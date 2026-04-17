@@ -163,6 +163,37 @@
     white-space: nowrap;
   }
 
+  /* ── LAST CARD GLOW ── */
+  .last-card-alert .npc-name {
+    color: #ff6b6b !important;
+    text-shadow: 0 0 12px rgba(255,80,80,0.8), 0 0 4px rgba(255,80,80,0.5) !important;
+    animation: lastcard-pulse 1.1s ease-in-out infinite alternate;
+  }
+  .last-card-alert .card-count {
+    background: rgba(180,20,20,0.5) !important;
+    border-color: #ff6b6b !important;
+    color: #ffaaaa !important;
+    box-shadow: 0 0 10px rgba(255,60,60,0.6);
+    animation: lastcard-pulse 1.1s ease-in-out infinite alternate;
+  }
+  .last-card-alert .mini-card {
+    box-shadow: 0 0 10px rgba(255,60,60,0.7), 0 0 4px rgba(255,100,100,0.5);
+    border-color: rgba(255,100,100,0.6) !important;
+  }
+  /* Player area last-card alert */
+  #player-area.last-card-alert #player-name-label {
+    color: #ff6b6b !important;
+    text-shadow: 0 0 12px rgba(255,80,80,0.7);
+    animation: lastcard-pulse 1.1s ease-in-out infinite alternate;
+  }
+  #player-area.last-card-alert .hand-card {
+    box-shadow: 0 0 14px rgba(255,60,60,0.55), 2px 4px 12px rgba(0,0,0,0.6);
+  }
+  @keyframes lastcard-pulse {
+    from { opacity: 0.85; }
+    to   { opacity: 1; filter: brightness(1.18); }
+  }
+
   /* ── NPC ZONES ── */
   .npc-zone {
     position: absolute;
@@ -1791,9 +1822,10 @@ function renderNpc(idx, zoneId, cardsId, countId, nameId) {
     container.appendChild(d);
   }
   // active highlight
-  const pidx = idx+1; // player index 1-based: npc at hands[1]=p2, [2]=p3, [3]=p4
   const zone = document.getElementById(zoneId);
   zone.classList.toggle('active', currentPlayer === idx);
+  // Last card glow
+  zone.classList.toggle('last-card-alert', count === 1);
 }
 
 function renderHand() {
@@ -1847,6 +1879,9 @@ function renderHand() {
   });
 
   document.getElementById('player-name-label').classList.toggle('active', currentPlayer === 0);
+  // Last card glow on player area
+  const playerArea = document.getElementById('player-area');
+  playerArea.classList.toggle('last-card-alert', hands[0].length === 1);
 }
 
 function renderDiscardPile() {
@@ -2014,6 +2049,31 @@ function setPlayerControls(enabled) {
   document.getElementById('player-name-label').classList.toggle('active', enabled);
 }
 
+
+// ── Last-card rule ─────────────────────────────────────────
+// Returns the index of the next active player after playerIdx, or -1 if none.
+function nextActivePlayer(playerIdx) {
+  let next = (playerIdx + 1) % 4;
+  let attempts = 0;
+  while (hands[next].length === 0 && attempts < 4) {
+    next = (next + 1) % 4;
+    attempts++;
+  }
+  return attempts < 4 ? next : -1;
+}
+
+// Returns true if the player immediately AFTER currentPlayer has exactly 1 card.
+function nextPlayerHasLastCard() {
+  const next = nextActivePlayer(currentPlayer);
+  return next !== -1 && hands[next].length === 1;
+}
+
+// Given a play, is it the player's HIGHEST single card?
+function isHighestSingle(play, hand) {
+  if (play.type !== 'single') return false;
+  const sorted = hand.slice().sort(compareCards);
+  return cardKey(sorted[sorted.length - 1]) === cardKey(play.cards[0]);
+}
 function playerPlay() {
   if (!selectedCards.length) { toast('Select cards to play'); return; }
   const play = classifyPlay(selectedCards);
@@ -2032,6 +2092,15 @@ function playerPlay() {
   // Must beat last play if not opening a new round
   if (lastPlay && !firstTurn) {
     if (!beatsPlay(play, lastPlay)) { toast('Must beat the last play!'); return; }
+  }
+
+  // ── Last-card rule: if next player has 1 card and current play is a single,
+  //    it must be the highest single in hand (can't play low to feed them)
+  if (nextPlayerHasLastCard() && play.type === 'single') {
+    if (!isHighestSingle(play, hands[0])) {
+      toast('Next player has 1 card left — play your highest card or a multi-card combo!');
+      return;
+    }
   }
 
   executePlay(0, selectedCards, play);
@@ -2302,9 +2371,23 @@ function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
     return valid[0];
   }
 
+  // ── LAST CARD RULE: filter if next player has 1 card ──
+  const npcNextHasLast = nextPlayerHasLastCard();
+
   // ── FREE PLAY (no reference to beat) ──
   if (!reference) {
-    return npcPickFreePlay(hand);
+    const freePlay = npcPickFreePlay(hand);
+    // If free play would be a single and next player has 1 card,
+    // upgrade to highest single or prefer multi-card
+    if (npcNextHasLast && freePlay && freePlay.type === 'single') {
+      // Prefer a multi-card play if available
+      const allPlays = generateAllPlays(hand);
+      const multiPlays = allPlays.filter(p => p.type !== 'single');
+      if (multiPlays.length) return multiPlays.sort((a,b)=>a.key-b.key)[0];
+      // No multi-card option — play highest single
+      return allPlays.filter(p=>p.type==='single').sort((a,b)=>b.key-a.key)[0];
+    }
+    return freePlay;
   }
 
   // ── MUST BEAT REFERENCE ──
@@ -2370,6 +2453,11 @@ function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
           if (highElsewhere > 1 && hand.length > 3) return null;
           return singlePlays.sort((a,b)=>a.key-b.key)[0];
         }
+      }
+
+      // ── LAST CARD RULE: if next player has 1 card, must play highest single ──
+      if (npcNextHasLast) {
+        return singlePlays.sort((a,b)=>b.key-a.key)[0]; // highest single
       }
 
       // ── BEGINNER MODE / FALLBACK ──
