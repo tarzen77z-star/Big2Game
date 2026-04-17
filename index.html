@@ -223,7 +223,7 @@
   }
 
   /* Top NPC (P3) */
-  #npc-top { top: 10px; left: 50%; transform: translateX(-50%); flex-direction: column; align-items: center; }
+  #npc-top { top: 8px; left: 50%; transform: translateX(-50%); flex-direction: column; align-items: center; }
   #npc-top .npc-cards { flex-direction: row; }
 
   /* Right NPC (P2) */
@@ -233,6 +233,39 @@
   /* Left NPC (P4) */
   #npc-left { top: 50%; left: 14px; transform: translateY(-50%); }
   #npc-left .npc-cards { flex-direction: column; }
+
+  /* NPC single card with count inside */
+  .npc-card-single {
+    position: relative;
+    width: 40px; height: 56px;
+    background: linear-gradient(135deg, #1a2fa0, #0d1a60);
+    border: 1.5px solid rgba(255,255,255,0.25);
+    border-radius: 6px;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .npc-card-single::before {
+    content: '';
+    position: absolute; inset: 3px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 3px;
+    background: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.04) 3px, rgba(255,255,255,0.04) 4px);
+  }
+  .npc-card-single .npc-card-count {
+    position: relative;
+    z-index: 2;
+    font-family: 'Playfair Display', serif;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: rgba(255,255,255,0.92);
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    line-height: 1;
+  }
+  /* Last-card alert on the single card */
+  .last-card-alert .npc-card-single {
+    border-color: rgba(255,80,80,0.7);
+    box-shadow: 0 0 12px rgba(255,60,60,0.7), 2px 2px 8px rgba(0,0,0,0.5);
+  }
 
   /* Back-of-card mini */
   .mini-card {
@@ -372,8 +405,8 @@
     user-select: none;
     flex-shrink: 0;
   }
-  .play-card .rank { font-size: 1rem; font-weight: 700; line-height: 1; }
-  .play-card .suit { font-size: 0.85rem; }
+  .play-card .rank { font-size: 1.2rem; font-weight: 700; line-height: 1; }
+  .play-card .suit { font-size: 1rem; }
   .play-card .center-suit { font-size: 1.5rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); }
   .play-card.red .rank, .play-card.red .suit, .play-card.red .center-suit { color: var(--card-red); }
   .play-card.black .rank, .play-card.black .suit, .play-card.black .center-suit { color: var(--card-black); }
@@ -669,14 +702,16 @@
     #npc-top { top: 6px; }
     #npc-top .npc-name { font-size: 0.7rem; }
     #npc-top .card-count { font-size: 0.62rem; padding: 1px 6px; }
-    #npc-top .mini-card { width: 16px; height: 23px; margin: 0 1px; }
+    #npc-top .npc-card-single { width: 32px; height: 45px; }
+    #npc-top .npc-card-single .npc-card-count { font-size: 0.9rem; }
 
     /* ── NPC LEFT & RIGHT: show badge only, no card fan ── */
     #npc-left { left: 4px; }
     #npc-right { right: 4px; }
     #npc-left .npc-name, #npc-right .npc-name { font-size: 0.65rem; }
-    #npc-left .npc-cards, #npc-right .npc-cards { display: none; }
-    #npc-left .card-count, #npc-right .card-count { font-size: 0.62rem; padding: 2px 5px; }
+    /* All NPCs now show single card — no need to hide */
+    .npc-card-single { width: 32px; height: 45px; }
+    .npc-card-single .npc-card-count { font-size: 0.9rem; }
 
     /* ── DISCARD AREA ── */
     #discard-area {
@@ -1389,7 +1424,6 @@
   <div id="npc-top" class="npc-zone">
     <div class="npc-name" id="name-p3">NPC 3</div>
     <div class="npc-cards" id="cards-p3"></div>
-    <div class="card-count" id="count-p3">13</div>
   </div>
 
   <!-- Play-by-play message below NPC 3 -->
@@ -1398,15 +1432,15 @@
   <!-- Right NPC (Player 2) -->
   <div id="npc-right" class="npc-zone">
     <div class="npc-name" id="name-p2">NPC 2</div>
-    <div class="card-count" id="count-p2">13</div>
     <div class="npc-cards" id="cards-p2"></div>
+    <span id="count-p2" style="display:none">13</span>
   </div>
 
   <!-- Left NPC (Player 4) -->
   <div id="npc-left" class="npc-zone">
     <div class="npc-name" id="name-p4">NPC 4</div>
-    <div class="card-count" id="count-p4">13</div>
     <div class="npc-cards" id="cards-p4"></div>
+    <span id="count-p4" style="display:none">13</span>
   </div>
 
   <!-- Center -->
@@ -1597,6 +1631,66 @@ function loadScores() {
   if (hp) highestPts = parseInt(hp);
 }
 
+
+// ════════════════════════════════════════
+//  GAME STATE PERSISTENCE
+// ════════════════════════════════════════
+function saveGameState() {
+  if (!gameActive) {
+    localStorage.removeItem('big2_gamestate');
+    return;
+  }
+  const state = {
+    hands: hands,
+    currentPlayer,
+    discardPile,
+    lastPlay,
+    passCount,
+    firstTurn,
+    openingPlayer,
+    currentRoundPlays,
+    globalDiscardedCards: [...globalDiscardedCards],
+    selectedMode,
+    gameActive
+  };
+  localStorage.setItem('big2_gamestate', JSON.stringify(state));
+}
+
+function loadGameState() {
+  try {
+    const raw = localStorage.getItem('big2_gamestate');
+    if (!raw) return false;
+    const state = JSON.parse(raw);
+    if (!state || !state.gameActive || !state.hands) return false;
+
+    hands                = state.hands;
+    currentPlayer        = state.currentPlayer;
+    discardPile          = state.discardPile || [];
+    lastPlay             = state.lastPlay || null;
+    passCount            = state.passCount || 0;
+    firstTurn            = state.firstTurn !== undefined ? state.firstTurn : true;
+    openingPlayer        = state.openingPlayer || 0;
+    currentRoundPlays    = state.currentRoundPlays || [];
+    globalDiscardedCards = new Set(state.globalDiscardedCards || []);
+    selectedMode         = state.selectedMode || 'beginner';
+    gameActive           = true;
+    selectedCards        = [];
+    return true;
+  } catch(e) {
+    localStorage.removeItem('big2_gamestate');
+    return false;
+  }
+}
+
+function clearGameState() {
+  localStorage.removeItem('big2_gamestate');
+}
+
+// Auto-save whenever the tab is closed/navigated away
+window.addEventListener('beforeunload', () => {
+  if (gameActive) saveGameState();
+});
+
 // ════════════════════════════════════════
 //  CARD UTILITIES
 // ════════════════════════════════════════
@@ -1662,27 +1756,38 @@ function classifyPlay(cards) {
 //
 // Suit of the highest card breaks ties within same top-rank.
 function isBig2Straight(ranks5) {
-  // ranks5 is already sorted ascending by RANK_VAL
-  // Check normal consecutive run (no 2 in this path except allowed)
+  // ranks5 is sorted ascending by RANK_VAL
+  // RANK_VAL order: 3=0,4=1,5=2,6=3,7=4,8=5,9=6,10=7,J=8,Q=9,K=10,A=11,2=12
+
+  // ── Normal run: no 2 anywhere ──
   const normal = (() => {
     for (let i = 1; i < 5; i++) if (ranks5[i] - ranks5[i-1] !== 1) return false;
-    // Must not include a 2 (rank index 12) — 2 only allowed in A-2-3-4-5
-    if (ranks5[4] === RANK_VAL['2']) return false;
+    if (ranks5[4] === RANK_VAL['2']) return false; // no 2 in normal run
     return true;
   })();
-  if (normal) return { valid: true, wrap: false };
+  if (normal) return { valid: true, wrap: false, wrapType: null };
 
-  // Check A-2-3-4-5 wrap: sorted ranks would be [0,1,2,11,12] → 3,4,5,A,2
-  const isWrap = (
+  // ── A-2-3-4-5 wrap: sorted [0,1,2,11,12] = 3,4,5,A,2 ──
+  const isAceLow = (
     ranks5[0] === RANK_VAL['3'] &&
     ranks5[1] === RANK_VAL['4'] &&
     ranks5[2] === RANK_VAL['5'] &&
     ranks5[3] === RANK_VAL['A'] &&
     ranks5[4] === RANK_VAL['2']
   );
-  if (isWrap) return { valid: true, wrap: true };
+  if (isAceLow) return { valid: true, wrap: true, wrapType: 'ace_low' };
 
-  return { valid: false, wrap: false };
+  // ── 2-3-4-5-6 wrap: sorted [0,1,2,3,12] = 3,4,5,6,2 ──
+  const isTwoLow = (
+    ranks5[0] === RANK_VAL['3'] &&
+    ranks5[1] === RANK_VAL['4'] &&
+    ranks5[2] === RANK_VAL['5'] &&
+    ranks5[3] === RANK_VAL['6'] &&
+    ranks5[4] === RANK_VAL['2']
+  );
+  if (isTwoLow) return { valid: true, wrap: true, wrapType: 'two_low' };
+
+  return { valid: false, wrap: false, wrapType: null };
 }
 
 function classifyFive(sorted) {
@@ -1693,6 +1798,7 @@ function classifyFive(sorted) {
   const straightResult = isBig2Straight(ranks);
   const isStraight = straightResult.valid;
   const isWrapStraight = straightResult.wrap;
+  const wrapType = straightResult.wrapType;
 
   // Check for pairs/trips/quads within 5 cards
   const rankCounts = {};
@@ -1709,11 +1815,16 @@ function classifyFive(sorted) {
   //   …
   //   3-4-5-6-7  → top rank 7=4   (lowest)
   // Tie-break within same top rank: suit of the highest card.
-  function straightKey(sortedCards, wrap) {
-    if (wrap) {
-      // Highest card in A-2-3-4-5 is the 2; use virtual rank 16 × 4 + suit of the 2
+  function straightKey(sortedCards, wrapType) {
+    if (wrapType === 'ace_low') {
+      // A-2-3-4-5: highest straight → virtual rank 16
       const twoCard = sortedCards.find(c => c.rank === '2');
       return 16 * 4 + SUIT_VAL[twoCard.suit];
+    }
+    if (wrapType === 'two_low') {
+      // 2-3-4-5-6: second-highest → virtual rank 14
+      const twoCard = sortedCards.find(c => c.rank === '2');
+      return 14 * 4 + SUIT_VAL[twoCard.suit];
     }
     const top = sortedCards[4]; // highest card by RANK_VAL
     return RANK_VAL[top.rank] * 4 + SUIT_VAL[top.suit];
@@ -1726,10 +1837,11 @@ function classifyFive(sorted) {
   // ── Five-card hand hierarchy (subtype rank 0-5) ──
   // straight=0, flush=1, full_house=2, four_of_kind=3, straight_flush=4, royal_flush=5(wrap sf)
   if (isStraight && isFlush) {
-    // "Royal flush" in Big 2 = A-2-3-4-5 suited (highest possible straight flush)
-    const sfKey = straightKey(sorted, isWrapStraight);
-    const subtype = isWrapStraight ? 'royal_flush' : 'straight_flush';
-    const subtypeRank = isWrapStraight ? 5 : 4;
+    // Royal flush = A-2-3-4-5 suited (wrapType ace_low) — highest SF
+    // 2-3-4-5-6 suited (wrapType two_low) — second highest SF
+    const sfKey = straightKey(sorted, wrapType);
+    const subtype = (wrapType === 'ace_low') ? 'royal_flush' : 'straight_flush';
+    const subtypeRank = (wrapType === 'ace_low') ? 5 : 4;
     return { type:'five', subtype, key: sfKey + subtypeRank * 1000, cards: sorted };
   }
   if (isFourOfKind) {
@@ -1743,7 +1855,7 @@ function classifyFive(sorted) {
     return { type:'five', subtype:'full_house', key: cardVal(tcard) + 2*1000, cards: sorted };
   }
   if (isFlush) return { type:'five', subtype:'flush', key: topVal + 1*1000, cards: sorted };
-  if (isStraight) return { type:'five', subtype:'straight', key: straightKey(sorted, isWrapStraight) + 0*1000, cards: sorted };
+  if (isStraight) return { type:'five', subtype:'straight', key: straightKey(sorted, wrapType) + 0*1000, cards: sorted };
   return null;
 }
 
@@ -1751,11 +1863,24 @@ function beatsPlay(play, reference) {
   if (!reference) return true;
   if (play.type !== reference.type) return false;
   if (play.type === 'five') {
-    // subtype rank
     const order = ['straight','flush','full_house','four_of_kind','straight_flush','royal_flush'];
     const pi = order.indexOf(play.subtype);
     const ri = order.indexOf(reference.subtype);
     if (pi !== ri) return pi > ri;
+
+    // Same subtype — flush needs special rank-by-rank comparison
+    if (play.subtype === 'flush') {
+      // Compare all 5 cards by rank descending, then suit of highest as final tiebreak
+      const pa = play.cards.slice().sort(compareCards).reverse();      // highest first
+      const ra = reference.cards.slice().sort(compareCards).reverse();
+      for (let i = 0; i < 5; i++) {
+        const pr = RANK_VAL[pa[i].rank];
+        const rr = RANK_VAL[ra[i].rank];
+        if (pr !== rr) return pr > rr;
+      }
+      // All ranks match — compare suit of highest card
+      return SUIT_VAL[pa[0].suit] > SUIT_VAL[ra[0].suit];
+    }
   }
   return play.key > reference.key;
 }
@@ -1770,6 +1895,7 @@ function startGame() {
   for (let i=0;i<52;i++) hands[i%4].push(deck[i]);
   hands.forEach(h=>h.sort(compareCards));
 
+  clearGameState();
   discardPile = [];
   currentRoundPlays = [];
   globalDiscardedCards = new Set();
@@ -1812,15 +1938,22 @@ function renderAll() {
 
 function renderNpc(idx, zoneId, cardsId, countId, nameId) {
   const count = hands[idx].length;
-  document.getElementById(countId).textContent = count;
+  // Update count badge if it exists (P2, P4 still have separate count el)
+  const countEl = document.getElementById(countId);
+  if (countEl) countEl.textContent = count;
+
   const container = document.getElementById(cardsId);
   container.innerHTML = '';
-  const max = Math.min(count, 13);
-  for (let i=0;i<max;i++) {
-    const d = document.createElement('div');
-    d.className = 'mini-card';
-    container.appendChild(d);
-  }
+
+  // All 3 NPCs now show a single face-down card with count inside
+  const card = document.createElement('div');
+  card.className = 'npc-card-single';
+  const num = document.createElement('div');
+  num.className = 'npc-card-count';
+  num.textContent = count;
+  card.appendChild(num);
+  container.appendChild(card);
+
   // active highlight
   const zone = document.getElementById(zoneId);
   zone.classList.toggle('active', currentPlayer === idx);
@@ -1951,7 +2084,6 @@ function buildPlayCard(card) {
   el.className = 'play-card ' + (RED_SUITS.has(card.suit) ? 'red' : 'black');
   el.innerHTML = `
     <div class="corner-top"><div class="rank">${card.rank}</div><div class="suit">${card.suit}</div></div>
-    <div class="center-suit">${card.suit}</div>
     <div class="corner-bot"><div class="rank">${card.rank}</div><div class="suit">${card.suit}</div></div>
   `;
   return el;
@@ -2133,6 +2265,7 @@ function confirmForfeit() {
   for (let i = 1; i < 4; i++) scores[i] += penalty;
   gamesPlayed++;
   saveScores();
+  clearGameState();
   updateScoreboard();
   updateRankUI();
 
@@ -2204,6 +2337,7 @@ function executePlay(playerIdx, cards, play) {
     return;
   }
 
+  saveGameState();
   renderAll();
   if (currentPlayer !== 0) {
     setPlayerControls(false);
@@ -2230,6 +2364,7 @@ function doPass(playerIdx) {
     document.getElementById('last-play-info').textContent = 'New round – play anything!';
   }
 
+  saveGameState();
   renderAll();
   if (currentPlayer !== 0) {
     setPlayerControls(false);
@@ -2735,6 +2870,7 @@ function endGame(winnerIdx) {
   for (let i = 0; i < 4; i++) scores[i] += gameDeltas[i];
 
   saveScores();
+  clearGameState();
   updateScoreboard();
   updateRankUI();
 
@@ -2877,6 +3013,57 @@ if (pni && playerCustomName !== 'You') pni.value = playerCustomName;
 // Update scoreboard player name
 const sc1n = document.getElementById('sc-p1-name');
 if (sc1n) sc1n.textContent = playerCustomName;
+
+// ── Resume saved game on page load ────────────────────────
+(function checkResume() {
+  const hasSaved = !!localStorage.getItem('big2_gamestate');
+  if (!hasSaved) return;
+
+  // Inject a "Resume Game" button above the Start button on splash
+  const resumeBtn = document.createElement('button');
+  resumeBtn.className = 'btn-gold';
+  resumeBtn.style.cssText = 'margin-bottom:0.5rem;background:linear-gradient(135deg,#1a5c38,#2d8a50,#1a5c38);box-shadow:0 4px 18px rgba(45,138,80,0.45);';
+  resumeBtn.innerHTML = '↩ Resume Game';
+  resumeBtn.onclick = resumeGame;
+  const startBtn = document.getElementById('btn-start-game');
+  if (startBtn) startBtn.parentNode.insertBefore(resumeBtn, startBtn);
+})();
+
+function resumeGame() {
+  const ok = loadGameState();
+  if (!ok) { toast('No saved game found.'); return; }
+
+  document.getElementById('splash').style.display = 'none';
+  document.getElementById('game').style.display = 'block';
+
+  const lbl = document.getElementById('player-name-label');
+  if (lbl) lbl.textContent = playerCustomName + ' (You)';
+
+  updateRankUI();
+  renderAll();
+  setPlayerControls(currentPlayer === 0);
+  updateTurnIndicator();
+
+  // Restore the last-play-info message
+  if (currentRoundPlays.length) {
+    const lp = currentRoundPlays[currentRoundPlays.length - 1];
+    const typeLabel = {
+      single:'Single', pair:'Pair', triple:'Three of a Kind',
+      quad:'Four of a Kind'
+    }[lp.type] || (lp.subtype?.replace(/_/g,' ') ?? lp.type);
+    document.getElementById('last-play-info').textContent =
+      playerName(lp.playerIdx) + ' played: ' + typeLabel;
+  } else if (!lastPlay) {
+    document.getElementById('last-play-info').textContent = '';
+  }
+
+  toast('↩ Game resumed!');
+
+  if (currentPlayer !== 0 && gameActive) {
+    setPlayerControls(false);
+    setTimeout(npcTurn, 1400);
+  }
+}
 </script>
 </body>
 </html>
