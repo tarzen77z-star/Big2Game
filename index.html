@@ -352,10 +352,10 @@
   /* ── PLAYER HAND ── */
   #player-area {
     position: absolute;
-    bottom: 0; left: 0; right: 0;
+    bottom: 22px; left: 0; right: 0;
     display: flex; flex-direction: column;
     align-items: center;
-    padding-bottom: 4px;
+    padding-bottom: 0;
     transition: box-shadow 0.4s;
   }
 
@@ -436,7 +436,7 @@
 
   #hand-container {
     position: relative;
-    height: 160px;
+    height: 185px;
     width: 100%;
     display: flex;
     align-items: flex-end;
@@ -513,7 +513,7 @@
 
   /* ── TOAST – moved to bottom so it doesn't cover NPC 3 ── */
   #toast {
-    position: fixed; bottom: 225px; left: 50%;
+    position: fixed; bottom: 250px; left: 50%;
     transform: translateX(-50%) translateY(10px);
     background: rgba(0,0,0,0.88);
     border: 1px solid var(--gold);
@@ -582,6 +582,21 @@
     text-align: center;
   }
   #winner-box h2 { font-family: 'Playfair Display', serif; color: var(--gold); font-size: 2rem; margin-bottom: 0.5rem; }
+  #game-commentary {
+    font-family: 'Crimson Pro', serif;
+    font-size: 1rem;
+    font-style: italic;
+    color: var(--text-dim);
+    line-height: 1.55;
+    margin: 0.6rem 0 0.4rem;
+    padding: 0.65rem 1rem;
+    background: rgba(0,0,0,0.25);
+    border-radius: 8px;
+    border-left: 2px solid rgba(201,168,76,0.35);
+    text-align: left;
+  }
+  #game-commentary strong { color: var(--text-light); font-style: normal; }
+  #game-commentary em { color: var(--gold-light); }
   #score-summary { margin: 1rem 0; }
   .score-line { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
 
@@ -676,7 +691,7 @@
     }
 
     /* ── PLAYER AREA ── */
-    #player-area { padding-bottom: 2px; }
+    #player-area { bottom: 28px; padding-bottom: 0; }
     #player-name-row {
     display: flex;
     align-items: center;
@@ -693,7 +708,7 @@
     .btn-pass-big { padding: 6px 10px !important; font-size: 0.85rem !important; }
 
     /* ── HAND CONTAINER ── */
-    #hand-container { height: 108px; }
+    #hand-container { height: 128px; }
 
     /* ── HAND CARDS ── */
     .hand-card {
@@ -857,6 +872,181 @@
     margin-bottom: 1.8rem;
   }
 
+  /* ── LEGEND ── */
+  #legend-toggle {
+    margin-top: 0.6rem;
+    background: none;
+    border: 1px solid rgba(201,168,76,0.3);
+    color: var(--text-dim);
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.82rem;
+    padding: 4px 14px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.05em;
+  }
+  #legend-toggle:hover { border-color: var(--gold); color: var(--gold-light); }
+
+  #legend-panel {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #legend-panel.open { display: flex; }
+
+  #legend-box {
+    background: linear-gradient(160deg, #1b3825, #0d2018);
+    border: 1px solid rgba(201,168,76,0.35);
+    border-radius: 14px;
+    width: min(480px, 94vw);
+    max-height: 88vh;
+    overflow-y: auto;
+    padding: 1.4rem 1.6rem;
+    position: relative;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(201,168,76,0.3) transparent;
+  }
+  #legend-box::-webkit-scrollbar { width: 4px; }
+  #legend-box::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius: 2px; }
+
+  #legend-close {
+    position: absolute;
+    top: 10px; right: 14px;
+    background: none; border: none;
+    color: var(--text-dim);
+    font-size: 1.3rem;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: color 0.15s;
+  }
+  #legend-close:hover { color: var(--text-light); }
+
+  #legend-box h2 {
+    font-family: 'Playfair Display', serif;
+    color: var(--gold);
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+    text-align: center;
+    letter-spacing: 0.06em;
+  }
+
+  .legend-section {
+    margin-bottom: 1.2rem;
+  }
+  .legend-section h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.92rem;
+    color: var(--gold-light);
+    border-bottom: 1px solid rgba(201,168,76,0.2);
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+    letter-spacing: 0.05em;
+  }
+
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .legend-row:last-child { border-bottom: none; }
+
+  .legend-badge {
+    flex-shrink: 0;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 1.5px solid rgba(255,255,255,0.15);
+  }
+  .legend-badge svg { width: 20px; height: 20px; }
+  .legend-badge.beginner { background: radial-gradient(circle, #3a3a3a, #1a1a1a); border-color: #555; }
+  .legend-badge.bronze   { background: radial-gradient(circle, #cd7f32, #7a4a1a); border-color: #cd7f32; box-shadow: 0 0 6px rgba(205,127,50,0.4); }
+  .legend-badge.silver   { background: radial-gradient(circle, #d8d8d8, #888);    border-color: #c0c0c0; box-shadow: 0 0 6px rgba(192,192,192,0.4); }
+  .legend-badge.gold     { background: radial-gradient(circle, #ffd700, #b8860b); border-color: #ffd700; box-shadow: 0 0 8px rgba(255,215,0,0.5); }
+
+  .legend-info { flex: 1; }
+  .legend-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.88rem;
+    color: var(--text-light);
+    margin-bottom: 1px;
+  }
+  .legend-detail {
+    font-size: 0.76rem;
+    color: var(--text-dim);
+    line-height: 1.35;
+  }
+  .legend-detail em { color: var(--gold-light); font-style: normal; }
+
+  .legend-arrow {
+    flex-shrink: 0;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    text-align: center;
+    min-width: 52px;
+  }
+  .legend-arrow strong { display: block; color: var(--gold); font-size: 0.9rem; }
+
+  .legend-mode-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .legend-mode-row:last-child { border-bottom: none; }
+  .legend-mode-icon {
+    font-size: 1.3rem;
+    flex-shrink: 0;
+    width: 34px;
+    text-align: center;
+    line-height: 34px;
+  }
+  .legend-mode-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.88rem;
+    color: var(--text-light);
+    margin-bottom: 2px;
+  }
+  .legend-mode-desc {
+    font-size: 0.74rem;
+    color: var(--text-dim);
+    line-height: 1.35;
+  }
+  .legend-mode-desc em { color: var(--gold-light); font-style: normal; }
+  .legend-mode-lock {
+    flex-shrink: 0;
+    margin-left: auto;
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    text-align: right;
+    padding-left: 6px;
+  }
+  .legend-mode-lock.unlocked { color: #7fffaa; }
+
+  .legend-scoring {
+    background: rgba(0,0,0,0.25);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-top: 4px;
+  }
+  .legend-scoring p {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin: 3px 0;
+    line-height: 1.4;
+  }
+  .legend-scoring p em { color: var(--gold-light); font-style: normal; }
+  .legend-scoring p strong { color: var(--text-light); }
+
 </style>
 </head>
 <body>
@@ -900,6 +1090,137 @@
   </div>
   <button class="btn-gold" id="btn-start-game" onclick="startGame()">▶ Start New Game</button>
   <button class="btn-ghost" onclick="showScoreboard()">📊 View Standings</button>
+  <button id="legend-toggle" onclick="document.getElementById('legend-panel').classList.add('open')">📖 Rank &amp; Mode Guide</button>
+</div>
+
+<!-- LEGEND PANEL -->
+<div id="legend-panel">
+  <div id="legend-box">
+    <button id="legend-close" onclick="document.getElementById('legend-panel').classList.remove('open')" title="Close">✕</button>
+    <h2>🏆 Rank &amp; Mode Guide</h2>
+
+    <!-- RANK PROGRESSION -->
+    <div class="legend-section">
+      <h3>Rank Progression</h3>
+
+      <div class="legend-row">
+        <div class="legend-badge beginner" id="lgd-b0"></div>
+        <div class="legend-info">
+          <div class="legend-name">Beginner</div>
+          <div class="legend-detail">Starting rank. Play games and earn points to advance.</div>
+        </div>
+        <div class="legend-arrow">0 pts<strong>START</strong></div>
+      </div>
+
+      <div class="legend-row">
+        <div class="legend-badge bronze" id="lgd-b1"></div>
+        <div class="legend-info">
+          <div class="legend-name">Bronze</div>
+          <div class="legend-detail">Earn <em>100+ points</em> in total to reach Bronze rank.<br>Unlocks <em>Intermediate Mode</em>.</div>
+        </div>
+        <div class="legend-arrow">100 pts<strong>BRONZE</strong></div>
+      </div>
+
+      <div class="legend-row">
+        <div class="legend-badge silver" id="lgd-b2"></div>
+        <div class="legend-info">
+          <div class="legend-name">Silver</div>
+          <div class="legend-detail">Reach <em>1,000 points</em> to earn Silver rank.<br>Unlocks <em>Hard Mode</em>.</div>
+        </div>
+        <div class="legend-arrow">1,000 pts<strong>SILVER</strong></div>
+      </div>
+
+      <div class="legend-row">
+        <div class="legend-badge gold" id="lgd-b3"></div>
+        <div class="legend-info">
+          <div class="legend-name">Gold</div>
+          <div class="legend-detail">The highest rank. Reach <em>5,000 points</em> total.<br>Unlocks <em>Professional Mode</em>.</div>
+        </div>
+        <div class="legend-arrow">5,000 pts<strong>GOLD</strong></div>
+      </div>
+
+      <p style="font-size:0.72rem;color:var(--text-dim);margin-top:8px;line-height:1.4;">
+        ✦ Your highest rank is <strong style="color:var(--text-light)">retained permanently</strong> — even if your score dips, you keep your unlocks.
+      </p>
+    </div>
+
+    <!-- SCORING SYSTEM -->
+    <div class="legend-section">
+      <h3>How Points Are Scored</h3>
+      <div class="legend-scoring">
+        <p>After each game, <strong>every player</strong> settles with every other player based on remaining card counts.</p>
+        <p style="margin-top:4px;"><em>For each pair of players:</em> the player with <strong>more</strong> weighted cards pays the <strong>difference</strong> to the player with fewer. This means everyone gains from players who did worse and loses to players who did better.</p>
+        <p style="margin-top:6px;"><em>Example — P1 finishes (0 cards), P2 has 2, P3 has 5, P4 has 7:</em></p>
+        <p>• P1: +2+5+7 = <em>+14 pts</em></p>
+        <p>• P2: gains (5−2)+(7−2) from P3/P4, loses 2 to P1 = <em>+6 pts</em></p>
+        <p>• P3: gains (7−5) from P4, loses (5−2) to P2 and 5 to P1 = <em>−6 pts</em></p>
+        <p>• P4: loses 7+5+2 to everyone = <em>−14 pts</em></p>
+        <p style="margin-top:6px;"><em>Card count multipliers (applied first):</em></p>
+        <p>• 1–7 cards remaining → <em>×1</em> (normal)</p>
+        <p>• 8–9 cards remaining → <em>×2</em> (double)</p>
+        <p>• 10–12 cards remaining → <em>×3</em> (triple)</p>
+        <p>• 13 cards remaining → <em>×4</em> (quadruple)</p>
+        <p style="margin-top:6px;"><strong>Forfeit:</strong> −10 points to you, +10 to each NPC (−30 total).</p>
+      </div>
+    </div>
+
+    <!-- GAME MODES -->
+    <div class="legend-section">
+      <h3>Game Modes</h3>
+
+      <div class="legend-mode-row">
+        <div class="legend-mode-icon">🌱</div>
+        <div style="flex:1;">
+          <div class="legend-mode-name">Beginner Mode</div>
+          <div class="legend-mode-desc">Open to all players. NPCs play straightforward — no card counting, no advanced strategy.</div>
+        </div>
+        <div class="legend-mode-lock unlocked">✔ Always<br>unlocked</div>
+      </div>
+
+      <div class="legend-mode-row">
+        <div class="legend-mode-icon">🥉</div>
+        <div style="flex:1;">
+          <div class="legend-mode-name">Intermediate Mode</div>
+          <div class="legend-mode-desc">Requires <em>Bronze rank (100 pts)</em>. NPCs count 2s and Aces — they strategically pass to save big cards for control, and bait you into wasting high cards.</div>
+        </div>
+        <div class="legend-mode-lock" id="lgd-lock-int">🔒 Bronze</div>
+      </div>
+
+      <div class="legend-mode-row">
+        <div class="legend-mode-icon">🥈</div>
+        <div style="flex:1;">
+          <div class="legend-mode-name">Hard Mode</div>
+          <div class="legend-mode-desc">Requires <em>Silver rank (1,000 pts)</em>. NPCs use full card-counting strategy and prioritise protecting sets over responding to every play.</div>
+        </div>
+        <div class="legend-mode-lock" id="lgd-lock-hard">🔒 Silver</div>
+      </div>
+
+      <div class="legend-mode-row">
+        <div class="legend-mode-icon">🥇</div>
+        <div style="flex:1;">
+          <div class="legend-mode-name">Professional Mode</div>
+          <div class="legend-mode-desc">Requires <em>Gold rank (5,000 pts)</em>. Maximum NPC intelligence — opponents play near-optimally, protect all sets, and aggressively exploit every pass.</div>
+        </div>
+        <div class="legend-mode-lock" id="lgd-lock-pro">🔒 Gold</div>
+      </div>
+    </div>
+
+    <!-- QUICK TIPS -->
+    <div class="legend-section">
+      <h3>Quick Tips</h3>
+      <div class="legend-scoring">
+        <p>• <strong>First play</strong> each game must include the <em>3♦</em> (3 of Diamonds).</p>
+        <p>• Play <strong>singles, pairs, triples, quads,</strong> or any <strong>5-card hand</strong> (straight, flush, full house, four-of-a-kind, straight flush, royal flush).</p>
+        <p>• You must <strong>beat the previous play</strong> with the same number of cards and a higher combination.</p>
+        <p>• If everyone else <strong>passes</strong>, you control the next play — throw anything.</p>
+        <p>• Card values low→high: <em>3 4 5 6 7 8 9 10 J Q K A 2</em></p>
+        <p>• Suit values low→high: <em>♦ ♣ ♥ ♠</em></p>
+        <p>• <strong>2♠</strong> is the highest single card in the game.</p>
+        <p>• <strong>Straights:</strong> must be 5 consecutive ranks with <em>no 2</em>, except the special wrap <em>A-2-3-4-5</em> (highest straight). Low→high: <em>3-4-5-6-7 … 10-J-Q-K-A … A-2-3-4-5</em>. <strong>J-Q-K-A-2 is not valid.</strong></p>
+      </div>
+    </div>
+
+  </div>
 </div>
 
 <!-- GAME TABLE -->
@@ -1099,6 +1420,7 @@
   <div id="winner-box">
     <h2 id="winner-title">🏆 Winner!</h2>
     <p id="winner-sub"></p>
+    <div id="game-commentary"></div>
     <div id="score-summary"></div>
     <div class="modal-buttons" style="margin-top:1.5rem">
       <button class="btn-gold" onclick="continueGame()">Continue Playing</button>
@@ -1294,48 +1616,103 @@ function classifyPlay(cards) {
   return null;
 }
 
-function classifyFive(sorted) {
-  const ranks = sorted.map(c=>RANK_VAL[c.rank]);
-  const suits = sorted.map(c=>c.suit);
-  const isFlush = suits.every(s=>s===suits[0]);
-  
-  // Straight: consecutive ranks (wrap: A-2-3-4-5 not valid in Big2, but A-K-Q-J-10 is)
-  // Straight ranks must be consecutive in order
-  const isStraight = (() => {
-    for (let i=1;i<5;i++) if (ranks[i]-ranks[i-1]!==1) return false;
+// ── Big 2 straight detection ────────────────────────────────
+// Valid straights are 5 consecutive ranks within the sequence
+// 3-4-5-6-7-8-9-10-J-Q-K-A (indices 0-11), PLUS the special
+// wrap-around A-2-3-4-5 (indices 11,12,0,1,2 sorted → 0,1,2,11,12).
+// J-Q-K-A-2 and similar 2-containing non-wrap straights are INVALID.
+//
+// Straight rank for tiebreaking (highest top card wins):
+//   A-2-3-4-5  = special wrap → key uses rank index 16 (above A=11)
+//   10-J-Q-K-A → top card A  (rank 11)
+//   9-10-J-Q-K → top card K  (rank 10)
+//   …
+//   3-4-5-6-7  → top card 7  (rank 4)   ← lowest
+//
+// Suit of the highest card breaks ties within same top-rank.
+function isBig2Straight(ranks5) {
+  // ranks5 is already sorted ascending by RANK_VAL
+  // Check normal consecutive run (no 2 in this path except allowed)
+  const normal = (() => {
+    for (let i = 1; i < 5; i++) if (ranks5[i] - ranks5[i-1] !== 1) return false;
+    // Must not include a 2 (rank index 12) — 2 only allowed in A-2-3-4-5
+    if (ranks5[4] === RANK_VAL['2']) return false;
     return true;
   })();
+  if (normal) return { valid: true, wrap: false };
+
+  // Check A-2-3-4-5 wrap: sorted ranks would be [0,1,2,11,12] → 3,4,5,A,2
+  const isWrap = (
+    ranks5[0] === RANK_VAL['3'] &&
+    ranks5[1] === RANK_VAL['4'] &&
+    ranks5[2] === RANK_VAL['5'] &&
+    ranks5[3] === RANK_VAL['A'] &&
+    ranks5[4] === RANK_VAL['2']
+  );
+  if (isWrap) return { valid: true, wrap: true };
+
+  return { valid: false, wrap: false };
+}
+
+function classifyFive(sorted) {
+  const ranks = sorted.map(c => RANK_VAL[c.rank]);
+  const suits  = sorted.map(c => c.suit);
+  const isFlush = suits.every(s => s === suits[0]);
+
+  const straightResult = isBig2Straight(ranks);
+  const isStraight = straightResult.valid;
+  const isWrapStraight = straightResult.wrap;
 
   // Check for pairs/trips/quads within 5 cards
   const rankCounts = {};
   for (const c of sorted) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
   const counts = Object.values(rankCounts).sort((a,b)=>b-a);
-  
-  const isFullHouse = counts[0]===3 && counts[1]===2;
+  const isFullHouse  = counts[0]===3 && counts[1]===2;
   const isFourOfKind = counts[0]===4;
 
-  // Best card for tiebreaking (highest card in the combo)
-  const topCard = sorted[4];
-  const topVal = cardVal(topCard);
+  // ── Straight key calculation ──────────────────────────────
+  // We need a single numeric key so straights compare correctly:
+  //   A-2-3-4-5 (wrap) is HIGHEST → virtual top rank 16
+  //   10-J-Q-K-A → top rank A=11
+  //   9-10-J-Q-K → top rank K=10
+  //   …
+  //   3-4-5-6-7  → top rank 7=4   (lowest)
+  // Tie-break within same top rank: suit of the highest card.
+  function straightKey(sortedCards, wrap) {
+    if (wrap) {
+      // Highest card in A-2-3-4-5 is the 2; use virtual rank 16 × 4 + suit of the 2
+      const twoCard = sortedCards.find(c => c.rank === '2');
+      return 16 * 4 + SUIT_VAL[twoCard.suit];
+    }
+    const top = sortedCards[4]; // highest card by RANK_VAL
+    return RANK_VAL[top.rank] * 4 + SUIT_VAL[top.suit];
+  }
 
-  // Five-card hand ranks (for comparison): straight=0, flush=1, full house=2, four of kind=3, straight flush=4, royal flush=5
+  // Best card value for non-straight five-card hands
+  const topCard = sorted[4];
+  const topVal  = cardVal(topCard);
+
+  // ── Five-card hand hierarchy (subtype rank 0-5) ──
+  // straight=0, flush=1, full_house=2, four_of_kind=3, straight_flush=4, royal_flush=5(wrap sf)
   if (isStraight && isFlush) {
-    const isRoyal = ranks[4]===RANK_VAL['A'] && ranks[0]===RANK_VAL['10'];
-    return { type:'five', subtype: isRoyal?'royal_flush':'straight_flush', key: topVal + (isRoyal?5:4)*1000, cards: sorted };
+    // "Royal flush" in Big 2 = A-2-3-4-5 suited (highest possible straight flush)
+    const sfKey = straightKey(sorted, isWrapStraight);
+    const subtype = isWrapStraight ? 'royal_flush' : 'straight_flush';
+    const subtypeRank = isWrapStraight ? 5 : 4;
+    return { type:'five', subtype, key: sfKey + subtypeRank * 1000, cards: sorted };
   }
   if (isFourOfKind) {
-    // key based on the quad rank
-    const qrank = Object.keys(rankCounts).find(r=>rankCounts[r]===4);
-    const qcard = sorted.filter(c=>c.rank===qrank).sort(compareCards).pop();
+    const qrank = Object.keys(rankCounts).find(r => rankCounts[r]===4);
+    const qcard  = sorted.filter(c => c.rank===qrank).sort(compareCards).pop();
     return { type:'five', subtype:'four_of_kind', key: cardVal(qcard) + 3*1000, cards: sorted };
   }
   if (isFullHouse) {
-    const trank = Object.keys(rankCounts).find(r=>rankCounts[r]===3);
-    const tcard = sorted.filter(c=>c.rank===trank).sort(compareCards).pop();
+    const trank = Object.keys(rankCounts).find(r => rankCounts[r]===3);
+    const tcard  = sorted.filter(c => c.rank===trank).sort(compareCards).pop();
     return { type:'five', subtype:'full_house', key: cardVal(tcard) + 2*1000, cards: sorted };
   }
   if (isFlush) return { type:'five', subtype:'flush', key: topVal + 1*1000, cards: sorted };
-  if (isStraight) return { type:'five', subtype:'straight', key: topVal + 0*1000, cards: sorted };
+  if (isStraight) return { type:'five', subtype:'straight', key: straightKey(sorted, isWrapStraight) + 0*1000, cards: sorted };
   return null;
 }
 
@@ -1429,12 +1806,12 @@ function renderHand() {
   // Fan angle: spread cards across an arc
   const isMobile = window.innerWidth <= 500;
   const cardW = isMobile ? 44 : 64;
-  const maxAngle = Math.min(isMobile ? 32 : 38, n * (isMobile ? 2.8 : 3.2));
+  const maxAngle = Math.min(isMobile ? 40 : 42, n * (isMobile ? 3.4 : 3.5));
   const step = n > 1 ? (maxAngle * 2) / (n - 1) : 0;
   const w = Math.min(window.innerWidth - (isMobile ? 80 : 60), isMobile ? 320 : 720);
   const spread = Math.min(isMobile ? 32 : 48, w / (n + 1));
   // Arc rise: center cards lift up more (parabolic)
-  const arcHeight = Math.min(30, n * 2.2);
+  const arcHeight = isMobile ? Math.min(42, n * 3.2) : Math.min(48, n * 3.5);
 
   hand.forEach((card, i) => {
     const angle = n > 1 ? -maxAngle + step * i : 0;
@@ -2094,13 +2471,152 @@ function combinations(arr, k) {
   return [...withFirst, ...withoutFirst];
 }
 
+
+// ════════════════════════════════════════
+//  GAME COMMENTARY
+// ════════════════════════════════════════
+function generateCommentary(winnerIdx, raw, mults, gameDeltas) {
+  const names = [playerCustomName, 'NPC 2', 'NPC 3', 'NPC 4'];
+  const wName = names[winnerIdx];
+  const isHuman = winnerIdx === 0;
+
+  // Collect facts
+  const losers = [0,1,2,3].filter(i => i !== winnerIdx);
+  const worstIdx    = losers.reduce((a,b) => raw[a] > raw[b] ? a : b);
+  const worstCards  = raw[worstIdx];
+  const worstMult   = mults[worstIdx];
+  const bigMultiers = losers.filter(i => mults[i] > 1);
+  const totalLeft   = losers.reduce((s,i) => s + raw[i], 0);
+  const winnerDelta = gameDeltas[winnerIdx];
+  const humanDelta  = gameDeltas[0];
+  const humanCards  = raw[0];
+  const dominantWin = totalLeft >= 18; // lots of cards left between losers
+  const closeGame   = totalLeft <= 5;  // everyone nearly done
+  const crushWin    = losers.some(i => mults[i] >= 3);
+  const pfx = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+  let lines = [];
+
+  // ── Opening line about the winner ──────────────────────────
+  if (isHuman) {
+    if (dominantWin) {
+      lines.push(pfx([
+        `<strong>Dominant.</strong> You swept the table, leaving opponents holding a combined <em>${totalLeft} cards</em>.`,
+        `<strong>Clinical finish.</strong> You cleared your hand with authority — the others never looked like catching up.`,
+        `<strong>Masterful.</strong> You finished first with <em>${totalLeft} cards</em> still stranded across the table.`
+      ]));
+    } else if (closeGame) {
+      lines.push(pfx([
+        `<strong>What a finish.</strong> You edged it — barely, but a win's a win.`,
+        `<strong>Tight game.</strong> You squeezed through by the skin of your teeth with everyone close behind.`,
+        `<strong>Nervy but decisive.</strong> You got your last card down just in time.`
+      ]));
+    } else {
+      lines.push(pfx([
+        `<strong>Well played.</strong> You came out on top with a solid, measured performance.`,
+        `<strong>Nice work.</strong> You navigated the hand well and closed it out first.`,
+        `<strong>Controlled.</strong> You read the table and finished first — exactly what Big 2 rewards.`
+      ]));
+    }
+  } else {
+    if (dominantWin) {
+      lines.push(pfx([
+        `<strong>${wName} was ruthless</strong>, finishing first while leaving <em>${totalLeft} cards</em> scattered across the table.`,
+        `<strong>${wName} dominated this round</strong> — everyone else was left holding cards as they cleared out.`,
+        `<strong>${wName} played a near-perfect hand</strong>, finishing with the rest of the table still in trouble.`
+      ]));
+    } else if (closeGame) {
+      lines.push(pfx([
+        `<strong>Close game — ${wName} pipped everyone</strong> at the wire. Don't blink next time.`,
+        `<strong>${wName} sneaked it</strong> in a tense finish. The margins were razor thin.`,
+        `<strong>${wName} got out just ahead</strong> — that could easily have gone another way.`
+      ]));
+    } else {
+      lines.push(pfx([
+        `<strong>${wName} finished first</strong> and claimed the round. They managed their cards well throughout.`,
+        `<strong>${wName} took the win</strong>, playing their cards at the right moments.`,
+        `<strong>${wName} came out on top</strong> this round — steady and composed.`
+      ]));
+    }
+  }
+
+  // ── Comment about the biggest loser ───────────────────────
+  if (worstCards >= 10) {
+    const penalty = worstMult > 1 ? ` (×${worstMult} multiplier — that's painful)` : '';
+    lines.push(pfx([
+      `<strong>${names[worstIdx]}</strong> had a rough night, ending with <em>${worstCards} cards${penalty}</em> — the table's hardest hit.`,
+      `<strong>${names[worstIdx]}</strong> could barely get going, finishing with <em>${worstCards} cards</em> in hand${worstMult > 1 ? ' and a multiplier to boot' : ''}.`,
+      `The biggest damage goes to <strong>${names[worstIdx]}</strong> — <em>${worstCards} cards</em> left${penalty}.`
+    ]));
+  } else if (worstCards >= 7) {
+    lines.push(pfx([
+      `<strong>${names[worstIdx]}</strong> struggled most this round, sitting on <em>${worstCards} cards</em> at the end.`,
+      `<strong>${names[worstIdx]}</strong> couldn't shed their cards fast enough — <em>${worstCards}</em> remained when time was called.`
+    ]));
+  }
+
+  // ── Multiplier callout ─────────────────────────────────────
+  if (crushWin) {
+    const mHeavy = losers.filter(i => mults[i] >= 3).map(i => names[i]);
+    lines.push(pfx([
+      `The <em>×${mults[worstIdx]} multiplier</em> made this especially punishing for <strong>${mHeavy.join(' and ')}</strong>.`,
+      `Holding double digits means the multiplier hits hard — <strong>${mHeavy.join(' and ')}</strong> felt that this round.`,
+      `With a <em>×${mults[worstIdx]} card multiplier</em>, the scoring gap widened significantly for <strong>${mHeavy.join(' and ')}</strong>.`
+    ]));
+  }
+
+  // ── Comment on human player performance ───────────────────
+  if (!isHuman) {
+    if (humanDelta > 0) {
+      lines.push(pfx([
+        `Still, <strong>you</strong> came away with <em>+${humanDelta} pts</em> — a positive round despite not winning.`,
+        `<strong>You</strong> ended with <em>+${humanDelta} pts</em> this game. Not the win, but you outplayed some of the table.`,
+        `<strong>Your</strong> <em>+${humanDelta} pts</em> shows you weren't far off — keep the pressure up.`
+      ]));
+    } else if (humanDelta === 0) {
+      lines.push(`<strong>You</strong> broke even this round — net zero points. Neither gaining nor bleeding.`);
+    } else if (humanCards >= 10) {
+      lines.push(pfx([
+        `A tough round for <strong>you</strong> — <em>${humanDelta} pts</em> with <em>${humanCards} cards</em> left. Regroup and come back stronger.`,
+        `<strong>You</strong> struggled to get rid of your cards this time, taking a <em>${humanDelta} pt</em> hit. Everyone has those games.`,
+        `<em>${humanDelta} pts</em> for <strong>you</strong> — those <em>${humanCards} cards</em> cost dearly. Use the multiplier as motivation next time.`
+      ]));
+    } else {
+      lines.push(pfx([
+        `<strong>You</strong> finished with <em>${humanDelta} pts</em> and <em>${humanCards} cards</em> left. Close, but room to tighten up.`,
+        `<strong>Your</strong> <em>${humanDelta} pts</em> this round — a few different plays and the picture changes.`
+      ]));
+    }
+  }
+
+  // ── Closing quip ──────────────────────────────────────────
+  if (isHuman && gamesPlayed === 1) {
+    lines.push(`First game in the books. The real test starts now.`);
+  } else if (!isHuman && gamesPlayed <= 3) {
+    lines.push(`Early days — plenty of time to turn the tables.`);
+  } else if (isHuman) {
+    lines.push(pfx([
+      `Game <em>${gamesPlayed}</em> done. Your total: <em>${scores[0]} pts</em>.`,
+      `Running total: <em>${scores[0]} pts</em> across <em>${gamesPlayed} games</em>.`,
+      `<em>${gamesPlayed} games</em> in — you're sitting at <em>${scores[0]} pts</em>.`
+    ]));
+  } else {
+    lines.push(pfx([
+      `Game <em>${gamesPlayed}</em> complete. Your total stands at <em>${scores[0]} pts</em>.`,
+      `After <em>${gamesPlayed} games</em> you're at <em>${scores[0]} pts</em>. Every round is a new opportunity.`
+    ]));
+  }
+
+  return lines.join(' ');
+}
+
 // ════════════════════════════════════════
 //  GAME OVER
 // ════════════════════════════════════════
 function penaltyMultiplier(cardCount) {
-  if (cardCount === 13)              return 4; // held ALL cards ×4
-  if (cardCount >= 10)               return 3; // 10-12 cards ×3
-  if (cardCount >= 8)                return 2; // 8-9 cards ×2
+  if (cardCount === 13) return 4; // held ALL cards ×4
+  if (cardCount >= 10)  return 3; // 10-12 cards ×3
+  if (cardCount >= 8)   return 2; // 8-9 cards ×2
   return 1;
 }
 
@@ -2108,18 +2624,27 @@ function endGame(winnerIdx) {
   gameActive = false;
   gamesPlayed++;
 
-  const penalties = hands.map(h => h.length);
-  const multipliers = penalties.map(penaltyMultiplier);
-  const weightedPenalties = penalties.map((p, i) => p * multipliers[i]);
+  // Step 1: Apply multiplier to each player's raw card count
+  const raw = hands.map(h => h.length);          // e.g. [0, 2, 5, 7]
+  const mults = raw.map(penaltyMultiplier);        // e.g. [1, 1, 1, 1]
+  const weighted = raw.map((r, i) => r * mults[i]); // weighted card totals
 
-  let totalWinnerGain = 0;
+  // Step 2: Pairwise settlement — for every pair (i, j):
+  //   the player with MORE weighted cards pays the DIFFERENCE to the other.
+  //   delta(i,j) = weighted[i] − weighted[j]
+  //   if delta > 0: i pays delta to j  (i loses delta, j gains delta)
+  //   if delta < 0: j pays |delta| to i (j loses |delta|, i gains |delta|)
+  const gameDeltas = [0, 0, 0, 0];
   for (let i = 0; i < 4; i++) {
-    if (i !== winnerIdx) {
-      scores[i] -= weightedPenalties[i];
-      totalWinnerGain += weightedPenalties[i];
+    for (let j = i + 1; j < 4; j++) {
+      const diff = weighted[i] - weighted[j]; // positive → i has more cards
+      gameDeltas[i] -= diff;  // i pays diff (negative = loss)
+      gameDeltas[j] += diff;  // j receives diff (positive = gain)
     }
   }
-  scores[winnerIdx] += totalWinnerGain;
+
+  // Step 3: Apply to running scores
+  for (let i = 0; i < 4; i++) scores[i] += gameDeltas[i];
 
   saveScores();
   updateScoreboard();
@@ -2127,23 +2652,35 @@ function endGame(winnerIdx) {
 
   const banner = document.getElementById('winner-banner');
   banner.style.display = 'flex';
-  document.getElementById('winner-title').textContent = (winnerIdx===0?'🏆 You Win!':'🃏 ' + playerName(winnerIdx) + ' Wins!');
-  document.getElementById('winner-sub').textContent = winnerIdx===0?'Congratulations!':'Better luck next time!';
+  document.getElementById('winner-title').textContent =
+    winnerIdx === 0 ? '🏆 You Win!' : '🃏 ' + playerName(winnerIdx) + ' Wins!';
+  document.getElementById('winner-sub').textContent =
+    winnerIdx === 0 ? 'Congratulations!' : 'Better luck next time!';
 
+  // Commentary
+  const commentary = document.getElementById('game-commentary');
+  if (commentary) commentary.innerHTML = generateCommentary(winnerIdx, raw, mults, gameDeltas);
+
+  // Build score summary showing each player's game delta and card info
   const summary = document.getElementById('score-summary');
   summary.innerHTML = '';
-  ['You','NPC 2','NPC 3','NPC 4'].forEach((name,i)=>{
+  const names = [playerCustomName, 'NPC 2', 'NPC 3', 'NPC 4'];
+  for (let i = 0; i < 4; i++) {
     const row = document.createElement('div');
     row.className = 'score-line';
-    if (i === winnerIdx) {
-      row.innerHTML = `<span>${name}</span><span style="color:#7fffaa">+${totalWinnerGain} pts 🏆</span>`;
-    } else {
-      const mult = multipliers[i];
-      const multTag = mult > 1 ? ` <span style="color:#ffcc44;font-size:0.8rem">×${mult}</span>` : '';
-      row.innerHTML = `<span>${name}</span><span style="color:#ff9999">-${weightedPenalties[i]} pts (${penalties[i]} cards${mult>1?' ×'+mult:''})</span>`;
-    }
+    const delta = gameDeltas[i];
+    const sign  = delta >= 0 ? '+' : '';
+    const color = i === winnerIdx ? '#7fffaa' : delta >= 0 ? '#aaffcc' : '#ff9999';
+    const multLabel = mults[i] > 1 ? ` ×${mults[i]}` : '';
+    const cardInfo  = i === winnerIdx
+      ? '0 cards left 🏆'
+      : `${raw[i]} card${raw[i] !== 1 ? 's' : ''}${multLabel} left`;
+    row.innerHTML =
+      `<span>${names[i]}</span>` +
+      `<span style="color:${color}">${sign}${delta} pts</span>` +
+      `<span style="color:var(--text-dim);font-size:0.78rem">${cardInfo}</span>`;
     summary.appendChild(row);
-  });
+  }
 }
 
 function continueGame() {
@@ -2220,6 +2757,32 @@ function playerName(idx) {
 loadScores();
 updateScoreboard();
 updateRankUI();
+// Init legend trophy badges
+['lgd-b0','lgd-b1','lgd-b2','lgd-b3'].forEach((id, i) => {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = trophySVG(['beginner','bronze','silver','gold'][i]);
+});
+// Update legend mode lock indicators based on retained rank
+function updateLegendLocks() {
+  const pts = getPlayerRankForUnlock();
+  const locks = [
+    { id: 'lgd-lock-int',  req: 100,  label: '🔒 Bronze' },
+    { id: 'lgd-lock-hard', req: 1000, label: '🔒 Silver' },
+    { id: 'lgd-lock-pro',  req: 5000, label: '🔒 Gold'   },
+  ];
+  locks.forEach(l => {
+    const el = document.getElementById(l.id);
+    if (!el) return;
+    if (pts >= l.req) {
+      el.textContent = '✔ Unlocked';
+      el.className = 'legend-mode-lock unlocked';
+    } else {
+      el.textContent = l.label;
+      el.className = 'legend-mode-lock';
+    }
+  });
+}
+updateLegendLocks();
 // Restore player name input
 const pni = document.getElementById('player-name-input');
 if (pni && playerCustomName !== 'You') pni.value = playerCustomName;
