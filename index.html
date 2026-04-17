@@ -1,0 +1,2085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Big 2 – Card Game</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap');
+
+  :root {
+    --green: #1a4a2e;
+    --green-light: #2d6b44;
+    --green-felt: #1e5c38;
+    --gold: #c9a84c;
+    --gold-light: #e8c96a;
+    --card-bg: #fdf6e3;
+    --card-red: #c0392b;
+    --card-black: #1a1a1a;
+    --text-light: #f0e8d0;
+    --text-dim: #a09060;
+    --shadow: rgba(0,0,0,0.6);
+    --panel-bg: rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Crimson Pro', serif;
+    background: #0d2b1a;
+    color: var(--text-light);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── SPLASH ── */
+  #splash {
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, #1e4a2a 0%, #0a1f10 100%);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  /* splash h1 moved to rank_css block */
+  #splash > p { color: var(--text-dim); font-size: 1.2rem; font-style: italic; display:none; }
+  .btn-gold {
+    background: linear-gradient(135deg, #b8941f, #e8c96a, #b8941f);
+    color: #1a1100;
+    border: none; padding: 0.9em 2.5em;
+    font-family: 'Playfair Display', serif;
+    font-size: 1.2rem; font-weight: 700;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(201,168,76,0.4);
+    transition: all 0.2s;
+    letter-spacing: 0.05em;
+  }
+  .btn-gold:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(201,168,76,0.6); }
+  .btn-gold:active { transform: translateY(0); }
+  .btn-ghost {
+    background: transparent;
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    padding: 0.7em 2em;
+    font-family: 'Crimson Pro', serif;
+    font-size: 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 1rem;
+    transition: all 0.2s;
+  }
+  .btn-ghost:hover { background: rgba(201,168,76,0.1); }
+
+  .splash-cards {
+    display: flex; gap: 8px; margin-bottom: 3rem;
+    font-size: 2.5rem;
+  }
+  .splash-card {
+    width: 60px; height: 85px;
+    background: var(--card-bg);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.8rem;
+    box-shadow: 3px 3px 12px rgba(0,0,0,0.5);
+    transform: rotate(var(--r, 0deg));
+  }
+
+  /* ── TABLE ── */
+  #game {
+    display: none;
+    width: 100vw; height: 100vh;
+    position: relative;
+    background: radial-gradient(ellipse at center, var(--green-felt) 0%, var(--green) 60%, #0d2018 100%);
+  }
+
+  /* Felt texture overlay */
+  #game::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='0.5' fill='rgba(255,255,255,0.03)'/%3E%3C/svg%3E");
+    pointer-events: none;
+  }
+
+
+  /* ── DRAGON WATERMARK ── */
+  #dragon-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.1;
+  }
+  #dragon-bg svg {
+    width: min(95vw, 90vh);
+    height: min(95vw, 90vh);
+    filter: grayscale(1) contrast(1.5) brightness(1.15);
+  }
+
+  /* ── SCOREBOARD ── */
+  #scoreboard {
+    position: absolute; top: 12px; right: 12px;
+    background: var(--panel-bg);
+    border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    min-width: 160px;
+    backdrop-filter: blur(4px);
+    z-index: 10;
+  }
+  #scoreboard h3 {
+    font-family: 'Playfair Display', serif;
+    color: var(--gold);
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(201,168,76,0.2);
+    padding-bottom: 4px;
+  }
+  .score-row { display: flex; justify-content: space-between; gap: 10px; margin: 2px 0; color: var(--text-dim); }
+  .score-row span:last-child { color: var(--text-light); font-weight: 600; }
+  #games-played { color: var(--gold-light); font-size: 0.78rem; margin-top: 6px; }
+
+  /* ── TURN INDICATOR ── */
+  #turn-indicator {
+    position: absolute; top: 12px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel-bg);
+    border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 20px;
+    padding: 6px 18px;
+    font-size: 0.9rem;
+    color: var(--gold-light);
+    z-index: 10;
+    backdrop-filter: blur(4px);
+    font-style: italic;
+  }
+
+  /* ── NPC ZONES ── */
+  .npc-zone {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 5;
+  }
+  .npc-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.85rem;
+    color: var(--gold);
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  }
+  .card-count {
+    background: rgba(0,0,0,0.5);
+    border: 1px solid var(--gold);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 0.8rem;
+    color: var(--gold-light);
+  }
+  .npc-cards {
+    display: flex;
+    position: relative;
+  }
+
+  /* Top NPC (P3) */
+  #npc-top { top: 10px; left: 50%; transform: translateX(-50%); flex-direction: column; align-items: center; }
+  #npc-top .npc-cards { flex-direction: row; }
+
+  /* Right NPC (P2) */
+  #npc-right { top: 50%; right: 14px; transform: translateY(-50%); }
+  #npc-right .npc-cards { flex-direction: column; }
+
+  /* Left NPC (P4) */
+  #npc-left { top: 50%; left: 14px; transform: translateY(-50%); }
+  #npc-left .npc-cards { flex-direction: column; }
+
+  /* Back-of-card mini */
+  .mini-card {
+    width: 28px; height: 40px;
+    background: linear-gradient(135deg, #1a2fa0, #0d1a60);
+    border: 1.5px solid rgba(255,255,255,0.2);
+    border-radius: 4px;
+    box-shadow: 1px 1px 4px rgba(0,0,0,0.5);
+    position: relative;
+  }
+  .mini-card::after {
+    content: '';
+    position: absolute; inset: 3px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 2px;
+    background: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.04) 3px, rgba(255,255,255,0.04) 4px);
+  }
+  #npc-right .mini-card, #npc-left .mini-card { width: 40px; height: 28px; margin: 1px 0; }
+  #npc-top .mini-card { margin: 0 1px; }
+
+  /* ── DISCARD PILE ── */
+  #discard-area {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -52%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    max-height: 58vh;
+    z-index: 6;
+  }
+  #chinese-title {
+    font-family: 'Noto Serif TC', 'SimSun', serif;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--gold);
+    text-shadow: 0 0 18px rgba(201,168,76,0.6), 0 2px 8px rgba(0,0,0,0.8);
+    letter-spacing: 0.15em;
+    line-height: 1;
+  }
+  #game-title-below {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  #discard-pile {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 380px;
+    max-width: 480px;
+    background: rgba(0,0,0,0.28);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    padding: 8px 12px;
+    align-items: flex-start;
+    overflow-y: auto;
+    max-height: 44vh;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(201,168,76,0.3) transparent;
+  }
+  #discard-pile::-webkit-scrollbar { width: 4px; }
+  #discard-pile::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius: 2px; }
+  /* Each play is a row */
+  .discard-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 3px;
+    flex-wrap: nowrap;
+    width: 100%;
+    min-height: 84px;
+  }
+  .discard-row .play-card {
+    flex-shrink: 0;
+  }
+  /* Singles mode — wrap if too many */
+  .singles-row {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+    min-height: unset !important;
+    align-items: flex-end !important;
+    padding: 4px 2px;
+  }
+
+  /* Player label on each row */
+  .discard-row-label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    min-width: 36px;
+    text-align: right;
+    padding-right: 4px;
+    flex-shrink: 0;
+    font-style: italic;
+  }
+  #last-play-info {
+    position: absolute;
+    /* Midpoint between NPC3 (~top 100px) and 鋤大弟 (~top 30vh): ~18vh */
+    top: 18vh;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Playfair Display', serif;
+    font-size: 1.35rem;
+    font-weight: 700;
+    font-style: normal;
+    color: var(--gold-light);
+    text-align: center;
+    padding: 6px 22px;
+    text-shadow: 0 0 16px rgba(201,168,76,0.55), 0 2px 8px rgba(0,0,0,0.9);
+    background: rgba(0,0,0,0.42);
+    border-radius: 20px;
+    white-space: nowrap;
+    z-index: 8;
+    pointer-events: none;
+    min-width: 220px;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(201,168,76,0.25);
+    letter-spacing: 0.03em;
+    transition: opacity 0.35s;
+  }
+
+  /* ── PLAY CARD ── */
+  .play-card {
+    width: 56px; height: 80px;
+    background: var(--card-bg);
+    border-radius: 7px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: space-between;
+    padding: 4px;
+    box-shadow: 2px 3px 10px rgba(0,0,0,0.5);
+    position: relative;
+    cursor: default;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .play-card .rank { font-size: 1rem; font-weight: 700; line-height: 1; }
+  .play-card .suit { font-size: 0.85rem; }
+  .play-card .center-suit { font-size: 1.5rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); }
+  .play-card.red .rank, .play-card.red .suit, .play-card.red .center-suit { color: var(--card-red); }
+  .play-card.black .rank, .play-card.black .suit, .play-card.black .center-suit { color: var(--card-black); }
+  .corner-top { position: absolute; top: 3px; left: 4px; text-align: center; }
+  .corner-bot { position: absolute; bottom: 3px; right: 4px; text-align: center; transform: rotate(180deg); }
+
+  /* ── PLAYER HAND ── */
+  #player-area {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    display: flex; flex-direction: column;
+    align-items: center;
+    padding-bottom: 4px;
+    transition: box-shadow 0.4s;
+  }
+
+  #player-controls {
+    display: flex; gap: 6px; margin-bottom: 5px; align-items: center;
+    flex-wrap: wrap; justify-content: center;
+    padding: 0 8px;
+  }
+  .btn-sm {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(201,168,76,0.4);
+    color: var(--gold-light);
+    padding: 5px 14px;
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.9rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-sm:hover { background: rgba(201,168,76,0.15); border-color: var(--gold); }
+  .btn-sm:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-play {
+    background: linear-gradient(135deg, #2d6b44, #1a4a2e);
+    border-color: var(--gold);
+    color: var(--gold);
+    font-weight: 600;
+  }
+  .btn-play:hover { background: linear-gradient(135deg, #3d8b5a, #2d6b44); }
+  .btn-play-big {
+    padding: 7px 22px !important;
+    font-size: 1rem !important;
+    letter-spacing: 0.04em;
+  }
+  .btn-pass-big {
+    padding: 7px 18px !important;
+    font-size: 1rem !important;
+    background: rgba(0,0,0,0.4) !important;
+    border-color: rgba(201,168,76,0.5) !important;
+    color: var(--gold-light) !important;
+  }
+  .btn-pass-big:hover { background: rgba(201,168,76,0.15) !important; }
+  /* New Game – floated to the right side */
+  .btn-forfeit {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,80,80,0.4);
+    color: #ff8888;
+    padding: 6px 16px;
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.9rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    z-index: 15;
+  }
+  .btn-forfeit:hover { background: rgba(200,40,40,0.2); border-color: rgba(255,80,80,0.7); color: #ffaaaa; }
+  .btn-forfeit:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  #player-name-label {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.85rem;
+    color: var(--gold);
+    margin-bottom: 3px;
+    transition: all 0.3s;
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+  }
+
+  #hand-container {
+    position: relative;
+    height: 160px;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    overflow: visible;
+  }
+
+  .hand-card {
+    position: absolute;
+    width: 64px; height: 90px;
+    background: var(--card-bg);
+    border-radius: 8px;
+    box-shadow: 2px 4px 12px rgba(0,0,0,0.6);
+    cursor: pointer;
+    transition: bottom 0.2s ease, transform 0.25s ease, box-shadow 0.2s;
+    transform-origin: bottom center;
+    user-select: none;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: space-between;
+    padding: 5px;
+  }
+  .hand-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.7); }
+  .hand-card.selected {
+    box-shadow: 0 0 0 2px var(--gold), 0 -10px 20px rgba(201,168,76,0.3) !important;
+    z-index: 20 !important;
+  }
+  .hand-card.red .rank, .hand-card.red .center-suit { color: var(--card-red); }
+  .hand-card.black .rank, .hand-card.black .center-suit { color: var(--card-black); }
+  .hand-card .rank { font-size: 1.1rem; font-weight: 700; align-self: flex-start; padding-left: 2px; }
+  .hand-card .center-suit { font-size: 1.8rem; }
+
+  /* ── MODAL ── */
+  #modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 200;
+  }
+  #modal-box {
+    background: linear-gradient(160deg, #1e3a28, #0d2018);
+    border: 1px solid var(--gold);
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 420px; width: 90%;
+    text-align: center;
+  }
+  #modal-box {
+    position: relative;
+  }
+  #modal-close-x {
+    position: absolute;
+    top: 12px; right: 14px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.4rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+  }
+  #modal-close-x:hover { color: var(--text-light); background: rgba(255,255,255,0.08); }
+  #modal-close-x.hidden { display: none; }
+  #modal-box h2 {
+    font-family: 'Playfair Display', serif;
+    color: var(--gold);
+    font-size: 1.6rem;
+    margin-bottom: 0.5rem;
+  }
+  #modal-box p { color: var(--text-dim); margin-bottom: 1.5rem; font-size: 1rem; }
+  .modal-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+  /* ── TOAST – moved to bottom so it doesn't cover NPC 3 ── */
+  #toast {
+    position: fixed; bottom: 225px; left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: rgba(0,0,0,0.88);
+    border: 1px solid var(--gold);
+    color: var(--gold-light);
+    padding: 7px 18px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s;
+    z-index: 300;
+    backdrop-filter: blur(4px);
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── ACTIVE PLAYER HIGHLIGHT ── */
+  .npc-zone.active .npc-name { color: #7fffaa; text-shadow: 0 0 10px rgba(100,255,150,0.6); }
+
+  /* Player turn – glowing name badge + subtle area glow */
+  #player-area.your-turn {
+    box-shadow: 0 -4px 32px rgba(100,255,150,0.15);
+    border-radius: 12px 12px 0 0;
+  }
+  #player-name-label.active {
+    color: #0d2010;
+    background: linear-gradient(135deg, #7fffaa, #50c878);
+    box-shadow: 0 0 14px rgba(100,255,150,0.55);
+    font-weight: 700;
+    padding: 2px 12px;
+    border-radius: 10px;
+  }
+
+  /* Newest discard group — glowing highlight, sized to fit in pile */
+  .play-card.newest {
+    width: 62px !important;
+    height: 88px !important;
+    box-shadow: 0 0 0 2px #7fffaa, 0 0 14px rgba(100,255,150,0.5) !important;
+    animation: newcard 0.38s cubic-bezier(0.22,1,0.36,1);
+    position: relative;
+    z-index: 5;
+  }
+  .play-card.newest .corner-top,
+  .play-card.newest .corner-bot { font-size: 1.05rem; }
+  .play-card.newest .center-suit { font-size: 1.6rem !important; }
+  @keyframes newcard {
+    0%  { transform: scale(0.78) translateY(-8px); opacity: 0.2; }
+    60% { transform: scale(1.04) translateY(1px);  opacity: 1;   }
+    100%{ transform: scale(1)    translateY(0);     opacity: 1;   }
+  }
+
+  /* ── WINNER BANNER ── */
+  #winner-banner {
+    display: none;
+    position: fixed; inset: 0;
+    align-items: center; justify-content: center;
+    z-index: 150;
+    background: rgba(0,0,0,0.6);
+  }
+  #winner-box {
+    background: linear-gradient(160deg, #1e3a28, #0d2018);
+    border: 2px solid var(--gold);
+    border-radius: 16px;
+    padding: 2.5rem;
+    max-width: 500px; width: 90%;
+    text-align: center;
+  }
+  #winner-box h2 { font-family: 'Playfair Display', serif; color: var(--gold); font-size: 2rem; margin-bottom: 0.5rem; }
+  #score-summary { margin: 1rem 0; }
+  .score-line { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  /* ── RANK BADGE ── */
+  #player-rank-badge {
+    position: absolute;
+    left: 14px;
+    bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    z-index: 15;
+  }
+  .rank-badge {
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    border: 2px solid rgba(255,255,255,0.15);
+    position: relative;
+    overflow: hidden;
+  }
+  .rank-badge svg { width: 28px; height: 28px; }
+  .rank-badge.beginner  { background: radial-gradient(circle, #3a3a3a, #1a1a1a); border-color: #555; }
+  .rank-badge.bronze    { background: radial-gradient(circle, #cd7f32, #7a4a1a); border-color: #cd7f32; box-shadow: 0 0 10px rgba(205,127,50,0.5); }
+  .rank-badge.silver    { background: radial-gradient(circle, #d8d8d8, #888); border-color: #c0c0c0; box-shadow: 0 0 10px rgba(192,192,192,0.5); }
+  .rank-badge.gold      { background: radial-gradient(circle, #ffd700, #b8860b); border-color: #ffd700; box-shadow: 0 0 14px rgba(255,215,0,0.6); }
+  /* Small badge variant used inline */
+  .rank-badge-sm {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.15);
+    vertical-align: middle;
+    margin-left: 5px;
+    flex-shrink: 0;
+  }
+  .rank-badge-sm svg { width: 13px; height: 13px; }
+  .rank-badge-sm.beginner { background: radial-gradient(circle, #3a3a3a, #1a1a1a); border-color: #555; }
+  .rank-badge-sm.bronze   { background: radial-gradient(circle, #cd7f32, #7a4a1a); border-color: #cd7f32; }
+  .rank-badge-sm.silver   { background: radial-gradient(circle, #d8d8d8, #888);    border-color: #c0c0c0; }
+  .rank-badge-sm.gold     { background: radial-gradient(circle, #ffd700, #b8860b); border-color: #ffd700; }
+  .rank-label {
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    text-align: center;
+    font-family: 'Crimson Pro', serif;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── SPLASH RANK DISPLAY ── */
+  #splash-rank {
+    margin-bottom: 1.2rem;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 18px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 20px;
+    border: 1px solid rgba(201,168,76,0.2);
+  }
+  #splash-rank .rank-badge { width: 32px; height: 32px; font-size: 1rem; }
+  #splash-rank-text { font-size: 0.9rem; color: var(--text-dim); }
+  #splash-rank-text strong { color: var(--text-light); }
+
+  /* ── GAME MODE BUTTONS ── */
+  .mode-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 1.2rem;
+    width: 280px;
+  }
+  .mode-btn {
+    padding: 10px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(201,168,76,0.3);
+    background: rgba(0,0,0,0.35);
+    color: var(--text-light);
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .mode-btn:hover:not(:disabled) { background: rgba(201,168,76,0.15); border-color: var(--gold); }
+  .mode-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .mode-btn .mode-icon { font-size: 1.1rem; display: block; margin-bottom: 3px; }
+  .mode-btn .mode-req  { font-size: 0.65rem; color: var(--text-dim); display: block; }
+  .mode-btn.active-mode { border-color: var(--gold); background: rgba(201,168,76,0.12); }
+
+  /* ── PLAYER NAME EDIT ── */
+  #player-name-edit-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 0.8rem;
+  }
+  #player-name-input {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(201,168,76,0.4);
+    color: var(--text-light);
+    font-family: 'Crimson Pro', serif;
+    font-size: 1rem;
+    padding: 5px 12px;
+    border-radius: 6px;
+    width: 160px;
+    text-align: center;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #player-name-input:focus { border-color: var(--gold); }
+  #player-name-input::placeholder { color: var(--text-dim); }
+  .edit-name-label {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+
+  /* ── SPLASH TITLES ── */
+  #splash-stonybrook {
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+    color: var(--text-dim);
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    margin-bottom: 0.3em;
+  }
+  #splash h1 {
+    font-family: 'Noto Serif TC', 'SimSun', 'Playfair Display', serif;
+    font-size: clamp(3.5rem, 10vw, 6.5rem);
+    color: var(--gold);
+    text-shadow: 0 0 40px rgba(201,168,76,0.5);
+    letter-spacing: 0.06em;
+    margin-bottom: 0.1em;
+    line-height: 1;
+  }
+  #splash-big2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.3rem;
+    color: var(--text-dim);
+    letter-spacing: 0.2em;
+    margin-bottom: 1.8rem;
+  }
+
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="splash-cards">
+    <div class="mini-card" style="width:55px;height:78px;transform:rotate(-8deg)"></div>
+    <div class="mini-card" style="width:55px;height:78px;transform:rotate(-3deg)"></div>
+    <div class="mini-card" style="width:55px;height:78px;transform:rotate(3deg)"></div>
+    <div class="mini-card" style="width:55px;height:78px;transform:rotate(8deg)"></div>
+  </div>
+  <div id="splash-stonybrook">Stony Brook</div>
+  <h1>鋤大弟</h1>
+  <div id="splash-big2">Big 2</div>
+  <div id="player-name-edit-row">
+    <span class="edit-name-label">Player Name:</span>
+    <input type="text" id="player-name-input" maxlength="16" placeholder="Your Name" oninput="updatePlayerName(this.value)"/>
+  </div>
+  <div id="splash-rank">
+    <div class="rank-badge beginner" id="splash-badge"></div>
+    <div id="splash-rank-text">Rank: <strong id="splash-rank-name">Beginner</strong> &nbsp;|&nbsp; Points: <strong id="splash-pts">0</strong></div>
+  </div>
+  <div class="mode-grid" id="mode-grid">
+    <button class="mode-btn active-mode" id="mode-beginner" onclick="selectMode('beginner')">
+      <span class="mode-icon">🌱</span>Beginner
+      <span class="mode-req">Open to all</span>
+    </button>
+    <button class="mode-btn" id="mode-intermediate" onclick="selectMode('intermediate')" disabled>
+      <span class="mode-icon">🥉</span>Intermediate
+      <span class="mode-req">Bronze req.</span>
+    </button>
+    <button class="mode-btn" id="mode-hard" onclick="selectMode('hard')" disabled>
+      <span class="mode-icon">🥈</span>Hard
+      <span class="mode-req">Silver req.</span>
+    </button>
+    <button class="mode-btn" id="mode-pro" onclick="selectMode('pro')" disabled>
+      <span class="mode-icon">🥇</span>Professional
+      <span class="mode-req">Gold req.</span>
+    </button>
+  </div>
+  <button class="btn-gold" id="btn-start-game" onclick="startGame()">▶ Start New Game</button>
+  <button class="btn-ghost" onclick="showScoreboard()">📊 View Standings</button>
+</div>
+
+<!-- GAME TABLE -->
+<div id="game">
+
+  <!-- Dragon watermark -->
+  <div id="dragon-bg">
+    <svg viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="white" stroke-linecap="round" stroke-linejoin="round">
+      <!-- === MAIN BODY COILS === -->
+      <path stroke-width="14" d="M400 80 C460 70 530 90 570 150 C610 210 600 285 555 330 C510 375 445 385 390 365 C335 345 295 300 285 250 C275 200 300 148 350 132 C400 116 450 138 465 182 C480 226 455 270 412 278 C369 286 335 258 330 218 C325 178 352 148 385 152"/>
+      <path stroke-width="13" d="M285 250 C260 220 225 205 192 215 C159 225 138 258 142 292 C146 326 173 352 205 358 C237 364 268 346 278 316 C288 286 270 255 242 248 C214 241 192 260 192 288"/>
+      <path stroke-width="12" d="M192 288 C185 320 192 355 212 378 C232 401 262 412 292 405 C322 398 344 374 344 344 C344 314 322 292 298 292 C274 292 258 312 262 335"/>
+      <path stroke-width="11" d="M262 335 C255 360 260 390 278 410 C296 430 322 438 348 430 C374 422 390 398 388 372 C386 346 366 328 344 330"/>
+      <path stroke-width="10" d="M348 430 C340 465 348 502 368 524 C388 546 418 552 446 540 C474 528 488 500 480 472 C472 444 448 430 424 436 C400 442 390 466 400 488"/>
+      <path stroke-width="8" d="M400 488 C408 510 420 528 438 532 C456 536 472 522 472 504 C472 486 456 475 442 480 C428 485 424 500 432 510"/>
+      <path stroke-width="6" d="M432 510 C438 520 448 524 456 518 C464 512 462 500 454 496"/>
+      <!-- === NECK AND HEAD === -->
+      <path stroke-width="13" d="M400 80 C388 58 368 42 345 38 C322 34 300 44 292 64 C284 84 295 108 315 116 C335 124 358 112 362 92 C366 72 350 56 332 60"/>
+      <path stroke-width="10" d="M362 92 C378 78 398 72 418 78 C438 84 450 102 445 122 C440 142 420 152 400 146 C380 140 368 122 370 104"/>
+      <path stroke-width="9" d="M445 122 C462 118 480 126 486 142 C492 158 482 176 466 180 C450 184 436 172 434 157"/>
+      <path stroke-width="8" d="M434 157 C428 170 428 185 438 193 C448 201 462 198 470 188 C478 178 476 164 466 158"/>
+      <path stroke-width="3" d="M455 142 L450 130 M462 145 L459 133 M469 150 L468 138 M476 156 L477 144"/>
+      <path stroke-width="3" d="M450 170 L448 182 M458 168 L458 180 M466 170 L468 182"/>
+      <ellipse cx="412" cy="100" rx="9" ry="10" stroke-width="3" fill="white"/>
+      <ellipse cx="412" cy="101" rx="5" ry="6" fill="white" stroke="none"/>
+      <path stroke-width="4" d="M402 89 C408 84 418 84 424 88"/>
+      <ellipse cx="474" cy="138" rx="4" ry="2.5" transform="rotate(-20,474,138)" stroke-width="2.5"/>
+      <!-- === MANE AND BEARD === -->
+      <path stroke-width="4" d="M370 104 C358 94 344 90 334 98 C324 106 325 120 335 126 C345 132 358 126 360 116"/>
+      <path stroke-width="3.5" d="M362 92 C350 80 336 76 328 84 C320 92 323 106 333 110"/>
+      <path stroke-width="3" d="M358 82 C348 70 335 66 328 74"/>
+      <path stroke-width="3.5" d="M362 140 C355 155 350 172 358 184 C366 196 380 198 390 190"/>
+      <path stroke-width="3" d="M370 148 C360 162 358 178 366 188"/>
+      <path stroke-width="3" d="M470 165 C488 175 502 192 498 210 C494 228 478 234 465 228"/>
+      <path stroke-width="2.5" d="M472 172 C492 185 505 205 500 222"/>
+      <path stroke-width="2.5" d="M466 158 C480 162 494 172 496 186 C498 200 488 210 476 208"/>
+      <!-- === DORSAL SPINES === -->
+      <path stroke-width="5" d="M420 80 C428 62 424 44 432 36"/>
+      <path stroke-width="4.5" d="M440 95 C452 78 450 58 460 50"/>
+      <path stroke-width="4" d="M455 115 C470 100 470 80 480 72"/>
+      <path stroke-width="4" d="M462 138 C480 125 482 104 492 96"/>
+      <path stroke-width="3.5" d="M560 185 C578 172 582 150 594 144"/>
+      <path stroke-width="3.5" d="M568 218 C588 208 594 186 606 180"/>
+      <path stroke-width="3" d="M562 252 C582 244 590 222 602 216"/>
+      <path stroke-width="3" d="M545 282 C564 276 572 255 584 250"/>
+      <path stroke-width="2.5" d="M380 372 C368 388 368 408 360 416"/>
+      <path stroke-width="2.5" d="M355 360 C342 374 340 395 332 402"/>
+      <path stroke-width="2.5" d="M345 340 C330 352 326 372 318 378"/>
+      <!-- === FRONT ARM AND CLAWS === -->
+      <path stroke-width="10" d="M555 330 C575 308 598 292 618 270 C638 248 648 220 635 198 C622 176 596 172 575 184 C554 196 548 222 558 244 C568 266 590 274 610 264"/>
+      <path stroke-width="5" d="M618 270 C632 256 640 238 632 224 C628 238 622 252 618 264"/>
+      <path stroke-width="4.5" d="M635 198 C645 182 644 162 635 152 C633 166 630 182 628 196"/>
+      <path stroke-width="4.5" d="M640 210 C654 196 656 174 648 162"/>
+      <path stroke-width="4" d="M645 225 C660 215 664 193 657 181"/>
+      <path stroke-width="3" d="M632 224 C638 214 636 202 628 198"/>
+      <path stroke-width="3" d="M635 152 C640 140 636 128 626 126"/>
+      <path stroke-width="3" d="M648 162 C654 150 651 137 641 135"/>
+      <path stroke-width="3" d="M657 181 C664 170 662 157 653 154"/>
+      <!-- === REAR ARM AND CLAWS === -->
+      <path stroke-width="9" d="M446 540 C440 568 445 598 460 620 C475 642 498 654 522 648 C546 642 560 620 554 596 C548 572 526 560 506 566 C486 572 478 594 488 612"/>
+      <path stroke-width="4.5" d="M460 620 C454 638 458 656 470 660 C465 648 462 634 462 622"/>
+      <path stroke-width="4.5" d="M446 626 C438 644 440 664 452 668"/>
+      <path stroke-width="4" d="M474 638 C470 656 474 674 486 676"/>
+      <path stroke-width="3.5" d="M488 644 C486 662 492 678 504 678"/>
+      <path stroke-width="3" d="M470 660 C468 672 472 682 480 682"/>
+      <path stroke-width="3" d="M452 668 C448 680 452 690 460 690"/>
+      <!-- === SCALES === -->
+      <path stroke-width="2" d="M500 188 C508 182 518 182 524 190"/>
+      <path stroke-width="2" d="M516 204 C524 198 534 198 540 206"/>
+      <path stroke-width="2" d="M526 222 C534 216 544 216 550 224"/>
+      <path stroke-width="2" d="M532 242 C540 236 550 236 556 244"/>
+      <path stroke-width="2" d="M528 264 C536 258 546 258 552 266"/>
+      <path stroke-width="2" d="M510 288 C518 282 528 282 534 290"/>
+      <path stroke-width="2" d="M315 265 C307 259 297 259 291 267"/>
+      <path stroke-width="2" d="M308 288 C300 282 290 282 284 290"/>
+      <path stroke-width="2" d="M244 262 C236 256 226 256 220 264"/>
+      <path stroke-width="2" d="M238 285 C230 279 220 279 214 287"/>
+      <path stroke-width="1.8" d="M274 350 C282 344 292 344 298 352"/>
+      <path stroke-width="1.8" d="M285 368 C293 362 303 362 309 370"/>
+      <path stroke-width="1.8" d="M355 398 C363 392 373 392 379 400"/>
+      <path stroke-width="1.8" d="M415 465 C423 459 433 459 439 467"/>
+      <path stroke-width="1.8" d="M420 488 C428 482 438 482 444 490"/>
+      <!-- === FLAME BREATH === -->
+      <path stroke-width="3.5" d="M486 142 C500 132 516 136 520 150 C524 164 514 178 502 178 C512 170 518 158 512 148 C506 138 494 138 488 148"/>
+      <path stroke-width="3" d="M512 148 C524 140 538 144 540 158 C542 172 530 182 519 180"/>
+      <path stroke-width="2.5" d="M540 158 C550 152 562 156 562 168 C562 180 550 186 541 182"/>
+      <path stroke-width="2.5" d="M502 178 C506 192 500 206 490 208 C480 210 472 200 474 190"/>
+      <path stroke-width="2" d="M519 180 C522 196 514 210 504 210"/>
+      <path stroke-width="2" d="M541 182 C548 196 542 212 532 213"/>
+      <path stroke-width="2" d="M525 140 C530 126 526 112 520 108 C524 118 526 130 524 142"/>
+      <path stroke-width="1.8" d="M538 148 C546 134 545 118 537 114"/>
+      <path stroke-width="1.8" d="M550 158 C560 146 561 130 554 126"/>
+      <!-- === CLOUD SWIRLS === -->
+      <path stroke-width="2.5" d="M100 200 C108 188 122 186 130 196 C138 206 134 220 124 224 C114 228 104 220 106 210 C108 200 118 196 126 202"/>
+      <path stroke-width="2" d="M130 196 C140 188 154 190 158 202 C162 214 154 226 144 226"/>
+      <path stroke-width="2.5" d="M680 500 C672 488 658 486 650 496 C642 506 646 520 656 524 C666 528 676 520 674 510"/>
+      <path stroke-width="2" d="M650 496 C640 488 626 490 622 502 C618 514 626 526 636 526"/>
+      <path stroke-width="2.5" d="M150 580 C158 568 172 566 180 576 C188 586 184 600 174 604 C164 608 154 600 156 590"/>
+      <path stroke-width="2.5" d="M620 160 C628 148 642 146 650 156 C658 166 654 180 644 184 C634 188 624 180 626 170"/>
+      <!-- === EXTRA DETAIL: second front arm reaching out === -->
+      <path stroke-width="8" d="M290 250 C265 235 245 215 228 192 C211 169 208 142 220 124 C232 106 254 102 272 112 C290 122 294 146 282 162 C270 178 252 180 244 168"/>
+      <path stroke-width="4" d="M220 124 C214 108 215 90 224 80 C221 94 220 108 222 122"/>
+      <path stroke-width="4" d="M208 136 C200 120 200 102 210 92"/>
+      <path stroke-width="3.5" d="M215 150 C205 136 203 118 212 108"/>
+      <path stroke-width="3" d="M224 80 C220 68 222 56 230 52"/>
+      <path stroke-width="3" d="M210 92 C204 80 205 66 214 62"/>
+      <path stroke-width="3" d="M212 108 C204 96 204 82 213 78"/>
+      <!-- === PEARL / BALL === -->
+      <circle cx="320" cy="108" r="22" stroke-width="4"/>
+      <circle cx="320" cy="108" r="15" stroke-width="2.5"/>
+      <path stroke-width="2" d="M310 96 C318 88 330 88 336 96"/>
+      <path stroke-width="2" d="M308 106 C314 98 326 98 334 106"/>
+      <path stroke-width="1.5" d="M310 115 C316 108 324 108 330 115"/>
+    </svg>
+  </div>
+
+
+  <!-- Turn -->
+  <div id="turn-indicator">Waiting to start…</div>
+
+  <!-- Scoreboard -->
+  <div id="scoreboard">
+    <h3>🏆 Standings</h3>
+    <div class="score-row"><span style="display:flex;align-items:center;gap:4px;"><span id="sc-p1-name">You</span><div class="rank-badge-sm beginner" id="sc-p1-badge"></div></span><span id="sc-p1">0</span></div>
+    <div class="score-row"><span>NPC 2</span><span id="sc-p2">0</span></div>
+    <div class="score-row"><span>NPC 3</span><span id="sc-p3">0</span></div>
+    <div class="score-row"><span>NPC 4</span><span id="sc-p4">0</span></div>
+    <div id="games-played">Games played: 0</div>
+  </div>
+
+  <!-- Top NPC (Player 3) -->
+  <div id="npc-top" class="npc-zone">
+    <div class="npc-name" id="name-p3">NPC 3</div>
+    <div class="npc-cards" id="cards-p3"></div>
+    <div class="card-count" id="count-p3">13</div>
+  </div>
+
+  <!-- Play-by-play message below NPC 3 -->
+  <div id="last-play-info"></div>
+
+  <!-- Right NPC (Player 2) -->
+  <div id="npc-right" class="npc-zone">
+    <div class="npc-name" id="name-p2">NPC 2</div>
+    <div class="card-count" id="count-p2">13</div>
+    <div class="npc-cards" id="cards-p2"></div>
+  </div>
+
+  <!-- Left NPC (Player 4) -->
+  <div id="npc-left" class="npc-zone">
+    <div class="npc-name" id="name-p4">NPC 4</div>
+    <div class="card-count" id="count-p4">13</div>
+    <div class="npc-cards" id="cards-p4"></div>
+  </div>
+
+  <!-- Center -->
+  <div id="discard-area">
+    <div id="chinese-title">鋤大弟</div>
+    <div id="discard-pile"></div>
+    <div id="game-title-below">Big 2</div>
+  </div>
+
+  <!-- Player Area -->
+  <div id="player-area">
+    <div id="player-name-label">You (Player 1)</div>
+    <div id="player-controls">
+      <button class="btn-sm" onclick="sortByRank()">Sort by Rank</button>
+      <button class="btn-sm" onclick="sortBySuit()">Sort by Suit</button>
+      <button class="btn-sm" onclick="groupByFive()">Group 5-Cards</button>
+      <button class="btn-sm btn-play btn-play-big" id="btn-play" onclick="playerPlay()" disabled>Play</button>
+      <button class="btn-sm btn-pass-big" id="btn-pass" onclick="playerPass()" disabled>Pass</button>
+    </div>
+    <button class="btn-forfeit" id="btn-forfeit" onclick="forfeitGame()">🏳 Forfeit</button>
+    <div id="hand-container"></div>
+  </div>
+
+  <!-- Player rank badge -->
+  <div id="player-rank-badge">
+    <div class="rank-badge beginner" id="game-rank-badge"></div>
+    <div class="rank-label" id="game-rank-label">Beginner</div>
+  </div>
+
+</div>
+
+<!-- Modal -->
+<div id="modal-overlay">
+  <div id="modal-box">
+    <button id="modal-close-x" class="hidden" onclick="cancelForfeit()" title="Cancel forfeit">✕</button>
+    <h2 id="modal-title">Game Over</h2>
+    <p id="modal-body"></p>
+    <div class="modal-buttons" id="modal-buttons"></div>
+  </div>
+</div>
+
+<!-- Winner banner -->
+<div id="winner-banner">
+  <div id="winner-box">
+    <h2 id="winner-title">🏆 Winner!</h2>
+    <p id="winner-sub"></p>
+    <div id="score-summary"></div>
+    <div class="modal-buttons" style="margin-top:1.5rem">
+      <button class="btn-gold" onclick="continueGame()">Continue Playing</button>
+      <button class="btn-ghost" onclick="endSession()">End Session</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════
+//  CONSTANTS
+// ════════════════════════════════════════
+const RANKS = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
+const SUITS = ['♦','♣','♥','♠']; // lowest to highest
+const SUIT_NAMES = { '♦':'Diamonds','♣':'Clubs','♥':'Hearts','♠':'Spades' };
+const RANK_VAL = Object.fromEntries(RANKS.map((r,i)=>[r,i]));
+const SUIT_VAL = Object.fromEntries(SUITS.map((s,i)=>[s,i]));
+const RED_SUITS = new Set(['♥','♦']);
+
+// ════════════════════════════════════════
+//  GAME STATE
+// ════════════════════════════════════════
+let hands = [[],[],[],[]]; // 0=player, 1=npc2, 2=npc3, 3=npc4
+let currentPlayer = 0;
+let discardPile = []; // array of arrays (each play)
+let lastPlay = null;   // {cards, type, playerIdx}
+let passCount = 0;
+let gameActive = false;
+let selectedCards = [];
+let scores = [0,0,0,0];
+let gamesPlayed = 0;
+let firstTurn = true; // first play of the game
+let openingPlayer = 0; // who has diamond 3
+let currentRoundPlays = []; // all plays in current round, cleared when everyone passes
+let selectedMode = 'beginner'; // current game mode
+let globalDiscardedCards = new Set(); // all cards ever played this game (for NPC card counting)
+let playerCustomName = 'You'; // player's display name
+let highestPts = 0; // highest score ever achieved (for rank retention)
+
+// ════════════════════════════════════════
+//  RANK SYSTEM
+// ════════════════════════════════════════
+
+function trophySVG(rankCls) {
+  const fills = {
+    beginner: '#707070', bronze: '#e8a050', silver: '#e0e0e0', gold: '#ffe44d'
+  };
+  const shines = {
+    beginner: 'rgba(255,255,255,0.2)', bronze: 'rgba(255,220,150,0.3)',
+    silver: 'rgba(255,255,255,0.4)', gold: 'rgba(255,255,200,0.45)'
+  };
+  const f = fills[rankCls] || '#707070';
+  const s = shines[rankCls] || 'rgba(255,255,255,0.2)';
+  return `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M7 3H17V13C17 15.76 14.76 18 12 18C9.24 18 7 15.76 7 13V3Z" fill="${f}"/>
+    <path d="M7 6H4C4 8.76 5.79 11.08 8.27 11.77L7 6Z" fill="${f}" opacity="0.8"/>
+    <path d="M17 6H20C20 8.76 18.21 11.08 15.73 11.77L17 6Z" fill="${f}" opacity="0.8"/>
+    <rect x="10" y="18" width="4" height="2" fill="${f}"/>
+    <rect x="8" y="20" width="8" height="1.5" rx="0.5" fill="${f}"/>
+    <path d="M9 5H15V11C15 13.21 13.21 15 12 15C10.79 15 9 13.21 9 11V5Z" fill="${s}" opacity="0.25"/>
+  </svg>`;
+}
+
+const RANKS_DEF = [
+  { name:'Beginner',     cls:'beginner',    minPts:    0, mode:'beginner'     },
+  { name:'Bronze',       cls:'bronze',      minPts:  100, mode:'intermediate' },
+  { name:'Silver',       cls:'silver',      minPts: 1000, mode:'hard'         },
+  { name:'Gold',         cls:'gold',        minPts: 5000, mode:'pro'          },
+];
+
+function getPlayerRank(pts) {
+  // Use the highest ever points to determine retained rank
+  const effectivePts = Math.max(pts, highestPts);
+  let r = RANKS_DEF[0];
+  for (const rd of RANKS_DEF) if (effectivePts >= rd.minPts) r = rd;
+  return r;
+}
+
+function getPlayerRankForUnlock() {
+  // For mode unlocking use the all-time high (retained rank)
+  return Math.max(scores[0], highestPts);
+}
+
+function updateRankUI() {
+  const pts = scores[0];
+  const rank = getPlayerRank(pts); // uses highestPts internally
+
+  // Splash
+  const sb = document.getElementById('splash-badge');
+  const sn = document.getElementById('splash-rank-name');
+  const sp = document.getElementById('splash-pts');
+  if (sb) { sb.innerHTML = trophySVG(rank.cls); sb.className = 'rank-badge ' + rank.cls; }
+  if (sn) sn.textContent = rank.name;
+  if (sp) sp.textContent = pts;
+
+  // Unlock mode buttons
+  const modes = ['beginner','intermediate','hard','pro'];
+  modes.forEach(m => {
+    const btn = document.getElementById('mode-' + m);
+    if (!btn) return;
+    const modeRank = RANKS_DEF.find(r => r.mode === m) || RANKS_DEF[0];
+    const unlocked = getPlayerRankForUnlock() >= modeRank.minPts;
+    btn.disabled = !unlocked;
+    btn.classList.toggle('active-mode', m === selectedMode);
+  });
+
+  // Game screen badge
+  const gb = document.getElementById('game-rank-badge');
+  const gl = document.getElementById('game-rank-label');
+  if (gb) { gb.innerHTML = trophySVG(rank.cls); gb.className = 'rank-badge ' + rank.cls; }
+  if (gl) gl.textContent = rank.name;
+
+  // In-game scoreboard row badge
+  const sc1 = document.getElementById('sc-p1-badge');
+  if (sc1) { sc1.innerHTML = trophySVG(rank.cls); sc1.className = 'rank-badge-sm ' + rank.cls; }
+}
+
+function selectMode(mode) {
+  selectedMode = mode;
+  updateRankUI();
+}
+
+// Storage
+function saveScores() {
+  // Track all-time high for rank retention
+  if (scores[0] > highestPts) highestPts = scores[0];
+  localStorage.setItem('big2_scores', JSON.stringify(scores));
+  localStorage.setItem('big2_games', gamesPlayed);
+  localStorage.setItem('big2_pname', playerCustomName);
+  localStorage.setItem('big2_highpts', highestPts);
+}
+function loadScores() {
+  const s  = localStorage.getItem('big2_scores');
+  const g  = localStorage.getItem('big2_games');
+  const n  = localStorage.getItem('big2_pname');
+  const hp = localStorage.getItem('big2_highpts');
+  if (s)  scores = JSON.parse(s);
+  if (g)  gamesPlayed = parseInt(g);
+  if (n)  playerCustomName = n;
+  if (hp) highestPts = parseInt(hp);
+}
+
+// ════════════════════════════════════════
+//  CARD UTILITIES
+// ════════════════════════════════════════
+function cardVal(card) {
+  return RANK_VAL[card.rank] * 4 + SUIT_VAL[card.suit];
+}
+function compareCards(a, b) { return cardVal(a) - cardVal(b); }
+function cardKey(c) { return c.rank + c.suit; }
+
+function buildDeck() {
+  const deck = [];
+  for (const s of SUITS) for (const r of RANKS) deck.push({rank:r, suit:s});
+  return deck;
+}
+function shuffle(arr) {
+  for (let i = arr.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+  return arr;
+}
+
+// ════════════════════════════════════════
+//  HAND CLASSIFICATION
+// ════════════════════════════════════════
+function classifyPlay(cards) {
+  if (!cards.length) return null;
+  const n = cards.length;
+  const sorted = [...cards].sort(compareCards);
+
+  if (n === 1) return { type:'single', key: cardVal(sorted[0]), cards: sorted };
+  if (n === 2) {
+    if (sorted[0].rank === sorted[1].rank)
+      return { type:'pair', key: cardVal(sorted[1]), cards: sorted };
+    return null;
+  }
+  if (n === 3) {
+    if (sorted[0].rank === sorted[1].rank && sorted[1].rank === sorted[2].rank)
+      return { type:'triple', key: cardVal(sorted[2]), cards: sorted };
+    return null;
+  }
+  if (n === 4) {
+    if (new Set(sorted.map(c=>c.rank)).size === 1)
+      return { type:'quad', key: cardVal(sorted[3]), cards: sorted };
+    return null;
+  }
+  if (n === 5) return classifyFive(sorted);
+  return null;
+}
+
+function classifyFive(sorted) {
+  const ranks = sorted.map(c=>RANK_VAL[c.rank]);
+  const suits = sorted.map(c=>c.suit);
+  const isFlush = suits.every(s=>s===suits[0]);
+  
+  // Straight: consecutive ranks (wrap: A-2-3-4-5 not valid in Big2, but A-K-Q-J-10 is)
+  // Straight ranks must be consecutive in order
+  const isStraight = (() => {
+    for (let i=1;i<5;i++) if (ranks[i]-ranks[i-1]!==1) return false;
+    return true;
+  })();
+
+  // Check for pairs/trips/quads within 5 cards
+  const rankCounts = {};
+  for (const c of sorted) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
+  const counts = Object.values(rankCounts).sort((a,b)=>b-a);
+  
+  const isFullHouse = counts[0]===3 && counts[1]===2;
+  const isFourOfKind = counts[0]===4;
+
+  // Best card for tiebreaking (highest card in the combo)
+  const topCard = sorted[4];
+  const topVal = cardVal(topCard);
+
+  // Five-card hand ranks (for comparison): straight=0, flush=1, full house=2, four of kind=3, straight flush=4, royal flush=5
+  if (isStraight && isFlush) {
+    const isRoyal = ranks[4]===RANK_VAL['A'] && ranks[0]===RANK_VAL['10'];
+    return { type:'five', subtype: isRoyal?'royal_flush':'straight_flush', key: topVal + (isRoyal?5:4)*1000, cards: sorted };
+  }
+  if (isFourOfKind) {
+    // key based on the quad rank
+    const qrank = Object.keys(rankCounts).find(r=>rankCounts[r]===4);
+    const qcard = sorted.filter(c=>c.rank===qrank).sort(compareCards).pop();
+    return { type:'five', subtype:'four_of_kind', key: cardVal(qcard) + 3*1000, cards: sorted };
+  }
+  if (isFullHouse) {
+    const trank = Object.keys(rankCounts).find(r=>rankCounts[r]===3);
+    const tcard = sorted.filter(c=>c.rank===trank).sort(compareCards).pop();
+    return { type:'five', subtype:'full_house', key: cardVal(tcard) + 2*1000, cards: sorted };
+  }
+  if (isFlush) return { type:'five', subtype:'flush', key: topVal + 1*1000, cards: sorted };
+  if (isStraight) return { type:'five', subtype:'straight', key: topVal + 0*1000, cards: sorted };
+  return null;
+}
+
+function beatsPlay(play, reference) {
+  if (!reference) return true;
+  if (play.type !== reference.type) return false;
+  if (play.type === 'five') {
+    // subtype rank
+    const order = ['straight','flush','full_house','four_of_kind','straight_flush','royal_flush'];
+    const pi = order.indexOf(play.subtype);
+    const ri = order.indexOf(reference.subtype);
+    if (pi !== ri) return pi > ri;
+  }
+  return play.key > reference.key;
+}
+
+// ════════════════════════════════════════
+//  DEAL & START
+// ════════════════════════════════════════
+function startGame() {
+  loadScores();
+  const deck = shuffle(buildDeck());
+  hands = [[],[],[],[]];
+  for (let i=0;i<52;i++) hands[i%4].push(deck[i]);
+  hands.forEach(h=>h.sort(compareCards));
+
+  discardPile = [];
+  currentRoundPlays = [];
+  globalDiscardedCards = new Set();
+  lastPlay = null;
+  passCount = 0;
+  selectedCards = [];
+  firstTurn = true;
+
+  // Find who has 3♦
+  openingPlayer = hands.findIndex(h=>h.some(c=>c.rank==='3'&&c.suit==='♦'));
+  currentPlayer = openingPlayer;
+
+  gameActive = true;
+  document.getElementById('splash').style.display = 'none';
+  document.getElementById('game').style.display = 'block';
+
+  // Update in-game player label with custom name
+  const lbl = document.getElementById('player-name-label');
+  if (lbl && lbl.textContent !== playerCustomName + ' (You)') lbl.textContent = playerCustomName + ' (You)';
+  renderAll();
+  setPlayerControls(currentPlayer === 0);
+  updateTurnIndicator();
+
+  if (currentPlayer !== 0) {
+    setTimeout(npcTurn, 1200);
+  }
+}
+
+// ════════════════════════════════════════
+//  RENDERING
+// ════════════════════════════════════════
+function renderAll() {
+  renderHand();
+  renderNpc(1, 'npc-right', 'cards-p2', 'count-p2', 'name-p2');
+  renderNpc(2, 'npc-top', 'cards-p3', 'count-p3', 'name-p3');
+  renderNpc(3, 'npc-left', 'cards-p4', 'count-p4', 'name-p4');
+  renderDiscardPile();
+  updateScoreboard();
+}
+
+function renderNpc(idx, zoneId, cardsId, countId, nameId) {
+  const count = hands[idx].length;
+  document.getElementById(countId).textContent = count;
+  const container = document.getElementById(cardsId);
+  container.innerHTML = '';
+  const max = Math.min(count, 13);
+  for (let i=0;i<max;i++) {
+    const d = document.createElement('div');
+    d.className = 'mini-card';
+    container.appendChild(d);
+  }
+  // active highlight
+  const pidx = idx+1; // player index 1-based: npc at hands[1]=p2, [2]=p3, [3]=p4
+  const zone = document.getElementById(zoneId);
+  zone.classList.toggle('active', currentPlayer === idx);
+}
+
+function renderHand() {
+  const container = document.getElementById('hand-container');
+  container.innerHTML = '';
+  const hand = hands[0];
+  if (!hand.length) return;
+
+  const n = hand.length;
+  // Fan angle: spread cards across an arc
+  const maxAngle = Math.min(38, n * 3.2);
+  const step = n > 1 ? (maxAngle * 2) / (n - 1) : 0;
+  const w = Math.min(window.innerWidth - 60, 720);
+  const spread = Math.min(48, w / (n + 1));
+  // Arc rise: center cards lift up more (parabolic)
+  const arcHeight = Math.min(30, n * 2.2);
+
+  hand.forEach((card, i) => {
+    const angle = n > 1 ? -maxAngle + step * i : 0;
+    const xOffset = (i - (n-1)/2) * spread;
+    // Parabolic lift: highest at center, 0 at edges
+    const t = n > 1 ? (i / (n-1)) * 2 - 1 : 0; // -1 to 1
+    const arcLift = arcHeight * (1 - t*t);
+    const baseBottom = 2 + arcLift; // arc lifts center cards
+    const zIdx = i + 1;
+
+    const el = document.createElement('div');
+    el.className = 'hand-card ' + (RED_SUITS.has(card.suit) ? 'red' : 'black');
+    el.dataset.idx = i;
+
+    el.innerHTML = `
+      <div class="rank">${card.rank}</div>
+      <div class="center-suit">${card.suit}</div>
+    `;
+
+    el.style.left = `calc(50% + ${xOffset}px - 32px)`;
+    el.style.bottom = baseBottom + 'px';
+    el.style.transform = `rotate(${angle}deg)`;
+    el.style.zIndex = zIdx;
+    el.style.transformOrigin = 'bottom center';
+
+    if (selectedCards.some(c=>cardKey(c)===cardKey(card))) {
+      el.classList.add('selected');
+      el.style.bottom = (baseBottom + 20) + 'px';
+    }
+
+    el.addEventListener('click', ()=>toggleCard(i));
+    container.appendChild(el);
+  });
+
+  document.getElementById('player-name-label').classList.toggle('active', currentPlayer === 0);
+}
+
+function renderDiscardPile() {
+  const pile = document.getElementById('discard-pile');
+  pile.innerHTML = '';
+
+  if (!currentRoundPlays.length) {
+    const hint = document.createElement('div');
+    hint.style.cssText = 'color:rgba(255,255,255,0.15);font-size:0.8rem;font-style:italic;padding:10px;width:100%;text-align:center;';
+    hint.textContent = 'No cards played yet';
+    pile.appendChild(hint);
+    return;
+  }
+
+  const shortNames = ['You', 'P2', 'P3', 'P4'];
+  const isSingleRound = currentRoundPlays.every(p => p.type === 'single');
+
+  if (isSingleRound) {
+    // ── SINGLES MODE: one flat row, all cards left→right, newest on right ──
+    const row = document.createElement('div');
+    row.className = 'discard-row singles-row';
+    currentRoundPlays.forEach((play, pi) => {
+      const isNewest = pi === currentRoundPlays.length - 1;
+      const card = play.cards[0];
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;';
+      const el = buildPlayCard(card);
+      if (isNewest) el.classList.add('newest');
+      const lbl = document.createElement('div');
+      lbl.className = 'discard-row-label';
+      lbl.style.cssText = 'min-width:unset;text-align:center;padding:0;font-size:0.6rem;' + (isNewest ? 'color:#7fffaa;' : '');
+      lbl.textContent = shortNames[play.playerIdx];
+      wrapper.appendChild(el);
+      wrapper.appendChild(lbl);
+      row.appendChild(wrapper);
+    });
+    pile.appendChild(row);
+  } else {
+    // ── MULTI-CARD MODE: each play on its own row ──
+    currentRoundPlays.forEach((play, pi) => {
+      const isNewest = pi === currentRoundPlays.length - 1;
+      const row = document.createElement('div');
+      row.className = 'discard-row';
+      if (isNewest) row.style.cssText = 'background:rgba(100,255,150,0.06);border-radius:6px;padding:2px 4px;margin:-2px -4px;';
+
+      const lbl = document.createElement('div');
+      lbl.className = 'discard-row-label';
+      lbl.textContent = shortNames[play.playerIdx];
+      lbl.style.color = isNewest ? '#7fffaa' : '';
+      row.appendChild(lbl);
+
+      play.cards.forEach(card => {
+        const el = buildPlayCard(card);
+        if (isNewest) el.classList.add('newest');
+        row.appendChild(el);
+      });
+
+      pile.appendChild(row);
+    });
+  }
+
+  pile.scrollTop = pile.scrollHeight;
+}
+
+function buildPlayCard(card) {
+  const el = document.createElement('div');
+  el.className = 'play-card ' + (RED_SUITS.has(card.suit) ? 'red' : 'black');
+  el.innerHTML = `
+    <div class="corner-top"><div class="rank">${card.rank}</div><div class="suit">${card.suit}</div></div>
+    <div class="center-suit">${card.suit}</div>
+    <div class="corner-bot"><div class="rank">${card.rank}</div><div class="suit">${card.suit}</div></div>
+  `;
+  return el;
+}
+
+function updateTurnIndicator() {
+  const names = [playerCustomName+"'s turn",'NPC 2\'s turn','NPC 3\'s turn','NPC 4\'s turn'];
+  const extra = firstTurn ? ' – must include 3♦' : '';
+  document.getElementById('turn-indicator').textContent = names[currentPlayer] + extra;
+}
+
+function updateScoreboard() {
+  ['p1','p2','p3','p4'].forEach((id,i)=>{
+    document.getElementById('sc-'+id).textContent = scores[i];
+  });
+  document.getElementById('games-played').textContent = 'Games played: ' + gamesPlayed;
+}
+
+// ════════════════════════════════════════
+//  PLAYER INTERACTION
+// ════════════════════════════════════════
+function toggleCard(idx) {
+  if (currentPlayer !== 0 || !gameActive) return;
+  const card = hands[0][idx];
+  const key = cardKey(card);
+  const found = selectedCards.findIndex(c=>cardKey(c)===key);
+  if (found >= 0) selectedCards.splice(found,1);
+  else selectedCards.push(card);
+  renderHand();
+}
+
+function clearSelection() {
+  selectedCards = [];
+  renderHand();
+}
+
+
+function groupByFive() {
+  // Find the best 5-card groups in hand and move them to front
+  const hand = hands[0];
+  if (hand.length < 5) { toast('Need at least 5 cards to group'); return; }
+  
+  const allFive = combinations(hand, 5)
+    .map(combo => classifyPlay(combo))
+    .filter(p => p && p.type === 'five')
+    .sort((a,b) => b.key - a.key); // best first
+  
+  if (!allFive.length) { toast('No 5-card combinations found'); return; }
+  
+  // Collect unique cards used in 5-card groups (greedy, best first)
+  const used = new Set();
+  const grouped = [];
+  for (const play of allFive) {
+    const keys = play.cards.map(cardKey);
+    if (keys.every(k => !used.has(k))) {
+      keys.forEach(k => used.add(k));
+      grouped.push(...play.cards);
+    }
+  }
+  // Remaining cards sorted by value
+  const remaining = hand.filter(c => !used.has(cardKey(c))).sort(compareCards);
+  hands[0] = [...grouped, ...remaining];
+  selectedCards = [];
+  renderHand();
+  const count = Math.floor(grouped.length / 5);
+  const subtypes = allFive.slice(0, count).map(p => p.subtype?.replace(/_/g,' ')).join(', ');
+  toast(`Grouped ${count} five-card hand${count>1?'s':''}: ${subtypes}`);
+}
+
+function sortByRank() {
+  // Sort by rank first, then suit within same rank
+  hands[0].sort((a,b)=>{
+    const rd = RANK_VAL[a.rank]-RANK_VAL[b.rank];
+    return rd !== 0 ? rd : SUIT_VAL[a.suit]-SUIT_VAL[b.suit];
+  });
+  selectedCards = [];
+  renderHand();
+}
+
+function sortBySuit() {
+  // Sort by suit first, then rank within suit
+  hands[0].sort((a,b)=>{
+    const sd = SUIT_VAL[a.suit]-SUIT_VAL[b.suit];
+    return sd !== 0 ? sd : RANK_VAL[a.rank]-RANK_VAL[b.rank];
+  });
+  selectedCards = [];
+  renderHand();
+}
+
+function setPlayerControls(enabled) {
+  document.getElementById('btn-play').disabled = !enabled;
+  document.getElementById('btn-pass').disabled = !enabled || (firstTurn && currentPlayer === 0);
+  // Visual turn indicator for player area
+  document.getElementById('player-area').classList.toggle('your-turn', enabled);
+  document.getElementById('player-name-label').classList.toggle('active', enabled);
+}
+
+function playerPlay() {
+  if (!selectedCards.length) { toast('Select cards to play'); return; }
+  const play = classifyPlay(selectedCards);
+  if (!play) { toast('Invalid combination!'); return; }
+
+  // First turn must include 3♦ in the combo
+  if (firstTurn) {
+    if (!selectedCards.some(c => c.rank==='3' && c.suit==='♦')) {
+      toast('First play must include 3♦'); return;
+    }
+    // Valid: single, pair (with 3♦), triple (with 3♦), quad (with 3♦), any 5-card (with 3♦)
+    // play is already classified above — all types are valid as long as 3♦ is in the combo
+    // No further restriction needed here.
+  }
+
+  // Must beat last play if not opening a new round
+  if (lastPlay && !firstTurn) {
+    if (!beatsPlay(play, lastPlay)) { toast('Must beat the last play!'); return; }
+  }
+
+  executePlay(0, selectedCards, play);
+}
+
+function forfeitGame() {
+  if (!gameActive) return;
+
+  // Step 1: Confirm — show the popup with X to cancel before committing
+  document.getElementById('modal-overlay').style.display = 'flex';
+  const xBtn = document.getElementById('modal-close-x');
+  xBtn.classList.remove('hidden');
+  document.getElementById('modal-title').textContent = '🏳 Forfeit Game?';
+  document.getElementById('modal-body').innerHTML =
+    `Are you sure you want to forfeit?<br><br>` +
+    `<span style="color:#ff8888">You will lose <strong>10 points</strong> to each NPC player<br>(−30 pts total).</span>`;
+  document.getElementById('modal-buttons').innerHTML = `
+    <button class="btn-gold" style="background:linear-gradient(135deg,#8b1a1a,#c0392b);box-shadow:0 4px 16px rgba(192,57,43,0.4);" onclick="confirmForfeit()">🏳 Confirm Forfeit</button>
+    <button class="btn-ghost" onclick="cancelForfeit()">✕ Cancel</button>
+  `;
+}
+
+function confirmForfeit() {
+  if (!gameActive) { closeModal(); return; }
+  gameActive = false;
+
+  // Deduct points
+  const penalty = 10;
+  scores[0] -= penalty * 3;
+  for (let i = 1; i < 4; i++) scores[i] += penalty;
+  gamesPlayed++;
+  saveScores();
+  updateScoreboard();
+  updateRankUI();
+
+  // Update popup to show result (no X — game is over)
+  const xBtn = document.getElementById('modal-close-x');
+  xBtn.classList.add('hidden');
+  document.getElementById('modal-title').textContent = '🏳 Game Forfeited';
+  document.getElementById('modal-body').innerHTML =
+    `You forfeited the game.<br><br>` +
+    `<span style="color:#ff8888">You lost <strong>30 points</strong> total (10 per NPC).</span><br><br>` +
+    `<span style="color:var(--text-dim);font-size:0.9rem">Your score: <strong style="color:var(--text-light)">${scores[0]}</strong></span>`;
+  document.getElementById('modal-buttons').innerHTML = `
+    <button class="btn-gold" onclick="forfeitNewGame()">▶ New Game</button>
+    <button class="btn-ghost" onclick="forfeitMainMenu()">🏠 Main Menu</button>
+  `;
+}
+
+function cancelForfeit() {
+  closeModal();
+  // Hide X button
+  document.getElementById('modal-close-x').classList.add('hidden');
+}
+
+function forfeitNewGame() {
+  closeModal();
+  startGame();
+}
+
+function forfeitMainMenu() {
+  closeModal();
+  document.getElementById('game').style.display = 'none';
+  document.getElementById('splash').style.display = 'flex';
+}
+
+function playerPass() {
+  if (firstTurn) { toast('Cannot pass on first turn'); return; }
+  if (!lastPlay) { toast('Cannot pass – you control the pile'); return; }
+  doPass(0);
+}
+
+// ════════════════════════════════════════
+//  GAME LOGIC
+// ════════════════════════════════════════
+function executePlay(playerIdx, cards, play) {
+  // Remove cards from hand
+  hands[playerIdx] = hands[playerIdx].filter(c=>!cards.some(s=>cardKey(s)===cardKey(c)));
+  discardPile.push([...cards]);
+  if (discardPile.length > 20) discardPile.shift();
+  currentRoundPlays.push({ cards:[...cards], playerIdx, type: play.type, subtype: play.subtype });
+  // Track all discarded cards for NPC card counting
+  cards.forEach(c => globalDiscardedCards.add(cardKey(c)));
+  lastPlay = { ...play, playerIdx };
+  passCount = 0;
+  firstTurn = false;
+
+  const typeLabel = {
+    single:'Single', pair:'Pair', triple:'Three of a Kind',
+    quad:'Four of a Kind', five: play.subtype?.replace(/_/g,' ')
+  }[play.type] || play.type;
+  document.getElementById('last-play-info').textContent =
+    `${playerName(playerIdx)} played: ${typeLabel}`;
+
+  selectedCards = [];
+  advanceTurn(playerIdx);
+
+  // Check win
+  if (hands[playerIdx].length === 0) {
+    setTimeout(()=>endGame(playerIdx), 400);
+    return;
+  }
+
+  renderAll();
+  if (currentPlayer !== 0) {
+    setPlayerControls(false);
+    setTimeout(npcTurn, 1000 + Math.random()*600);
+  } else {
+    setPlayerControls(true);
+    updateTurnIndicator();
+  }
+}
+
+function doPass(playerIdx) {
+  passCount++;
+  toast(playerName(playerIdx) + ' passes');
+  advanceTurn(playerIdx);
+
+  const activePlayers = hands.filter(h=>h.length>0).length;
+
+  // If passCount >= activePlayers - 1, last player opens freely
+  if (passCount >= activePlayers - 1) {
+    lastPlay = null;
+    passCount = 0;
+    currentRoundPlays = [];
+    toast(playerName(currentPlayer) + ' controls the pile!');
+    document.getElementById('last-play-info').textContent = 'New round – play anything!';
+  }
+
+  renderAll();
+  if (currentPlayer !== 0) {
+    setPlayerControls(false);
+    setTimeout(npcTurn, 900 + Math.random()*500);
+  } else {
+    setPlayerControls(true);
+    updateTurnIndicator();
+  }
+}
+
+function advanceTurn(fromPlayer) {
+  let next = (fromPlayer + 1) % 4;
+  // Skip players with no cards
+  let attempts = 0;
+  while (hands[next].length === 0 && attempts < 4) {
+    next = (next + 1) % 4;
+    attempts++;
+  }
+  currentPlayer = next;
+  updateTurnIndicator();
+}
+
+// ════════════════════════════════════════
+//  NPC AI
+// ════════════════════════════════════════
+function npcTurn() {
+  if (!gameActive || currentPlayer === 0) return;
+  const idx = currentPlayer;
+  const hand = hands[idx];
+
+  const play = findBestNpcPlay(hand, lastPlay, firstTurn && idx === openingPlayer);
+
+  if (!play) {
+    doPass(idx);
+  } else {
+    executePlay(idx, play.cards, play);
+  }
+}
+
+// ── NPC hand analysis helpers ──────────────────────────
+function npcGroupHand(hand) {
+  // Returns sets: quads, triples, pairs, singles, fiveCardCombos
+  const byRank = {};
+  for (const c of hand) { if (!byRank[c.rank]) byRank[c.rank]=[]; byRank[c.rank].push(c); }
+  const quads=[], triples=[], pairs=[], singles=[];
+  for (const cards of Object.values(byRank)) {
+    const n = cards.length;
+    if (n === 4) quads.push(cards);
+    else if (n === 3) triples.push(cards);
+    else if (n === 2) pairs.push(cards);
+    else singles.push(cards);
+  }
+  // Five-card combos
+  const fiveCombos = hand.length >= 5
+    ? combinations(hand,5).map(c=>classifyPlay(c)).filter(Boolean).filter(p=>p.type==='five')
+    : [];
+  return { quads, triples, pairs, singles, fiveCombos };
+}
+
+function npcPickFreePlay(hand) {
+  // When NPC controls the pile, pick the smartest play:
+  // Prefer to dump sets (pair > single when available), protect big cards.
+  // Priority: clear a quad > triple > full-house/flush/straight > pair > single (smallest)
+  const g = npcGroupHand(hand);
+
+  // If only 1-2 cards, just play them all
+  if (hand.length <= 2) {
+    const p = classifyPlay(hand);
+    return p || classifyPlay([hand[0]]);
+  }
+
+  // Prefer a complete quad
+  if (g.quads.length) {
+    const p = classifyPlay(g.quads[0]);
+    if (p) return p;
+  }
+
+  // Prefer a five-card combo (best subtype first: straight < flush < fh < 4oak < sf < rf)
+  const fiveOrder = ['straight','flush','full_house','four_of_kind','straight_flush','royal_flush'];
+  if (g.fiveCombos.length) {
+    // Sort ascending so we play the weakest combo first (save strong ones)
+    const sorted = g.fiveCombos.slice().sort((a,b)=>{
+      const ai=fiveOrder.indexOf(a.subtype), bi=fiveOrder.indexOf(b.subtype);
+      return ai!==bi ? ai-bi : a.key-b.key;
+    });
+    // Only play a five-card combo if it doesn't break up a better one we only have one of
+    return sorted[0];
+  }
+
+  // Prefer a triple
+  if (g.triples.length) {
+    const sorted = g.triples.slice().sort((a,b)=>cardVal(a[0])-cardVal(b[0]));
+    const p = classifyPlay(sorted[0]);
+    if (p) return p;
+  }
+
+  // Prefer smallest pair
+  if (g.pairs.length) {
+    const sorted = g.pairs.slice().sort((a,b)=>cardVal(a[0])-cardVal(b[0]));
+    const p = classifyPlay(sorted[0]);
+    if (p) return p;
+  }
+
+  // ── INTERMEDIATE/HARD/PRO: when controlling, lead small to fish for 2 usage ──
+  if ((selectedMode === 'intermediate' || selectedMode === 'hard' || selectedMode === 'pro') && hand.length > 3) {
+    const sorted = hand.slice().sort(compareCards);
+    // Play smallest non-high single to bait others into using their 2s/Aces
+    const nonHigh = sorted.filter(c => c.rank !== '2' && c.rank !== 'A');
+    if (nonHigh.length) {
+      const rankCounts = {};
+      for (const c of hand) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
+      const loner = nonHigh.find(c => rankCounts[c.rank] === 1);
+      return classifyPlay([loner || nonHigh[0]]);
+    }
+  }
+  // Fall back: play the single smallest card
+  const sorted = hand.slice().sort(compareCards);
+  return classifyPlay([sorted[0]]);
+}
+
+function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
+  const candidates = generateAllPlays(hand);
+
+  // Filter: must include 3♦ if first turn
+  let valid = candidates.filter(p => {
+    if (mustIncludeDiamond3) return p.cards.some(c=>c.rank==='3'&&c.suit==='♦');
+    return true;
+  });
+
+  // ── FIRST TURN: must contain 3♦, pick best from valid combos ──
+  if (mustIncludeDiamond3) {
+    if (!valid.length) return null;
+    // Prefer: dump a complete set containing 3♦ (pair > triple > quad > five > single)
+    const typeOrder = ['five','quad','triple','pair','single'];
+    for (const t of typeOrder) {
+      const ofType = valid.filter(p=>p.type===t);
+      if (ofType.length) return ofType.sort((a,b)=>a.key-b.key)[0];
+    }
+    return valid[0];
+  }
+
+  // ── FREE PLAY (no reference to beat) ──
+  if (!reference) {
+    return npcPickFreePlay(hand);
+  }
+
+  // ── MUST BEAT REFERENCE ──
+  valid = valid.filter(p => beatsPlay(p, reference));
+  if (!valid.length) return null;
+
+  // If almost done, just clear
+  if (hand.length <= 2) return valid.sort((a,b)=>a.key-b.key)[0];
+
+  const g = npcGroupHand(hand);
+
+  // For SINGLES: try to match with a single first.
+  // Prefer to dump a lone card (no pair partner) over breaking up a pair.
+  if (reference.type === 'single') {
+    const singlePlays = valid.filter(p=>p.type==='single');
+    if (singlePlays.length) {
+      // ── INTERMEDIATE MODE: card counting for 2s and Aces ──
+      if (selectedMode === 'intermediate' || selectedMode === 'hard' || selectedMode === 'pro') {
+        // Count how many 2s and Aces are still live (not yet discarded)
+        const HIGH_CARDS = ['2','A'];
+        const totalHighCards = 4 * HIGH_CARDS.length; // 8 total (4 of each)
+        const discardedHigh = [...globalDiscardedCards].filter(k => HIGH_CARDS.some(r => k.startsWith(r))).length;
+        const liveHighCards = totalHighCards - discardedHigh;
+
+        // Also count how many are in THIS NPC's hand
+        const highInHand = hand.filter(c => HIGH_CARDS.includes(c.rank)).length;
+        // High cards held by OTHER players still alive
+        const highElsewhere = liveHighCards - highInHand;
+
+        // If I have a 2 in hand and the reference card is not very high (below Q),
+        // and other players still have high cards, consider passing to protect my 2
+        const refRank = reference.cards[0].rank;
+        const refRankVal = RANK_VAL[refRank];
+        const hasOwnTwo = hand.some(c => c.rank === '2');
+        const hasOwnAce = hand.some(c => c.rank === 'A');
+        const QUEEN_VAL = RANK_VAL['Q'];
+
+        // Strategy: if I have a 2 or Ace, and the current card is below Queen,
+        // skip playing unless I'm the only one who can beat it (few cards left)
+        if ((hasOwnTwo || hasOwnAce) && refRankVal < QUEEN_VAL && hand.length > 4 && highElsewhere > 0) {
+          // Save my big cards — let others fight, then come in with control
+          // Only play if I have loner singles that beat it
+          const rankCounts = {};
+          for (const c of hand) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
+          const lonerSingles = singlePlays.filter(p => rankCounts[p.cards[0].rank] === 1 && RANK_VAL[p.cards[0].rank] < QUEEN_VAL);
+          if (lonerSingles.length) return lonerSingles.sort((a,b)=>a.key-b.key)[0];
+          // No cheap loners — pass and preserve high cards for control
+          return null;
+        }
+
+        // If I have a 2 and can beat the current card cheaply with a non-2, do so
+        // But don't burn a 2 unless nothing else can beat it
+        if (hasOwnTwo) {
+          const nonTwoSingles = singlePlays.filter(p => p.cards[0].rank !== '2');
+          if (nonTwoSingles.length) {
+            const rankCounts = {};
+            for (const c of hand) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
+            const loners = nonTwoSingles.filter(p => rankCounts[p.cards[0].rank] === 1);
+            if (loners.length) return loners.sort((a,b)=>a.key-b.key)[0];
+            return nonTwoSingles.sort((a,b)=>a.key-b.key)[0];
+          }
+          // Only 2s can beat it — pass if there are still Aces/2s elsewhere
+          if (highElsewhere > 1 && hand.length > 3) return null;
+          return singlePlays.sort((a,b)=>a.key-b.key)[0];
+        }
+      }
+
+      // ── BEGINNER MODE / FALLBACK ──
+      const rankCounts = {};
+      for (const c of hand) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
+      const loners = singlePlays.filter(p => rankCounts[p.cards[0].rank] === 1);
+      if (loners.length) return loners.sort((a,b)=>a.key-b.key)[0];
+      return singlePlays.sort((a,b)=>a.key-b.key)[0];
+    }
+    return null; // pass rather than break up combos to beat a single
+  }
+
+  // For PAIRS: prefer to beat with another pair, keeping sets intact.
+  if (reference.type === 'pair') {
+    const pairPlays = valid.filter(p=>p.type==='pair');
+    if (pairPlays.length) return pairPlays.sort((a,b)=>a.key-b.key)[0];
+    return null;
+  }
+
+  // For TRIPLES: beat with triple
+  if (reference.type === 'triple') {
+    const triplePlays = valid.filter(p=>p.type==='triple');
+    if (triplePlays.length) return triplePlays.sort((a,b)=>a.key-b.key)[0];
+    return null;
+  }
+
+  // For QUAD: beat with quad
+  if (reference.type === 'quad') {
+    const quadPlays = valid.filter(p=>p.type==='quad');
+    if (quadPlays.length) return quadPlays.sort((a,b)=>a.key-b.key)[0];
+    return null;
+  }
+
+  // For FIVE-CARD: prefer weakest valid five-card that beats it
+  if (reference.type === 'five') {
+    const fivePlays = valid.filter(p=>p.type==='five');
+    if (fivePlays.length) return fivePlays.sort((a,b)=>a.key-b.key)[0];
+    return null;
+  }
+
+  // Fallback: smallest valid play
+  return valid.sort((a,b)=>a.key-b.key)[0];
+}
+
+function generateAllPlays(hand) {
+  const plays = [];
+  const n = hand.length;
+
+  // Singles
+  for (const c of hand) {
+    const p = classifyPlay([c]);
+    if (p) plays.push(p);
+  }
+
+  // Pairs, triples, quads from same rank
+  const byRank = {};
+  for (const c of hand) {
+    if (!byRank[c.rank]) byRank[c.rank]=[];
+    byRank[c.rank].push(c);
+  }
+  for (const cards of Object.values(byRank)) {
+    if (cards.length >= 2) {
+      // All pairs
+      for (let i=0;i<cards.length;i++) for (let j=i+1;j<cards.length;j++) {
+        const p = classifyPlay([cards[i],cards[j]]);
+        if (p) plays.push(p);
+      }
+    }
+    if (cards.length >= 3) {
+      for (let i=0;i<cards.length;i++) for (let j=i+1;j<cards.length;j++) for (let k=j+1;k<cards.length;k++) {
+        const p = classifyPlay([cards[i],cards[j],cards[k]]);
+        if (p) plays.push(p);
+      }
+    }
+    if (cards.length === 4) {
+      const p = classifyPlay(cards);
+      if (p) plays.push(p);
+    }
+  }
+
+  // 5-card combinations (straights, flushes, full houses, etc.)
+  if (n >= 5) {
+    const combos = combinations(hand, 5);
+    for (const combo of combos) {
+      const p = classifyPlay(combo);
+      if (p) plays.push(p);
+    }
+  }
+
+  return plays;
+}
+
+function combinations(arr, k) {
+  if (k > arr.length) return [];
+  if (k === 0) return [[]];
+  const [first, ...rest] = arr;
+  const withFirst = combinations(rest, k-1).map(c=>[first,...c]);
+  const withoutFirst = combinations(rest, k);
+  return [...withFirst, ...withoutFirst];
+}
+
+// ════════════════════════════════════════
+//  GAME OVER
+// ════════════════════════════════════════
+function penaltyMultiplier(cardCount) {
+  if (cardCount === 13)              return 4; // held ALL cards ×4
+  if (cardCount >= 10)               return 3; // 10-12 cards ×3
+  if (cardCount >= 8)                return 2; // 8-9 cards ×2
+  return 1;
+}
+
+function endGame(winnerIdx) {
+  gameActive = false;
+  gamesPlayed++;
+
+  const penalties = hands.map(h => h.length);
+  const multipliers = penalties.map(penaltyMultiplier);
+  const weightedPenalties = penalties.map((p, i) => p * multipliers[i]);
+
+  let totalWinnerGain = 0;
+  for (let i = 0; i < 4; i++) {
+    if (i !== winnerIdx) {
+      scores[i] -= weightedPenalties[i];
+      totalWinnerGain += weightedPenalties[i];
+    }
+  }
+  scores[winnerIdx] += totalWinnerGain;
+
+  saveScores();
+  updateScoreboard();
+  updateRankUI();
+
+  const banner = document.getElementById('winner-banner');
+  banner.style.display = 'flex';
+  document.getElementById('winner-title').textContent = (winnerIdx===0?'🏆 You Win!':'🃏 ' + playerName(winnerIdx) + ' Wins!');
+  document.getElementById('winner-sub').textContent = winnerIdx===0?'Congratulations!':'Better luck next time!';
+
+  const summary = document.getElementById('score-summary');
+  summary.innerHTML = '';
+  ['You','NPC 2','NPC 3','NPC 4'].forEach((name,i)=>{
+    const row = document.createElement('div');
+    row.className = 'score-line';
+    if (i === winnerIdx) {
+      row.innerHTML = `<span>${name}</span><span style="color:#7fffaa">+${totalWinnerGain} pts 🏆</span>`;
+    } else {
+      const mult = multipliers[i];
+      const multTag = mult > 1 ? ` <span style="color:#ffcc44;font-size:0.8rem">×${mult}</span>` : '';
+      row.innerHTML = `<span>${name}</span><span style="color:#ff9999">-${weightedPenalties[i]} pts (${penalties[i]} cards${mult>1?' ×'+mult:''})</span>`;
+    }
+    summary.appendChild(row);
+  });
+}
+
+function continueGame() {
+  document.getElementById('winner-banner').style.display = 'none';
+  startGame();
+}
+
+function endSession() {
+  document.getElementById('winner-banner').style.display = 'none';
+  document.getElementById('game').style.display = 'none';
+  document.getElementById('splash').style.display = 'flex';
+}
+
+function showScoreboard() {
+  loadScores();
+  const names = ['You','NPC 2','NPC 3','NPC 4'];
+  let body = `Games played: ${gamesPlayed}\n\n`;
+  names.forEach((n,i)=>{ body += `${n}: ${scores[i]} pts\n`; });
+
+  const overlay = document.getElementById('modal-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('modal-title').textContent = '📊 Standings';
+  document.getElementById('modal-body').innerHTML = `
+    <div style="text-align:left">
+      ${names.map((n,i)=>`<div class="score-row"><span>${n}</span><span>${scores[i]} pts</span></div>`).join('')}
+      <div style="margin-top:0.5rem;color:var(--text-dim);font-size:0.85rem">Games played: ${gamesPlayed}</div>
+    </div>
+  `;
+  document.getElementById('modal-buttons').innerHTML = `
+    <button class="btn-gold" onclick="closeModal()">Close</button>
+    <button class="btn-ghost" onclick="resetScores()">Reset All</button>
+  `;
+}
+
+function resetScores() {
+  scores = [0,0,0,0];
+  gamesPlayed = 0;
+  saveScores();
+  closeModal();
+  updateRankUI();
+  toast('Scores reset!');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').style.display = 'none';
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+function updatePlayerName(val) {
+  playerCustomName = val.trim() || 'You';
+  saveScores();
+  // Update in-game label
+  const lbl = document.getElementById('player-name-label');
+  if (lbl) lbl.textContent = playerCustomName + ' (You)';
+  // Update scoreboard
+  const sc1n = document.getElementById('sc-p1-name');
+  if (sc1n) sc1n.textContent = playerCustomName;
+}
+
+function playerName(idx) {
+  return [playerCustomName,'NPC 2','NPC 3','NPC 4'][idx];
+}
+
+// ════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════
+loadScores();
+updateScoreboard();
+updateRankUI();
+// Restore player name input
+const pni = document.getElementById('player-name-input');
+if (pni && playerCustomName !== 'You') pni.value = playerCustomName;
+// Update scoreboard player name
+const sc1n = document.getElementById('sc-p1-name');
+if (sc1n) sc1n.textContent = playerCustomName;
+</script>
+</body>
+</html>
