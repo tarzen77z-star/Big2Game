@@ -574,6 +574,142 @@
   #winner-box h2 { font-family: 'Playfair Display', serif; color: var(--gold); font-size: 2rem; margin-bottom: 0.5rem; }
   #score-summary { margin: 1rem 0; }
   .score-line { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
+
+  /* ════════════════════════════════════════════
+     IPHONE PORTRAIT  ≤ 500px
+     ════════════════════════════════════════════ */
+  @media (max-width: 500px) {
+
+    body { height: 100dvh; }
+    #game { height: 100dvh; }
+
+    /* ── SCOREBOARD ── */
+    #scoreboard {
+      top: 6px; right: 6px;
+      padding: 5px 8px;
+      font-size: 0.66rem;
+      min-width: 100px;
+    }
+    #scoreboard h3 { font-size: 0.7rem; margin-bottom: 2px; }
+    .score-row { gap: 4px; margin: 1px 0; }
+    #games-played { font-size: 0.58rem; margin-top: 2px; }
+    .rank-badge-sm { width: 16px; height: 16px; }
+    .rank-badge-sm svg { width: 9px; height: 9px; }
+
+    /* ── TURN INDICATOR ── */
+    #turn-indicator {
+      top: 6px;
+      left: 6px;
+      transform: none;
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      max-width: 50vw;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── NPC TOP ── */
+    #npc-top { top: 6px; }
+    #npc-top .npc-name { font-size: 0.7rem; }
+    #npc-top .card-count { font-size: 0.62rem; padding: 1px 6px; }
+    #npc-top .mini-card { width: 16px; height: 23px; margin: 0 1px; }
+
+    /* ── NPC LEFT & RIGHT: show badge only, no card fan ── */
+    #npc-left { left: 4px; }
+    #npc-right { right: 4px; }
+    #npc-left .npc-name, #npc-right .npc-name { font-size: 0.65rem; }
+    #npc-left .npc-cards, #npc-right .npc-cards { display: none; }
+    #npc-left .card-count, #npc-right .card-count { font-size: 0.62rem; padding: 2px 5px; }
+
+    /* ── DISCARD AREA ── */
+    #discard-area {
+      top: 47%;
+      transform: translate(-50%, -50%);
+      gap: 2px;
+      max-height: 50vh;
+    }
+    #chinese-title { font-size: 1.2rem; letter-spacing: 0.08em; }
+    #game-title-below { font-size: 0.65rem; letter-spacing: 0.12em; margin-top: 0; }
+
+    /* ── DISCARD PILE ── */
+    #discard-pile {
+      min-width: 240px;
+      max-width: calc(100vw - 80px);
+      max-height: 28vh;
+      padding: 5px 6px;
+      gap: 3px;
+    }
+    .discard-row { min-height: 52px; gap: 2px; }
+    .discard-row-label { min-width: 22px; font-size: 0.55rem; }
+    .singles-row { gap: 3px !important; }
+
+    /* ── DISCARD PLAY CARDS ── */
+    .play-card { width: 38px !important; height: 54px !important; padding: 2px; }
+    .play-card .rank { font-size: 0.68rem; }
+    .play-card .suit { font-size: 0.6rem; }
+    .play-card .center-suit { font-size: 0.95rem !important; }
+    .corner-top { top: 2px; left: 2px; }
+    .corner-bot { bottom: 2px; right: 2px; }
+    .play-card.newest { width: 44px !important; height: 62px !important; }
+    .play-card.newest .center-suit { font-size: 1.1rem !important; }
+
+    /* ── LAST PLAY INFO ── */
+    #last-play-info {
+      top: 14vh;
+      font-size: 0.82rem;
+      padding: 3px 12px;
+      min-width: 140px;
+      max-width: 78vw;
+      white-space: normal;
+      line-height: 1.25;
+    }
+
+    /* ── PLAYER AREA ── */
+    #player-area { padding-bottom: 2px; }
+    #player-name-label { font-size: 0.7rem; padding: 1px 8px; margin-bottom: 1px; }
+
+    /* ── CONTROLS ── */
+    #player-controls { gap: 4px; margin-bottom: 3px; padding: 0 4px; }
+    .btn-sm { padding: 4px 8px; font-size: 0.72rem; }
+    .btn-play-big { padding: 6px 14px !important; font-size: 0.85rem !important; }
+    .btn-pass-big { padding: 6px 10px !important; font-size: 0.85rem !important; }
+
+    /* ── HAND CONTAINER ── */
+    #hand-container { height: 108px; }
+
+    /* ── HAND CARDS ── */
+    .hand-card {
+      width: 44px; height: 62px;
+      border-radius: 6px; padding: 3px;
+    }
+    .hand-card .rank { font-size: 0.78rem; }
+    .hand-card .center-suit { font-size: 1.2rem; }
+
+    /* ── RANK BADGE (in-game) ── */
+    #player-rank-badge { left: 5px; bottom: 5px; }
+    #player-rank-badge .rank-badge { width: 32px; height: 32px; }
+    #player-rank-badge .rank-badge svg { width: 19px; height: 19px; }
+    #player-rank-badge .rank-label { font-size: 0.5rem; }
+
+    /* ── FORFEIT BUTTON ── */
+    .btn-forfeit { right: 5px; bottom: 5px; padding: 4px 9px; font-size: 0.72rem; }
+
+    /* ── TOAST ── */
+    #toast { bottom: 150px; font-size: 0.76rem; padding: 5px 12px; }
+
+    /* ── MODAL ── */
+    #modal-box { padding: 1.2rem 0.9rem; }
+    #modal-box h2 { font-size: 1.15rem; }
+    #modal-box p { font-size: 0.82rem; margin-bottom: 0.9rem; }
+    .btn-gold { padding: 0.7em 1.6em; font-size: 1rem; }
+    .btn-ghost { padding: 0.55em 1.3em; font-size: 0.88rem; }
+
+    /* ── WINNER BOX ── */
+    #winner-box { padding: 1.4rem 1rem; }
+    #winner-box h2 { font-size: 1.4rem; }
+  }
+
   /* ── RANK BADGE ── */
   #player-rank-badge {
     position: absolute;
@@ -1283,10 +1419,12 @@ function renderHand() {
 
   const n = hand.length;
   // Fan angle: spread cards across an arc
-  const maxAngle = Math.min(38, n * 3.2);
+  const isMobile = window.innerWidth <= 500;
+  const cardW = isMobile ? 44 : 64;
+  const maxAngle = Math.min(isMobile ? 32 : 38, n * (isMobile ? 2.8 : 3.2));
   const step = n > 1 ? (maxAngle * 2) / (n - 1) : 0;
-  const w = Math.min(window.innerWidth - 60, 720);
-  const spread = Math.min(48, w / (n + 1));
+  const w = Math.min(window.innerWidth - (isMobile ? 80 : 60), isMobile ? 320 : 720);
+  const spread = Math.min(isMobile ? 32 : 48, w / (n + 1));
   // Arc rise: center cards lift up more (parabolic)
   const arcHeight = Math.min(30, n * 2.2);
 
@@ -1308,7 +1446,7 @@ function renderHand() {
       <div class="center-suit">${card.suit}</div>
     `;
 
-    el.style.left = `calc(50% + ${xOffset}px - 32px)`;
+    el.style.left = `calc(50% + ${xOffset}px - ${cardW/2}px)`;
     el.style.bottom = baseBottom + 'px';
     el.style.transform = `rotate(${angle}deg)`;
     el.style.zIndex = zIdx;
