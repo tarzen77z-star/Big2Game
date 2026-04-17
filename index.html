@@ -145,19 +145,22 @@
   .score-row span:last-child { color: var(--text-light); font-weight: 600; }
   #games-played { color: var(--gold-light); font-size: 0.78rem; margin-top: 6px; }
 
-  /* ── TURN INDICATOR ── */
+  /* ── TURN INDICATOR — sits just below play-by-play message ── */
   #turn-indicator {
-    position: absolute; top: 12px; left: 50%;
+    position: absolute;
+    top: calc(18vh + 46px);   /* last-play-info top (18vh) + its height (~40px) + gap */
+    left: 50%;
     transform: translateX(-50%);
     background: var(--panel-bg);
-    border: 1px solid rgba(201,168,76,0.3);
-    border-radius: 20px;
-    padding: 6px 18px;
-    font-size: 0.9rem;
-    color: var(--gold-light);
+    border: 1px solid rgba(201,168,76,0.2);
+    border-radius: 16px;
+    padding: 4px 14px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
     z-index: 10;
     backdrop-filter: blur(4px);
     font-style: italic;
+    white-space: nowrap;
   }
 
   /* ── NPC ZONES ── */
@@ -394,17 +397,17 @@
     color: var(--gold-light) !important;
   }
   .btn-pass-big:hover { background: rgba(201,168,76,0.15) !important; }
-  /* New Game – floated to the right side */
+  /* Forfeit — upper-left corner */
   .btn-forfeit {
     position: absolute;
-    right: 14px;
-    bottom: 14px;
+    left: 12px;
+    top: 12px;
     background: rgba(0,0,0,0.45);
     border: 1px solid rgba(255,80,80,0.4);
     color: #ff8888;
-    padding: 6px 16px;
+    padding: 5px 13px;
     font-family: 'Crimson Pro', serif;
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.15s;
@@ -413,6 +416,13 @@
   .btn-forfeit:hover { background: rgba(200,40,40,0.2); border-color: rgba(255,80,80,0.7); color: #ffaaaa; }
   .btn-forfeit:disabled { opacity: 0.3; cursor: not-allowed; }
 
+  #player-name-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 3px;
+  }
   #player-name-label {
     font-family: 'Playfair Display', serif;
     font-size: 0.85rem;
@@ -596,14 +606,14 @@
     .rank-badge-sm { width: 16px; height: 16px; }
     .rank-badge-sm svg { width: 9px; height: 9px; }
 
-    /* ── TURN INDICATOR ── */
+    /* ── TURN INDICATOR (mobile) ── */
     #turn-indicator {
-      top: 6px;
-      left: 6px;
-      transform: none;
-      font-size: 0.7rem;
-      padding: 4px 10px;
-      max-width: 50vw;
+      top: calc(14vh + 38px);
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.68rem;
+      padding: 3px 10px;
+      max-width: 80vw;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -667,7 +677,14 @@
 
     /* ── PLAYER AREA ── */
     #player-area { padding-bottom: 2px; }
-    #player-name-label { font-size: 0.7rem; padding: 1px 8px; margin-bottom: 1px; }
+    #player-name-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 3px;
+  }
+  #player-name-label { font-size: 0.7rem; padding: 1px 8px; margin-bottom: 1px; }
 
     /* ── CONTROLS ── */
     #player-controls { gap: 4px; margin-bottom: 3px; padding: 0 4px; }
@@ -686,14 +703,12 @@
     .hand-card .rank { font-size: 0.78rem; }
     .hand-card .center-suit { font-size: 1.2rem; }
 
-    /* ── RANK BADGE (in-game) ── */
-    #player-rank-badge { left: 5px; bottom: 5px; }
-    #player-rank-badge .rank-badge { width: 32px; height: 32px; }
-    #player-rank-badge .rank-badge svg { width: 19px; height: 19px; }
-    #player-rank-badge .rank-label { font-size: 0.5rem; }
+    /* ── RANK BADGE (inline next to player name) ── */
+    #player-name-row .rank-badge-sm { width: 22px !important; height: 22px !important; }
+    #player-name-row .rank-badge-sm svg { width: 12px !important; height: 12px !important; }
 
     /* ── FORFEIT BUTTON ── */
-    .btn-forfeit { right: 5px; bottom: 5px; padding: 4px 9px; font-size: 0.72rem; }
+    .btn-forfeit { left: 4px; top: 4px; padding: 3px 8px; font-size: 0.68rem; }
 
     /* ── TOAST ── */
     #toast { bottom: 150px; font-size: 0.76rem; padding: 5px 12px; }
@@ -710,17 +725,8 @@
     #winner-box h2 { font-size: 1.4rem; }
   }
 
-  /* ── RANK BADGE ── */
-  #player-rank-badge {
-    position: absolute;
-    left: 14px;
-    bottom: 14px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    z-index: 15;
-  }
+  /* ── RANK BADGE (old standalone removed — badge is now inline) ── */
+  #player-rank-badge { display: none; }
   .rank-badge {
     width: 46px; height: 46px;
     border-radius: 50%;
@@ -746,6 +752,7 @@
     flex-shrink: 0;
   }
   .rank-badge-sm svg { width: 13px; height: 13px; }
+  #game-rank-badge svg { width: 17px; height: 17px; }
   .rank-badge-sm.beginner { background: radial-gradient(circle, #3a3a3a, #1a1a1a); border-color: #555; }
   .rank-badge-sm.bronze   { background: radial-gradient(circle, #cd7f32, #7a4a1a); border-color: #cd7f32; }
   .rank-badge-sm.silver   { background: radial-gradient(circle, #d8d8d8, #888);    border-color: #c0c0c0; }
@@ -1023,6 +1030,9 @@
     <div id="games-played">Games played: 0</div>
   </div>
 
+  <!-- Forfeit button: upper-left -->
+  <button class="btn-forfeit" id="btn-forfeit" onclick="forfeitGame()">🏳 Forfeit</button>
+
   <!-- Top NPC (Player 3) -->
   <div id="npc-top" class="npc-zone">
     <div class="npc-name" id="name-p3">NPC 3</div>
@@ -1056,7 +1066,11 @@
 
   <!-- Player Area -->
   <div id="player-area">
-    <div id="player-name-label">You (Player 1)</div>
+    <div id="player-name-row">
+      <div class="rank-badge-sm beginner" id="game-rank-badge" style="width:28px;height:28px;margin-right:6px;flex-shrink:0;"></div>
+      <div id="player-name-label">You (Player 1)</div>
+      <div id="game-rank-label" style="font-size:0.62rem;color:var(--text-dim);margin-left:6px;font-family:'Crimson Pro',serif;">Beginner</div>
+    </div>
     <div id="player-controls">
       <button class="btn-sm" onclick="sortByRank()">Sort by Rank</button>
       <button class="btn-sm" onclick="sortBySuit()">Sort by Suit</button>
@@ -1064,15 +1078,9 @@
       <button class="btn-sm btn-play btn-play-big" id="btn-play" onclick="playerPlay()" disabled>Play</button>
       <button class="btn-sm btn-pass-big" id="btn-pass" onclick="playerPass()" disabled>Pass</button>
     </div>
-    <button class="btn-forfeit" id="btn-forfeit" onclick="forfeitGame()">🏳 Forfeit</button>
     <div id="hand-container"></div>
   </div>
 
-  <!-- Player rank badge -->
-  <div id="player-rank-badge">
-    <div class="rank-badge beginner" id="game-rank-badge"></div>
-    <div class="rank-label" id="game-rank-label">Beginner</div>
-  </div>
 
 </div>
 
@@ -1200,10 +1208,10 @@ function updateRankUI() {
     btn.classList.toggle('active-mode', m === selectedMode);
   });
 
-  // Game screen badge
+  // Game screen badge (inline in player name row — uses rank-badge-sm class)
   const gb = document.getElementById('game-rank-badge');
   const gl = document.getElementById('game-rank-label');
-  if (gb) { gb.innerHTML = trophySVG(rank.cls); gb.className = 'rank-badge ' + rank.cls; }
+  if (gb) { gb.innerHTML = trophySVG(rank.cls); gb.className = 'rank-badge-sm ' + rank.cls; gb.style.cssText = 'width:28px;height:28px;margin-right:6px;flex-shrink:0;'; }
   if (gl) gl.textContent = rank.name;
 
   // In-game scoreboard row badge
