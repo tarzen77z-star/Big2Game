@@ -1527,6 +1527,7 @@ let selectedMode = 'beginner'; // current game mode
 let globalDiscardedCards = new Set(); // all cards ever played this game (for NPC card counting)
 let playerCustomName = 'You'; // player's display name
 let highestPts = 0; // highest score ever achieved (for rank retention)
+let gameHistory = []; // per-game history records
 
 // ════════════════════════════════════════
 //  RANK SYSTEM
@@ -1619,6 +1620,7 @@ function saveScores() {
   localStorage.setItem('big2_games', gamesPlayed);
   localStorage.setItem('big2_pname', playerCustomName);
   localStorage.setItem('big2_highpts', highestPts);
+  localStorage.setItem('big2_history', JSON.stringify(gameHistory));
 }
 function loadScores() {
   const s  = localStorage.getItem('big2_scores');
@@ -1629,6 +1631,8 @@ function loadScores() {
   if (g)  gamesPlayed = parseInt(g);
   if (n)  playerCustomName = n;
   if (hp) highestPts = parseInt(hp);
+  const hist = localStorage.getItem('big2_history');
+  if (hist) { try { gameHistory = JSON.parse(hist); } catch(e) { gameHistory = []; } }
 }
 
 
@@ -2264,6 +2268,16 @@ function confirmForfeit() {
   scores[0] -= penalty * 3;
   for (let i = 1; i < 4; i++) scores[i] += penalty;
   gamesPlayed++;
+  gameHistory.push({
+    gameNum: gamesPlayed,
+    winnerIdx: -1,
+    mode: selectedMode,
+    cards: hands.map(h=>h.length),
+    mults: [1,1,1,1],
+    deltas: [-30, 10, 10, 10],
+    runningScores: scores.slice(),
+    forfeit: true
+  });
   saveScores();
   clearGameState();
   updateScoreboard();
@@ -2297,6 +2311,8 @@ function forfeitNewGame() {
 function forfeitMainMenu() {
   closeModal();
   document.getElementById('game').style.display = 'none';
+  const sb = document.getElementById('btn-start-game');
+  if (sb) sb.style.display = '';
   document.getElementById('splash').style.display = 'flex';
 }
 
@@ -2869,6 +2885,18 @@ function endGame(winnerIdx) {
   // Step 3: Apply to running scores
   for (let i = 0; i < 4; i++) scores[i] += gameDeltas[i];
 
+  // Record to history
+  gameHistory.push({
+    gameNum: gamesPlayed,
+    winnerIdx,
+    mode: selectedMode,
+    cards: raw.slice(),       // cards remaining per player
+    mults: mults.slice(),     // multipliers per player
+    deltas: gameDeltas.slice(), // pts gained/lost per player
+    runningScores: scores.slice(), // cumulative score after this game
+    forfeit: false
+  });
+
   saveScores();
   clearGameState();
   updateScoreboard();
@@ -2915,24 +2943,127 @@ function continueGame() {
 function endSession() {
   document.getElementById('winner-banner').style.display = 'none';
   document.getElementById('game').style.display = 'none';
+  // Show Start New Game again (no active game to resume)
+  const sb = document.getElementById('btn-start-game');
+  if (sb) sb.style.display = '';
   document.getElementById('splash').style.display = 'flex';
 }
 
 function showScoreboard() {
   loadScores();
-  const names = ['You','NPC 2','NPC 3','NPC 4'];
-  let body = `Games played: ${gamesPlayed}\n\n`;
-  names.forEach((n,i)=>{ body += `${n}: ${scores[i]} pts\n`; });
+  const pnames = [playerCustomName, 'NPC 2', 'NPC 3', 'NPC 4'];
+  const pshort = [playerCustomName.length > 5 ? playerCustomName.slice(0,5)+'…' : playerCustomName, 'NPC2', 'NPC3', 'NPC4'];
+  const modeLabels = { beginner:'Beginner', intermediate:'Intermediate', hard:'Hard', pro:'Pro' };
+
+  // ── Summary table ──────────────────────────────────────────
+  let summaryHTML = `
+  <div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:6px">Games played: <strong style="color:var(--text-light)">${gamesPlayed}</strong></div>
+  <table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:14px">
+    <thead>
+      <tr style="color:var(--gold);border-bottom:1px solid rgba(201,168,76,0.3)">
+        <th style="text-align:left;padding:4px 6px">Player</th>
+        <th style="text-align:right;padding:4px 6px">Total Pts</th>
+        <th style="text-align:right;padding:4px 6px">Wins</th>
+        <th style="text-align:right;padding:4px 6px">Avg Pts</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  const wins = [0,0,0,0];
+  gameHistory.forEach(g => {
+    if (g.forfeit) return;
+    // winnerIdx may be stored directly, or we can detect from cards (0 cards = winner)
+    if (typeof g.winnerIdx === 'number' && g.winnerIdx >= 0 && g.winnerIdx <= 3) {
+      wins[g.winnerIdx]++;
+    } else if (g.cards) {
+      // fallback: whoever has 0 cards won
+      const wi = g.cards.indexOf(0);
+      if (wi >= 0) wins[wi]++;
+    }
+  });
+
+  for (let i = 0; i < 4; i++) {
+    const avg = gamesPlayed > 0 ? (scores[i] / gamesPlayed).toFixed(1) : '0.0';
+    const col = scores[i] > 0 ? '#7fffaa' : scores[i] < 0 ? '#ff9999' : 'var(--text-light)';
+    summaryHTML += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+      <td style="padding:4px 6px;color:var(--text-light)">${pnames[i]}${i===0?' 👤':''}</td>
+      <td style="text-align:right;padding:4px 6px;color:${col};font-weight:700">${scores[i] > 0 ? '+' : ''}${scores[i]}</td>
+      <td style="text-align:right;padding:4px 6px;color:var(--gold-light)">${wins[i]}</td>
+      <td style="text-align:right;padding:4px 6px;color:var(--text-dim)">${avg > 0 ? '+' : ''}${avg}</td>
+    </tr>`;
+  }
+  summaryHTML += '</tbody></table>';
+
+  // ── Per-game history ────────────────────────────────────────
+  let histHTML = '';
+  if (gameHistory.length > 0) {
+    histHTML = `<div style="font-size:0.8rem;color:var(--gold-light);margin-bottom:6px;font-family:'Playfair Display',serif">Game History</div>
+    <div style="max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(201,168,76,0.3) transparent">`;
+
+    // Most recent first
+    const histReversed = [...gameHistory].reverse();
+    histReversed.forEach((g, gi) => {
+      const effectiveWinnerIdx = g.forfeit ? -1
+        : (typeof g.winnerIdx === 'number' && g.winnerIdx >= 0) ? g.winnerIdx
+        : (g.cards ? g.cards.indexOf(0) : -1);
+      const gameLabel = g.forfeit
+        ? `<span style="color:#ff8888">🏳 Forfeit</span>`
+        : effectiveWinnerIdx >= 0
+          ? `<span style="color:#7fffaa">🏆 ${pshort[effectiveWinnerIdx]} wins</span>`
+          : `<span style="color:var(--text-dim)">—</span>`;
+      const modeStr = g.mode ? `<span style="font-size:0.65rem;color:var(--text-dim);margin-left:4px">[${modeLabels[g.mode]||g.mode}]</span>` : '';
+
+      histHTML += `<div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:7px 9px;margin-bottom:6px;border:1px solid rgba(255,255,255,0.06)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <span style="font-size:0.72rem;color:var(--text-dim)">Game ${g.gameNum}</span>
+          <span style="font-size:0.8rem">${gameLabel}${modeStr}</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.75rem">
+          <thead>
+            <tr style="color:var(--text-dim);border-bottom:1px solid rgba(255,255,255,0.07)">
+              <th style="text-align:left;padding:2px 4px">Player</th>
+              <th style="text-align:center;padding:2px 4px">Cards</th>
+              <th style="text-align:center;padding:2px 4px">Mult</th>
+              <th style="text-align:right;padding:2px 4px">Pts</th>
+              <th style="text-align:right;padding:2px 4px">Total</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+      for (let i = 0; i < 4; i++) {
+      const isWinner = !g.forfeit && (
+        g.winnerIdx === i ||
+        (typeof g.winnerIdx !== 'number' && g.cards && g.cards[i] === 0)
+      );
+        const delta = g.deltas[i];
+        const dSign = delta >= 0 ? '+' : '';
+        const dCol = delta > 0 ? '#7fffaa' : delta < 0 ? '#ff9999' : 'var(--text-dim)';
+        const runScore = g.runningScores ? g.runningScores[i] : '—';
+        const multLabel = g.mults && g.mults[i] > 1 ? `×${g.mults[i]}` : '—';
+        const cardsStr = isWinner ? '0 🏆' : (g.cards[i] !== undefined ? g.cards[i] : '?');
+        const nameCol = isWinner ? '#7fffaa' : 'var(--text-light)';
+
+        histHTML += `<tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+          <td style="padding:2px 4px;color:${nameCol}">${pshort[i]}</td>
+          <td style="text-align:center;padding:2px 4px;color:var(--text-dim)">${cardsStr}</td>
+          <td style="text-align:center;padding:2px 4px;color:${g.mults&&g.mults[i]>1?'#ffcc44':'var(--text-dim)'}">${multLabel}</td>
+          <td style="text-align:right;padding:2px 4px;color:${dCol};font-weight:600">${dSign}${delta}</td>
+          <td style="text-align:right;padding:2px 4px;color:var(--text-dim)">${runScore > 0 ? '+' : ''}${runScore}</td>
+        </tr>`;
+      }
+
+      histHTML += `</tbody></table></div>`;
+    });
+    histHTML += '</div>';
+  } else {
+    histHTML = `<div style="color:var(--text-dim);font-size:0.8rem;font-style:italic;text-align:center;padding:10px 0">No games played yet.</div>`;
+  }
 
   const overlay = document.getElementById('modal-overlay');
   overlay.style.display = 'flex';
+  document.getElementById('modal-close-x').classList.add('hidden');
   document.getElementById('modal-title').textContent = '📊 Standings';
-  document.getElementById('modal-body').innerHTML = `
-    <div style="text-align:left">
-      ${names.map((n,i)=>`<div class="score-row"><span>${n}</span><span>${scores[i]} pts</span></div>`).join('')}
-      <div style="margin-top:0.5rem;color:var(--text-dim);font-size:0.85rem">Games played: ${gamesPlayed}</div>
-    </div>
-  `;
+  document.getElementById('modal-body').innerHTML = summaryHTML + histHTML;
   document.getElementById('modal-buttons').innerHTML = `
     <button class="btn-gold" onclick="closeModal()">Close</button>
     <button class="btn-ghost" onclick="resetScores()">Reset All</button>
@@ -2942,6 +3073,7 @@ function showScoreboard() {
 function resetScores() {
   scores = [0,0,0,0];
   gamesPlayed = 0;
+  gameHistory = [];
   saveScores();
   closeModal();
   updateRankUI();
@@ -3026,7 +3158,10 @@ if (sc1n) sc1n.textContent = playerCustomName;
   resumeBtn.innerHTML = '↩ Resume Game';
   resumeBtn.onclick = resumeGame;
   const startBtn = document.getElementById('btn-start-game');
-  if (startBtn) startBtn.parentNode.insertBefore(resumeBtn, startBtn);
+  if (startBtn) {
+    startBtn.parentNode.insertBefore(resumeBtn, startBtn);
+    startBtn.style.display = 'none';
+  }
 })();
 
 function resumeGame() {
