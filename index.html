@@ -2410,6 +2410,9 @@ function playerPlay() {
     const msg = {type:'play', seat:mpMySeat, cards:[...selectedCards], playType:play.type, subtype:play.subtype};
     if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
     selectedCards = [];
+    setPlayerControls(false); // disable while waiting for host sync
+    renderHand();             // clear card selection visual
+    toast('Waiting for host…');
     return;
   }
   // Single-player or host: execute locally (sync happens inside executePlay)
@@ -2497,6 +2500,7 @@ function playerPass() {
     // Guest: send to host and wait for sync
     const msg = {type:'pass', seat:mpMySeat};
     if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
+    setPlayerControls(false);
     return;
   }
   // Single-player or host: execute locally (sync happens inside doPass)
@@ -3441,22 +3445,32 @@ function endGame(winnerIdx) {
     mpConnections.forEach(c => { try { c.send(goMsg); } catch(e) {} });
   }
 
-  mpShowEndBanner(winnerIdx, raw, mults, gameDeltas);
+  // Build names for host (global seat = local seat since mpMySeat=0)
+  const mpNames = mpGameMode === 'vs_human' && mpSeats.length > 0
+    ? [0,1,2,3].map(li => {
+        const n = mpSeats[li] ? mpSeats[li].name : ('Player '+(li+1));
+        return li === 0 ? n + ' (You)' : n;
+      })
+    : null;
+  mpShowEndBanner(winnerIdx, raw, mults, gameDeltas, mpNames);
 }
 
 // Show end-of-game banner — works for both host and guest
 // winnerLocalIdx is local to THIS player's perspective (0 = "you")
 // names[] is in local order (0=you, 1=right, 2=top, 3=left)
-function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas) {
+function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas, namesOverride) {
   // Build display names in local index order
   let names;
-  if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
+  if (namesOverride) {
+    names = namesOverride;
+  } else if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
     names = [0,1,2,3].map(li => {
       const globalSeat = (mpMySeat + li) % 4;
-      return (li === 0 ? '' : '') + (mpSeats[globalSeat] ? mpSeats[globalSeat].name : 'Player '+(globalSeat+1));
+      const n = mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('Player '+(globalSeat+1));
+      return li === 0 ? n + ' (You)' : n;
     });
   } else {
-    names = [playerCustomName, 'NPC 2', 'NPC 3', 'NPC 4'];
+    names = [playerCustomName + ' (You)', 'NPC 2', 'NPC 3', 'NPC 4'];
   }
 
   const banner = document.getElementById('winner-banner');
@@ -4075,6 +4089,7 @@ function mpSetupGameScreen(seats){
 
 // Guest applies a sync snapshot from host
 function mpGuestApplySync(snap){
+  selectedCards=[]; // always clear selection on sync
   // snap.hands[0] is already the guest's own hand (rotated by host)
   hands=snap.hands.map(h=>h.map(c=>({rank:String(c.rank),suit:String(c.suit)})));
   currentPlayer=snap.currentPlayer;      // already in guest-local space
@@ -4142,17 +4157,25 @@ function mpRenderSeats(){
 function mpGuestShowGameover(data) {
   gameActive = false;
 
-  // data.winnerIdx is in HOST-local space (global seat index since host=seat 0)
-  // We need to convert to GUEST-local space
-  const hostWinnerGlobal = data.winnerIdx; // host local = global (host is seat 0)
+  // data.winnerIdx is host-local = global seat index (host is seat 0)
+  const hostWinnerGlobal = data.winnerIdx;
   const guestWinnerLocal = (hostWinnerGlobal - mpMySeat + 4) % 4;
 
-  // data.raw, mults, gameDeltas are in host-local order — remap to guest-local
-  const raw     = [0,1,2,3].map(li => data.raw[   (mpMySeat + li) % 4]);
-  const mults   = [0,1,2,3].map(li => data.mults[ (mpMySeat + li) % 4]);
-  const deltas  = [0,1,2,3].map(li => data.gameDeltas[(mpMySeat + li) % 4]);
+  // Remap arrays from global/host-local order to guest-local order
+  const raw    = [0,1,2,3].map(li => data.raw[        (mpMySeat + li) % 4]);
+  const mults  = [0,1,2,3].map(li => data.mults[      (mpMySeat + li) % 4]);
+  const deltas = [0,1,2,3].map(li => data.gameDeltas[ (mpMySeat + li) % 4]);
 
-  mpShowEndBanner(guestWinnerLocal, raw, mults, deltas);
+  // Build names from seatNames (global order) remapped to guest-local
+  // data.seatNames[globalSeat] = that seat's name
+  const seatNames = data.seatNames || [];
+  const names = [0,1,2,3].map(li => {
+    const globalSeat = (mpMySeat + li) % 4;
+    const n = seatNames[globalSeat] || ('Player '+(globalSeat+1));
+    return li === 0 ? n + ' (You)' : n;
+  });
+
+  mpShowEndBanner(guestWinnerLocal, raw, mults, deltas, names);
 }
 
 function mpDestroy(){
