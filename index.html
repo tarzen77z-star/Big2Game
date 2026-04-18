@@ -1908,6 +1908,9 @@ function startGame() {
   selectedCards = [];
   firstTurn = true;
 
+  // Record starting hand profiles for hard mode
+  startingHandProfile = hands.map(h => classifyStartingHand(h));
+
   // Find who has 3♦
   openingPlayer = hands.findIndex(h=>h.some(c=>c.rank==='3'&&c.suit==='♦'));
   currentPlayer = openingPlayer;
@@ -2440,11 +2443,273 @@ function npcGroupHand(hand) {
   return { quads, triples, pairs, singles, fiveCombos };
 }
 
+// ── 2-suit hierarchy protection ──────────────────────────
+// Returns true if it would be strategically unwise to play this 2-card
+// because a higher-suited 2 has not yet been discarded (by anyone).
+// Suit order: ♦ < ♣ < ♥ < ♠
+// Rule: never play 2♦ while any of 2♣/2♥/2♠ are still alive.
+//        never play 2♣ while 2♥ or 2♠ are still alive.
+//        never play 2♥ while 2♠ is still alive.
+function shouldProtectTwo(card) {
+  if (card.rank !== '2') return false;
+  const higherSuits = {
+    '♦': ['♣','♥','♠'],
+    '♣': ['♥','♠'],
+    '♥': ['♠'],
+    '♠': []
+  };
+  const higher = higherSuits[card.suit] || [];
+  // A higher-suited 2 is "alive" if it hasn't been discarded yet
+  return higher.some(s => !globalDiscardedCards.has('2' + s));
+}
+
+// ── Follow-up awareness: does the hand contain a bigger play of the same type? ──
+// Returns true if playing `play` leaves the NPC with a bigger same-type play as backup.
+function hasFollowUp(play, hand) {
+  if (play.type === 'single') {
+    const myVal = cardVal(play.cards[0]);
+    return hand.some(c => cardKey(c) !== cardKey(play.cards[0]) && cardVal(c) > myVal);
+  }
+  if (play.type === 'pair') {
+    const myKey = play.key;
+    // Check if hand (minus these 2 cards) has another pair with higher key
+    const usedKeys = new Set(play.cards.map(cardKey));
+    const remaining = hand.filter(c => !usedKeys.has(cardKey(c)));
+    const byRank = {};
+    for (const c of remaining) { if (!byRank[c.rank]) byRank[c.rank]=[]; byRank[c.rank].push(c); }
+    return Object.values(byRank).some(cards => {
+      if (cards.length < 2) return false;
+      const p = classifyPlay(cards.slice(0,2));
+      return p && p.key > myKey;
+    });
+  }
+  return true; // for triples/quads/five-cards, always consider having a follow-up
+}
+
+
+// ── Hard mode: detect if hand is "small-card heavy" ──────────
+// Returns true if hand has 8+ small cards (3,4,5,6,7,8,9,10)
+const SMALL_RANKS = new Set(['3','4','5','6','7','8','9','10']);
+const BIG_RANKS   = new Set(['J','Q','K','A','2']);
+
+function isSmallHeavyHand(hand) {
+  const smallCount = hand.filter(c => SMALL_RANKS.has(c.rank)).length;
+  return smallCount >= 8;
+}
+
+// Returns true if this NPC started with a small-heavy hand
+// We track this flag per-NPC at deal time via startingHandProfile
+// (stored as a simple array indexed by playerIdx)
+let startingHandProfile = ['normal','normal','normal','normal']; // 'normal'|'small_heavy'|'big_heavy'
+
+// Count big cards remaining in hand
+function bigCardCount(hand) {
+  return hand.filter(c => BIG_RANKS.has(c.rank)).length;
+}
+
+// Find plays that INCLUDE at least one big card — these are preferred
+// in hard mode to dump big cards alongside small ones
+function playsIncludingBigCard(plays) {
+  return plays.filter(p => p.cards.some(c => BIG_RANKS.has(c.rank)));
+}
+
+// Among all valid plays, prefer ones that use the most big cards
+// (dumps big + small together), then falls back to smallest play
+function bestPlayForSmallHeavy(plays) {
+  if (!plays.length) return null;
+  // Sort by: (1) how many big cards are used (desc), (2) play key ascending (weakest first)
+  const scored = plays.map(p => ({
+    play: p,
+    bigUsed: p.cards.filter(c => BIG_RANKS.has(c.rank)).length
+  }));
+  scored.sort((a,b) => b.bigUsed - a.bigUsed || a.play.key - b.play.key);
+  return scored[0].play;
+}
+
+
+// ── Hard mode: "big-card heavy" hand (5+ Aces and 2s) ────────
+// This profile: control with singles, hold sets, finish with sets after final big card
+function isBigHeavyHand(hand) {
+  const aceAndTwo = hand.filter(c => c.rank === 'A' || c.rank === '2').length;
+  return aceAndTwo >= 5;
+}
+
+// Classify starting hand profile:
+// 'big_heavy'   = 5+ Aces and 2s → control-with-singles strategy
+// 'small_heavy' = 8+ small cards  → dump big cards in combos
+// 'normal'      = no special profile
+function classifyStartingHand(hand) {
+  if (isBigHeavyHand(hand))  return 'big_heavy';
+  if (isSmallHeavyHand(hand)) return 'small_heavy';
+  return 'normal';
+}
+
+// For big-heavy: find the smallest non-set single card to bait with
+// (a card that is NOT part of a pair/triple/five-combo in the hand)
+function findBaitSingle(hand) {
+  const byRank = {};
+  for (const c of hand) { if (!byRank[c.rank]) byRank[c.rank]=[]; byRank[c.rank].push(c); }
+  // Singles = ranks with exactly 1 card
+  const loners = hand.filter(c => byRank[c.rank].length === 1)
+                     .filter(c => c.rank !== 'A' && c.rank !== '2')
+                     .sort(compareCards);
+  return loners.length ? loners[0] : null;
+}
+
+// For big-heavy: check if this is the LAST big card we have
+function isLastBigCard(card, hand) {
+  if (card.rank !== 'A' && card.rank !== '2') return false;
+  const bigCount = hand.filter(c => (c.rank === 'A' || c.rank === '2') && cardKey(c) !== cardKey(card)).length;
+  return bigCount === 0;
+}
+
+// For big-heavy: find the smallest Ace or 2 to use as control card
+function smallestBigCard(hand) {
+  return hand.filter(c => c.rank === 'A' || c.rank === '2')
+             .sort(compareCards)[0] || null;
+}
+
+// For big-heavy: count how many "set" cards remain (pairs, triples, five-card hands)
+// These are held until the last big card is played
+function countSetCards(hand) {
+  const byRank = {};
+  for (const c of hand) { if (!byRank[c.rank]) byRank[c.rank]=[]; byRank[c.rank].push(c); }
+  let setCount = 0;
+  for (const cards of Object.values(byRank)) {
+    if (cards.length >= 2) setCount += cards.length;
+  }
+  // Also check five-card combos
+  return setCount;
+}
+
+// For big-heavy: find the best "set" play to make after final big card is gone
+// Returns pairs/triples sorted smallest first, or five-card combos
+function bestSetPlay(hand) {
+  const g = npcGroupHand(hand);
+  // Five-card combos first
+  if (g.fiveCombos.length) {
+    const sorted = g.fiveCombos.slice().sort((a,b)=>a.key-b.key);
+    return sorted[0];
+  }
+  // Triples
+  if (g.triples.length) {
+    const sorted = g.triples.slice().sort((a,b)=>cardVal(a[0])-cardVal(b[0]));
+    return classifyPlay(sorted[0]);
+  }
+  // Pairs
+  if (g.pairs.length) {
+    const sorted = g.pairs.slice().sort((a,b)=>cardVal(a[0])-cardVal(b[0]));
+    return classifyPlay(sorted[0]);
+  }
+  return null;
+}
+
+
+// ════════════════════════════════════════
+//  PROFESSIONAL MODE HELPERS
+// ════════════════════════════════════════
+
+// Tracked high cards: Q, K, A, 2
+const PRO_TRACKED_RANKS = new Set(['Q','K','A','2']);
+
+// Count how many of a given rank have been discarded
+function proDiscardedOfRank(rank) {
+  return SUITS.filter(s => globalDiscardedCards.has(rank + s)).length;
+}
+
+// Count remaining live cards of a rank (not yet discarded)
+function proRemainingOfRank(rank) {
+  return 4 - proDiscardedOfRank(rank);
+}
+
+// How many Q/K/A/2 cards remain in play across all hands (not discarded)?
+function proLiveHighCount() {
+  let total = 0;
+  for (const r of PRO_TRACKED_RANKS) total += proRemainingOfRank(r);
+  return total;
+}
+
+// How many Q/K/A/2 does this hand hold?
+function proHighInHand(hand) {
+  return hand.filter(c => PRO_TRACKED_RANKS.has(c.rank)).length;
+}
+
+// Does this NPC hold the highest remaining Q/K/A/2 card overall?
+// "Highest remaining" = the highest cardVal among all non-discarded tracked cards
+function proHoldsHighestRemaining(hand) {
+  // Find highest tracked card not yet discarded
+  let highestAlive = null;
+  for (const r of ['2','A','K','Q']) { // rank order high→low
+    for (const s of ['♠','♥','♣','♦']) { // suit order high→low
+      if (!globalDiscardedCards.has(r + s)) {
+        highestAlive = { rank: r, suit: s };
+        break;
+      }
+    }
+    if (highestAlive) break;
+  }
+  if (!highestAlive) return false;
+  return hand.some(c => c.rank === highestAlive.rank && c.suit === highestAlive.suit);
+}
+
+// Should this NPC pass to set up a control move?
+// Returns true if the NPC should skip this beat and wait to play the highest remaining card.
+function proShouldPassToControl(hand, reference) {
+  if (reference.type !== 'single') return false;
+  const refVal = cardVal(reference.cards[0]);
+  // Only consider passing if reference is Q or below (not already a high card)
+  if (refVal >= RANK_VAL['K'] * 4) return false; // reference is already K/A/2 — must decide normally
+
+  // Do we hold the highest remaining tracked card?
+  if (!proHoldsHighestRemaining(hand)) return false;
+
+  // How many Q/K/A/2 are still live outside our hand?
+  const liveHigh = proLiveHighCount();
+  const myHigh   = proHighInHand(hand);
+  const othersHigh = liveHigh - myHigh;
+
+  // Pass if others still have high tracked cards — let them use them,
+  // then we come in last with the highest card for control.
+  return othersHigh > 0 && hand.length > 3;
+}
+
+// ── Multiplier trap strategy ──────────────────────────────────
+// When this NPC has < 8 cards, try to pass against players with < 8 cards
+// and beat against players with > 7 cards (keep them in multiplier range).
+// "The last player who played" is reference.playerIdx.
+// Returns: 'pass_to_trap' | 'play_to_trap' | null (no trap situation)
+function proTrapDecision(hand, reference) {
+  if (!reference) return null;
+  const myCount = hand.length;
+  if (myCount >= 8) return null; // We're not in the sub-8 zone yet — normal play
+
+  // Count each other player's cards
+  const otherCounts = [0,1,2,3].filter(i => i !== currentPlayer).map(i => ({
+    idx: i, count: hands[i].length
+  }));
+
+  const playersAbove7 = otherCounts.filter(p => p.count > 7 && p.count > 0);
+  const playersBelow8 = otherCounts.filter(p => p.count < 8 && p.count > 0);
+
+  if (playersAbove7.length === 0) return null; // no one to trap
+
+  // Who played last (who we'd be beating)?
+  const lastPlayerIdx = reference.playerIdx;
+  const lastPlayerCount = hands[lastPlayerIdx] ? hands[lastPlayerIdx].length : 0;
+
+  // If the last player has > 7 cards — try to beat them (keep them in multiplier range)
+  if (lastPlayerCount > 7) return 'play_to_trap';
+
+  // If the last player has < 8 cards — try to pass (let someone with > 7 cards beat them instead)
+  if (lastPlayerCount < 8 && playersAbove7.length > 0) return 'pass_to_trap';
+
+  return null;
+}
+
 function npcPickFreePlay(hand) {
   // When NPC controls the pile, pick the smartest play:
-  // Prefer to dump sets (pair > single when available), protect big cards.
-  // Priority: clear a quad > triple > full-house/flush/straight > pair > single (smallest)
   const g = npcGroupHand(hand);
+  const isIntermediate = selectedMode === 'intermediate' || selectedMode === 'hard' || selectedMode === 'pro';
 
   // If only 1-2 cards, just play them all
   if (hand.length <= 2) {
@@ -2458,47 +2723,112 @@ function npcPickFreePlay(hand) {
     if (p) return p;
   }
 
-  // Prefer a five-card combo (best subtype first: straight < flush < fh < 4oak < sf < rf)
+  // ── HARD MODE: big-heavy hand strategy ────────────────────
+  // When controlling the pile with 5+ Aces/2s in starting hand:
+  // Play singles only. Lead a small bait card → opponent beats it →
+  // we recapture with a big card. Hold all sets until big cards run out,
+  // then flush sets to finish.
+  const isHard = selectedMode === 'hard' || selectedMode === 'pro';
+  if (isHard && startingHandProfile[currentPlayer] === 'big_heavy') {
+    const bigRemaining = hand.filter(c => c.rank === 'A' || c.rank === '2').length;
+
+    if (bigRemaining > 0) {
+      // Still have big cards — play small bait single if available,
+      // otherwise play smallest non-set card
+      const bait = findBaitSingle(hand);
+      if (bait) return classifyPlay([bait]);
+
+      // No loner bait — play smallest non-A/2 card from any pair/set
+      const nonBig = hand.slice().sort(compareCards).filter(c => c.rank !== 'A' && c.rank !== '2');
+      if (nonBig.length) return classifyPlay([nonBig[0]]);
+
+      // Only big cards left — play smallest big card
+      const big = smallestBigCard(hand);
+      if (big) return classifyPlay([big]);
+    } else {
+      // No big cards left — flush sets now, smallest first
+      const setPlay = bestSetPlay(hand);
+      if (setPlay) return setPlay;
+      // No sets — play smallest single
+      const sorted = hand.slice().sort(compareCards);
+      return classifyPlay([sorted[0]]);
+    }
+  }
+
+  // Prefer a five-card combo (weakest first)
   const fiveOrder = ['straight','flush','full_house','four_of_kind','straight_flush','royal_flush'];
   if (g.fiveCombos.length) {
-    // Sort ascending so we play the weakest combo first (save strong ones)
     const sorted = g.fiveCombos.slice().sort((a,b)=>{
       const ai=fiveOrder.indexOf(a.subtype), bi=fiveOrder.indexOf(b.subtype);
       return ai!==bi ? ai-bi : a.key-b.key;
     });
-    // Only play a five-card combo if it doesn't break up a better one we only have one of
     return sorted[0];
+  }
+
+  // ── HARD MODE: small-heavy hand — prioritise dumping big cards in combos ──
+  if (isHard && startingHandProfile[currentPlayer] === 'small_heavy' && bigCardCount(hand) > 0) {
+    // Find ALL multi-card plays and prefer those that use big cards
+    const allMulti = generateAllPlays(hand).filter(p => p.type !== 'single');
+    const withBig  = playsIncludingBigCard(allMulti);
+    if (withBig.length) {
+      const best = bestPlayForSmallHeavy(withBig);
+      if (best) return best;
+    }
+    // No multi-card play uses a big card — fall through to normal strategy
   }
 
   // Prefer a triple
   if (g.triples.length) {
-    const sorted = g.triples.slice().sort((a,b)=>cardVal(a[0])-cardVal(b[0]));
-    const p = classifyPlay(sorted[0]);
+    const sortedT = g.triples.slice().sort((a,b)=>cardVal(a[0])-cardVal(b[0]));
+    const p = classifyPlay(sortedT[0]);
     if (p) return p;
   }
 
-  // Prefer smallest pair
+  // Prefer pair — but in intermediate mode, only lead a small pair if a bigger pair is held
   if (g.pairs.length) {
-    const sorted = g.pairs.slice().sort((a,b)=>cardVal(a[0])-cardVal(b[0]));
-    const p = classifyPlay(sorted[0]);
-    if (p) return p;
-  }
-
-  // ── INTERMEDIATE/HARD/PRO: when controlling, lead small to fish for 2 usage ──
-  if ((selectedMode === 'intermediate' || selectedMode === 'hard' || selectedMode === 'pro') && hand.length > 3) {
-    const sorted = hand.slice().sort(compareCards);
-    // Play smallest non-high single to bait others into using their 2s/Aces
-    const nonHigh = sorted.filter(c => c.rank !== '2' && c.rank !== 'A');
-    if (nonHigh.length) {
-      const rankCounts = {};
-      for (const c of hand) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
-      const loner = nonHigh.find(c => rankCounts[c.rank] === 1);
-      return classifyPlay([loner || nonHigh[0]]);
+    const sortedP = g.pairs.slice().sort((a,b)=>cardVal(a[0])-cardVal(b[0]));
+    if (isIntermediate) {
+      // Find smallest pair that still leaves a bigger pair in hand
+      for (const pairCards of sortedP) {
+        const play = classifyPlay(pairCards);
+        if (play && hasFollowUp(play, hand)) return play;
+      }
+      // No pair with a follow-up — fall through to singles strategy
+    } else {
+      const p = classifyPlay(sortedP[0]);
+      if (p) return p;
     }
   }
-  // Fall back: play the single smallest card
+
+  // ── INTERMEDIATE: lead small single only if a bigger single exists as follow-up ──
+  if (isIntermediate && hand.length > 3) {
+    const sortedH = hand.slice().sort(compareCards);
+    // Find smallest non-high card that has a bigger card to follow with
+    const nonHigh = sortedH.filter(c => c.rank !== '2' && c.rank !== 'A');
+    for (const c of nonHigh) {
+      const play = classifyPlay([c]);
+      // Don't play it if it's a 2 that should be protected (shouldn't be non-high, but safety check)
+      if (shouldProtectTwo(c)) continue;
+      if (hasFollowUp(play, hand)) return play;
+    }
+    // No ideal lead — play smallest non-high loner
+    const rankCounts = {};
+    for (const c of hand) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
+    const loner = nonHigh.find(c => rankCounts[c.rank] === 1);
+    if (loner) return classifyPlay([loner]);
+  }
+
+  // INTERMEDIATE fallback / beginner: lead small to bait 2s
+  if (isIntermediate && hand.length > 3) {
+    const sorted = hand.slice().sort(compareCards);
+    const nonHigh = sorted.filter(c => c.rank !== '2' && c.rank !== 'A' && !shouldProtectTwo(c));
+    if (nonHigh.length) return classifyPlay([nonHigh[0]]);
+  }
+
+  // Fall back: play the single smallest card (that isn't a protected 2)
   const sorted = hand.slice().sort(compareCards);
-  return classifyPlay([sorted[0]]);
+  const safe = sorted.find(c => !shouldProtectTwo(c));
+  return classifyPlay([safe || sorted[0]]);
 }
 
 function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
@@ -2527,6 +2857,29 @@ function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
 
   // ── FREE PLAY (no reference to beat) ──
   if (!reference) {
+    // ── PROFESSIONAL: if we hold the highest remaining tracked card and opponents
+    //    have used up their high cards, lead with it to seal control ──
+    if (selectedMode === 'pro' && proHoldsHighestRemaining(hand)) {
+      const liveHigh = proLiveHighCount();
+      const myHigh   = proHighInHand(hand);
+      const othersHigh = liveHigh - myHigh;
+      if (othersHigh === 0) {
+        // We have the absolute highest card and no one else has any tracked high cards
+        // Lead with a small bait first to fish, OR if hand is short, just lead the high card
+        if (hand.length > 5) {
+          const bait = findBaitSingle(hand);
+          if (bait) {
+            const baitPlay = classifyPlay([bait]);
+            return baitPlay;
+          }
+        }
+        // Hand is short or no bait — play the highest tracked card we have
+        const highCard = hand.filter(c => PRO_TRACKED_RANKS.has(c.rank))
+                            .sort(compareCards).pop();
+        if (highCard) return classifyPlay([highCard]);
+      }
+    }
+
     const freePlay = npcPickFreePlay(hand);
     // If free play would be a single and next player has 1 card,
     // upgrade to highest single or prefer multi-card
@@ -2541,12 +2894,122 @@ function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
     return freePlay;
   }
 
+  // ── PROFESSIONAL MODE: pre-filter strategic decisions ──
+  if (selectedMode === 'pro') {
+    // 1. Multiplier trap: if we have < 8 cards and last player has > 7, try to beat;
+    //    if last player has < 8, try to pass so a high-count player beats them instead.
+    const trapDecision = proTrapDecision(hand, reference);
+    if (trapDecision === 'pass_to_trap') {
+      // We'd rather pass — but if we hold the highest remaining card, still play it
+      if (proHoldsHighestRemaining(hand)) {
+        // Fall through to normal logic — don't trap in this case
+      } else {
+        return null; // pass to let a >7 card player fight it out
+      }
+    }
+    // If trapDecision === 'play_to_trap', fall through and beat them normally.
+
+    // 2. Control setup: if we hold the highest remaining Q/K/A/2, pass to build position
+    //    unless the reference itself is already very high (K, A, 2) or hand is short.
+    if (proShouldPassToControl(hand, reference)) {
+      // Play a loner small card if we have one; otherwise pass
+      const allSingles = generateAllPlays(hand)
+        .filter(p => p.type === 'single' && beatsPlay(p, reference));
+      const rc = {};
+      for (const c of hand) rc[c.rank] = (rc[c.rank]||0)+1;
+      const lonerNonHigh = allSingles.filter(p =>
+        rc[p.cards[0].rank] === 1 &&
+        !PRO_TRACKED_RANKS.has(p.cards[0].rank) &&
+        !shouldProtectTwo(p.cards[0])
+      );
+      if (lonerNonHigh.length) return lonerNonHigh.sort((a,b)=>a.key-b.key)[0];
+      return null; // pass — preserve the highest card for next control move
+    }
+  }
+
   // ── MUST BEAT REFERENCE ──
   valid = valid.filter(p => beatsPlay(p, reference));
   if (!valid.length) return null;
 
   // If almost done, just clear
   if (hand.length <= 2) return valid.sort((a,b)=>a.key-b.key)[0];
+
+  // ── HARD MODE: big-heavy hand — when responding, prefer to pass and wait for control ──
+  const isHardMode = selectedMode === 'hard' || selectedMode === 'pro';
+  if (isHardMode && startingHandProfile[currentPlayer] === 'big_heavy') {
+    const bigRemaining = hand.filter(c => c.rank === 'A' || c.rank === '2').length;
+
+    if (reference.type === 'single') {
+      // Strategy: play a bait single if we have one, OR a big card to recapture control
+      // Prefer playing smallest big card over breaking up sets
+      const validSingles = valid.filter(p => p.type === 'single');
+      const validBigSingles = validSingles.filter(p => p.cards[0].rank === 'A' || p.cards[0].rank === '2');
+      const validSmallSingles = validSingles.filter(p => p.cards[0].rank !== 'A' && p.cards[0].rank !== '2');
+      const lonerSmalls = (() => {
+        const rc = {};
+        for (const c of hand) rc[c.rank] = (rc[c.rank]||0)+1;
+        return validSmallSingles.filter(p => rc[p.cards[0].rank] === 1);
+      })();
+
+      // If we have a loner small that beats it — bait play
+      if (lonerSmalls.length) return lonerSmalls.sort((a,b)=>a.key-b.key)[0];
+
+      // If we have a big card to beat it with — use it to recapture control
+      if (validBigSingles.length && bigRemaining > 0) {
+        // Don't play the last big card unless hand is small
+        if (bigRemaining > 1 || hand.length <= 4) {
+          const unprotected = validBigSingles.filter(p => !shouldProtectTwo(p.cards[0]));
+          const toPlay = unprotected.length ? unprotected : validBigSingles;
+          return toPlay.sort((a,b)=>a.key-b.key)[0]; // smallest valid big card
+        }
+      }
+
+      // Otherwise pass — preserve sets and big cards
+      return null;
+    }
+
+    if (reference.type === 'pair') {
+      // For pairs: only beat if we're about to lose control and have a matching pair
+      // Don't play sets here — hold them
+      const validPairs = valid.filter(p => p.type === 'pair');
+      if (validPairs.length && hand.length <= 6) {
+        // Near the end — play to get rid of cards
+        return validPairs.sort((a,b)=>a.key-b.key)[0];
+      }
+      // Pass — we'll control via singles
+      return null;
+    }
+
+    // For five-card / triple / quad — fall through to normal logic
+  }
+
+  // ── HARD MODE: small-heavy hand — try to use big cards to beat reference ──
+  if (isHardMode && startingHandProfile[currentPlayer] === 'small_heavy' && bigCardCount(hand) > 0) {
+    // For SINGLES reference: prefer a non-single play that includes big cards if available,
+    // otherwise prefer a single that uses a big card (A, K, Q, J vs small reference)
+    if (reference.type === 'single') {
+      // First: try multi-card plays that include a big card (pair/triple using big+small)
+      const multiWithBig = valid.filter(p => p.type !== 'single' && p.cards.some(c => BIG_RANKS.has(c.rank)));
+      if (multiWithBig.length) return bestPlayForSmallHeavy(multiWithBig);
+      // Second: try singles that ARE big cards (burn a face card to gain control)
+      const bigSingles = valid.filter(p => p.type === 'single' && BIG_RANKS.has(p.cards[0].rank) && p.cards[0].rank !== '2');
+      if (bigSingles.length && bigCardCount(hand) > 2) {
+        // Only burn a big single if we have several big cards — not the last one
+        return bigSingles.sort((a,b)=>a.key-b.key)[0]; // smallest big card
+      }
+    }
+    // For PAIRS reference: prefer a pair that includes a big card
+    if (reference.type === 'pair') {
+      const bigPairs = valid.filter(p => p.type === 'pair' && p.cards.some(c => BIG_RANKS.has(c.rank)));
+      if (bigPairs.length) return bigPairs.sort((a,b)=>a.key-b.key)[0];
+    }
+    // For FIVE-card reference: prefer five-card that uses big cards
+    if (reference.type === 'five') {
+      const bigFives = valid.filter(p => p.type === 'five' && p.cards.some(c => BIG_RANKS.has(c.rank)));
+      if (bigFives.length) return bigFives.sort((a,b)=>a.key-b.key)[0];
+    }
+    // Fall through to normal mode-specific logic below
+  }
 
   const g = npcGroupHand(hand);
 
@@ -2555,54 +3018,76 @@ function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
   if (reference.type === 'single') {
     const singlePlays = valid.filter(p=>p.type==='single');
     if (singlePlays.length) {
-      // ── INTERMEDIATE MODE: card counting for 2s and Aces ──
+      // ── INTERMEDIATE/HARD/PRO: strategic pass/protect decisions ──
+      // These checks only PASS (return null) — they never pick a specific card.
+      // Card selection always falls through to the beginner loner logic below.
       if (selectedMode === 'intermediate' || selectedMode === 'hard' || selectedMode === 'pro') {
-        // Count how many 2s and Aces are still live (not yet discarded)
         const HIGH_CARDS = ['2','A'];
-        const totalHighCards = 4 * HIGH_CARDS.length; // 8 total (4 of each)
+        const totalHighCards = 4 * HIGH_CARDS.length;
         const discardedHigh = [...globalDiscardedCards].filter(k => HIGH_CARDS.some(r => k.startsWith(r))).length;
         const liveHighCards = totalHighCards - discardedHigh;
-
-        // Also count how many are in THIS NPC's hand
         const highInHand = hand.filter(c => HIGH_CARDS.includes(c.rank)).length;
-        // High cards held by OTHER players still alive
         const highElsewhere = liveHighCards - highInHand;
 
-        // If I have a 2 in hand and the reference card is not very high (below Q),
-        // and other players still have high cards, consider passing to protect my 2
         const refRank = reference.cards[0].rank;
         const refRankVal = RANK_VAL[refRank];
         const hasOwnTwo = hand.some(c => c.rank === '2');
         const hasOwnAce = hand.some(c => c.rank === 'A');
         const QUEEN_VAL = RANK_VAL['Q'];
+        const KING_VAL  = RANK_VAL['K'];
 
-        // Strategy: if I have a 2 or Ace, and the current card is below Queen,
-        // skip playing unless I'm the only one who can beat it (few cards left)
-        if ((hasOwnTwo || hasOwnAce) && refRankVal < QUEEN_VAL && hand.length > 4 && highElsewhere > 0) {
-          // Save my big cards — let others fight, then come in with control
-          // Only play if I have loner singles that beat it
-          const rankCounts = {};
-          for (const c of hand) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
-          const lonerSingles = singlePlays.filter(p => rankCounts[p.cards[0].rank] === 1 && RANK_VAL[p.cards[0].rank] < QUEEN_VAL);
-          if (lonerSingles.length) return lonerSingles.sort((a,b)=>a.key-b.key)[0];
-          // No cheap loners — pass and preserve high cards for control
+        // ── NEW: PASS WHEN REFERENCE IS K, A, OR 2 EARLY IN THE GAME ──
+        // If someone just played K, A, or 2, it costs too much to beat it early on.
+        // "Early" = more than half the cards in the game are still in play
+        // (i.e., globalDiscardedCards.size < 26, roughly)
+        const isEarlyGame = globalDiscardedCards.size < 26;
+        const refIsHighValue = refRankVal >= KING_VAL; // K, A, or 2
+
+        if (refIsHighValue && isEarlyGame && hand.length > 4) {
+          // Only beat it if we have a loner card of the same high tier that won't waste a 2
+          const noLoss = singlePlays.filter(p =>
+            RANK_VAL[p.cards[0].rank] >= KING_VAL && // also K/A/2
+            p.cards[0].rank !== '2' &&               // never spend a 2 here
+            !shouldProtectTwo(p.cards[0])
+          );
+          // Even then, only play if it's not our only high card
+          const ownHighCount = hand.filter(c => RANK_VAL[c.rank] >= KING_VAL && c.rank !== '2').length;
+          if (noLoss.length && ownHighCount > 1) {
+            return noLoss.sort((a,b)=>a.key-b.key)[0];
+          }
+          // Pass — let others beat this high card
           return null;
         }
 
-        // If I have a 2 and can beat the current card cheaply with a non-2, do so
-        // But don't burn a 2 unless nothing else can beat it
+        // STRATEGIC PASS: if holding a 2 or Ace and current card is below Queen,
+        // let others fight — only play a cheap loner, otherwise pass.
+        if ((hasOwnTwo || hasOwnAce) && refRankVal < QUEEN_VAL && hand.length > 4 && highElsewhere > 0) {
+          const rankCounts = {};
+          for (const c of hand) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
+          const lonerSingles = singlePlays.filter(p =>
+            rankCounts[p.cards[0].rank] === 1 &&
+            RANK_VAL[p.cards[0].rank] < QUEEN_VAL &&
+            !shouldProtectTwo(p.cards[0])
+          );
+          if (lonerSingles.length) return lonerSingles.sort((a,b)=>a.key-b.key)[0];
+          return null; // pass — preserve high cards
+        }
+
+        // PROTECT 2s: if the only winning singles are 2s, check suit hierarchy
         if (hasOwnTwo) {
           const nonTwoSingles = singlePlays.filter(p => p.cards[0].rank !== '2');
-          if (nonTwoSingles.length) {
-            const rankCounts = {};
-            for (const c of hand) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
-            const loners = nonTwoSingles.filter(p => rankCounts[p.cards[0].rank] === 1);
-            if (loners.length) return loners.sort((a,b)=>a.key-b.key)[0];
-            return nonTwoSingles.sort((a,b)=>a.key-b.key)[0];
+          if (!nonTwoSingles.length) {
+            // Only 2s available — apply suit hierarchy protection
+            const twoSingles = singlePlays.filter(p => p.cards[0].rank === '2');
+            const unprotectedTwos = twoSingles.filter(p => !shouldProtectTwo(p.cards[0]));
+            if (unprotectedTwos.length) return unprotectedTwos.sort((a,b)=>a.key-b.key)[0];
+            // All 2s protected — pass unless hand is almost empty
+            if (highElsewhere > 1 && hand.length > 3) return null;
+            // Forced — play lowest 2 anyway
+            return twoSingles.sort((a,b)=>a.key-b.key)[0];
           }
-          // Only 2s can beat it — pass if there are still Aces/2s elsewhere
-          if (highElsewhere > 1 && hand.length > 3) return null;
-          return singlePlays.sort((a,b)=>a.key-b.key)[0];
+          // Non-2 singles exist — fall through to beginner logic to pick the best one
+          // (beginner logic will pick loners first, which is correct)
         }
       }
 
@@ -2611,12 +3096,20 @@ function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
         return singlePlays.sort((a,b)=>b.key-a.key)[0]; // highest single
       }
 
-      // ── BEGINNER MODE / FALLBACK ──
+      // ── BEGINNER LOGIC (used by all modes including intermediate) ──
+      // Prefer loner cards (no pair partner) over breaking up sets.
+      // In intermediate mode, also exclude protected 2s from loner selection.
       const rankCounts = {};
       for (const c of hand) rankCounts[c.rank] = (rankCounts[c.rank]||0)+1;
-      const loners = singlePlays.filter(p => rankCounts[p.cards[0].rank] === 1);
+      const isAdvanced = selectedMode === 'intermediate' || selectedMode === 'hard' || selectedMode === 'pro';
+      // Filter out protected 2s from consideration in advanced modes
+      const candidateSingles = isAdvanced
+        ? singlePlays.filter(p => !shouldProtectTwo(p.cards[0]))
+        : singlePlays;
+      const pool = candidateSingles.length ? candidateSingles : singlePlays;
+      const loners = pool.filter(p => rankCounts[p.cards[0].rank] === 1);
       if (loners.length) return loners.sort((a,b)=>a.key-b.key)[0];
-      return singlePlays.sort((a,b)=>a.key-b.key)[0];
+      return pool.sort((a,b)=>a.key-b.key)[0];
     }
     return null; // pass rather than break up combos to beat a single
   }
@@ -2624,7 +3117,15 @@ function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
   // For PAIRS: prefer to beat with another pair, keeping sets intact.
   if (reference.type === 'pair') {
     const pairPlays = valid.filter(p=>p.type==='pair');
-    if (pairPlays.length) return pairPlays.sort((a,b)=>a.key-b.key)[0];
+    if (pairPlays.length) {
+      if (selectedMode === 'intermediate' || selectedMode === 'hard' || selectedMode === 'pro') {
+        // Prefer pairs that don't include a protected 2
+        const safePairs = pairPlays.filter(p => !p.cards.some(c => shouldProtectTwo(c)));
+        if (safePairs.length) return safePairs.sort((a,b)=>a.key-b.key)[0];
+        // Only pairs with protected 2s available — play if necessary
+      }
+      return pairPlays.sort((a,b)=>a.key-b.key)[0];
+    }
     return null;
   }
 
