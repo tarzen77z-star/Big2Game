@@ -41,8 +41,15 @@
     position: fixed; inset: 0;
     background: radial-gradient(ellipse at center, #1e4a2a 0%, #0a1f10 100%);
     display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
+    align-items: center; justify-content: flex-start;
     z-index: 100;
+    overflow-y: auto; overflow-x: hidden;
+    padding: 20px 16px 28px;
+    box-sizing: border-box;
+  }
+  /* On tall-enough screens, centre the content */
+  @media (min-height: 700px) {
+    #splash { justify-content: center; padding: 16px; }
   }
   /* splash h1 moved to rank_css block */
   #splash > p { color: var(--text-dim); font-size: 1.2rem; font-style: italic; display:none; }
@@ -162,27 +169,6 @@
     backdrop-filter: blur(4px);
     font-style: italic;
     white-space: nowrap;
-  }
-
-
-  /* ── LAST PLAYED HIGHLIGHT ── */
-  /* NPC zones: amber glow on name + card when they were last to play */
-  .npc-zone.last-played .npc-name {
-    color: #ffd06b !important;
-    text-shadow: 0 0 10px rgba(255,180,60,0.7), 0 0 4px rgba(255,180,60,0.4) !important;
-  }
-  .npc-zone.last-played .npc-card-single {
-    border-color: rgba(255,180,60,0.6) !important;
-    box-shadow: 0 0 12px rgba(255,160,40,0.55), 2px 2px 8px rgba(0,0,0,0.5) !important;
-  }
-  /* Player area: amber glow on name label when player was last to play */
-  #player-area.last-played #player-name-label:not(.active) {
-    color: #ffd06b !important;
-    text-shadow: 0 0 8px rgba(255,180,60,0.6);
-  }
-  #player-area.last-played.your-turn #player-name-label {
-    /* your-turn active green takes priority; add subtle amber border */
-    box-shadow: 0 0 14px rgba(100,255,150,0.55), 0 0 0 1.5px rgba(255,180,60,0.4) !important;
   }
 
   /* ── LAST CARD GLOW ── */
@@ -341,8 +327,8 @@
     display: flex;
     flex-direction: column;
     gap: 5px;
-    min-width: 400px;
-    max-width: 520px;
+    min-width: 380px;
+    max-width: 480px;
     background: rgba(0,0,0,0.28);
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 10px;
@@ -360,10 +346,10 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     flex-wrap: nowrap;
     width: 100%;
-    min-height: 106px;
+    min-height: 84px;
   }
   .discard-row .play-card {
     flex-shrink: 0;
@@ -415,20 +401,20 @@
 
   /* ── PLAY CARD ── */
   .play-card {
-    width: 70px; height: 99px;
+    width: 56px; height: 80px;
     background: var(--card-bg);
-    border-radius: 8px;
+    border-radius: 7px;
     display: flex; flex-direction: column;
     align-items: center; justify-content: space-between;
-    padding: 5px;
+    padding: 4px;
     box-shadow: 2px 3px 10px rgba(0,0,0,0.5);
     position: relative;
     cursor: default;
     user-select: none;
     flex-shrink: 0;
   }
-  .play-card .rank { font-size: 1.35rem; font-weight: 700; line-height: 1; }
-  .play-card .suit { font-size: 1.1rem; }
+  .play-card .rank { font-size: 1.2rem; font-weight: 700; line-height: 1; }
+  .play-card .suit { font-size: 1rem; }
   .play-card .center-suit { font-size: 1.5rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); }
   .play-card.red .rank, .play-card.red .suit, .play-card.red .center-suit { color: var(--card-red); }
   .play-card.black .rank, .play-card.black .suit, .play-card.black .center-suit { color: var(--card-black); }
@@ -438,7 +424,7 @@
   /* ── PLAYER HAND ── */
   #player-area {
     position: absolute;
-    bottom: 30px; left: 0; right: 0;
+    bottom: 22px; left: 0; right: 0;
     display: flex; flex-direction: column;
     align-items: center;
     padding-bottom: 0;
@@ -446,7 +432,7 @@
   }
 
   #player-controls {
-    display: flex; gap: 8px; margin-bottom: 5px; align-items: center;
+    display: flex; gap: 6px; margin-bottom: 5px; align-items: center;
     flex-wrap: wrap; justify-content: center;
     padding: 0 8px;
   }
@@ -454,25 +440,15 @@
     background: rgba(0,0,0,0.4);
     border: 1px solid rgba(201,168,76,0.4);
     color: var(--gold-light);
-    padding: 11px 24px;
+    padding: 5px 14px;
     font-family: 'Crimson Pro', serif;
-    font-size: 1.15rem;
-    border-radius: 6px;
+    font-size: 0.9rem;
+    border-radius: 4px;
     cursor: pointer;
     transition: all 0.15s;
   }
   .btn-sm:hover { background: rgba(201,168,76,0.15); border-color: var(--gold); }
   .btn-sm:disabled { opacity: 0.35; cursor: not-allowed; }
-  /* Sort buttons: 5% smaller than btn-sm */
-  .btn-sort {
-    padding: 10.45px 22.8px !important;
-    font-size: 1.093rem !important;
-  }
-  /* Gap between sort group and play/pass group */
-  .controls-gap {
-    width: 16px;
-    flex-shrink: 0;
-  }
   .btn-play {
     background: linear-gradient(135deg, #2d6b44, #1a4a2e);
     border-color: var(--gold);
@@ -480,33 +456,17 @@
     font-weight: 600;
   }
   .btn-play:hover { background: linear-gradient(135deg, #3d8b5a, #2d6b44); }
-  /* Play = circle: equal width/height, fully rounded */
   .btn-play-big {
-    width: 72px !important;
-    height: 72px !important;
-    padding: 0 !important;
-    font-size: 1.1rem !important;
-    border-radius: 50% !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    letter-spacing: 0.03em;
-    flex-shrink: 0;
+    padding: 7px 22px !important;
+    font-size: 1rem !important;
+    letter-spacing: 0.04em;
   }
-  /* Pass = square: 5% smaller than Play */
   .btn-pass-big {
-    width: 68px !important;
-    height: 68px !important;
-    padding: 0 !important;
-    font-size: 1.1rem !important;
-    border-radius: 10px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+    padding: 7px 18px !important;
+    font-size: 1rem !important;
     background: rgba(0,0,0,0.4) !important;
     border-color: rgba(201,168,76,0.5) !important;
     color: var(--gold-light) !important;
-    flex-shrink: 0;
   }
   .btn-pass-big:hover { background: rgba(201,168,76,0.15) !important; }
   /* Forfeit — upper-left corner */
@@ -548,7 +508,7 @@
 
   #hand-container {
     position: relative;
-    height: 200px;
+    height: 185px;
     width: 100%;
     display: flex;
     align-items: flex-end;
@@ -558,7 +518,7 @@
 
   .hand-card {
     position: absolute;
-    width: 70px; height: 99px;
+    width: 64px; height: 90px;
     background: var(--card-bg);
     border-radius: 8px;
     box-shadow: 2px 4px 12px rgba(0,0,0,0.6);
@@ -577,8 +537,8 @@
   }
   .hand-card.red .rank, .hand-card.red .center-suit { color: var(--card-red); }
   .hand-card.black .rank, .hand-card.black .center-suit { color: var(--card-black); }
-  .hand-card .rank { font-size: 1.2rem; font-weight: 700; align-self: flex-start; padding-left: 2px; }
-  .hand-card .center-suit { font-size: 2rem; }
+  .hand-card .rank { font-size: 1.1rem; font-weight: 700; align-self: flex-start; padding-left: 2px; }
+  .hand-card .center-suit { font-size: 1.8rem; }
 
   /* ── MODAL ── */
   #modal-overlay {
@@ -661,8 +621,8 @@
 
   /* Newest discard group — glowing highlight, sized to fit in pile */
   .play-card.newest {
-    width: 78px !important;
-    height: 110px !important;
+    width: 62px !important;
+    height: 88px !important;
     box-shadow: 0 0 0 2px #7fffaa, 0 0 14px rgba(100,255,150,0.5) !important;
     animation: newcard 0.38s cubic-bezier(0.22,1,0.36,1);
     position: relative;
@@ -779,19 +739,19 @@
       padding: 5px 6px;
       gap: 3px;
     }
-    .discard-row { min-height: 72px; gap: 2px; }
+    .discard-row { min-height: 52px; gap: 2px; }
     .discard-row-label { min-width: 22px; font-size: 0.55rem; }
     .singles-row { gap: 3px !important; }
 
     /* ── DISCARD PLAY CARDS ── */
-    .play-card { width: 48px !important; height: 68px !important; padding: 3px; }
-    .play-card .rank { font-size: 0.82rem; }
-    .play-card .suit { font-size: 0.72rem; }
-    .play-card .center-suit { font-size: 1.1rem !important; }
+    .play-card { width: 38px !important; height: 54px !important; padding: 2px; }
+    .play-card .rank { font-size: 0.68rem; }
+    .play-card .suit { font-size: 0.6rem; }
+    .play-card .center-suit { font-size: 0.95rem !important; }
     .corner-top { top: 2px; left: 2px; }
     .corner-bot { bottom: 2px; right: 2px; }
-    .play-card.newest { width: 56px !important; height: 79px !important; }
-    .play-card.newest .center-suit { font-size: 1.3rem !important; }
+    .play-card.newest { width: 44px !important; height: 62px !important; }
+    .play-card.newest .center-suit { font-size: 1.1rem !important; }
 
     /* ── LAST PLAY INFO ── */
     #last-play-info {
@@ -816,23 +776,21 @@
   #player-name-label { font-size: 0.7rem; padding: 1px 8px; margin-bottom: 1px; }
 
     /* ── CONTROLS ── */
-    #player-controls { gap: 5px; margin-bottom: 3px; padding: 0 4px; }
-    .btn-sm { padding: 7px 14px; font-size: 0.82rem; }
-    .btn-sort { padding: 6.65px 13.3px !important; font-size: 0.779rem !important; }
-    .controls-gap { width: 10px; }
-    .btn-play-big { width: 52px !important; height: 52px !important; font-size: 0.9rem !important; }
-    .btn-pass-big { width: 52px !important; height: 52px !important; font-size: 0.9rem !important; }
+    #player-controls { gap: 4px; margin-bottom: 3px; padding: 0 4px; }
+    .btn-sm { padding: 4px 8px; font-size: 0.72rem; }
+    .btn-play-big { padding: 6px 14px !important; font-size: 0.85rem !important; }
+    .btn-pass-big { padding: 6px 10px !important; font-size: 0.85rem !important; }
 
     /* ── HAND CONTAINER ── */
-    #hand-container { height: 140px; }
+    #hand-container { height: 128px; }
 
     /* ── HAND CARDS ── */
     .hand-card {
-      width: 48px; height: 68px;
+      width: 44px; height: 62px;
       border-radius: 6px; padding: 3px;
     }
-    .hand-card .rank { font-size: 0.85rem; }
-    .hand-card .center-suit { font-size: 1.35rem; }
+    .hand-card .rank { font-size: 0.78rem; }
+    .hand-card .center-suit { font-size: 1.2rem; }
 
     /* ── RANK BADGE (inline next to player name) ── */
     #player-name-row .rank-badge-sm { width: 22px !important; height: 22px !important; }
@@ -1163,146 +1121,118 @@
   .legend-scoring p em { color: var(--gold-light); font-style: normal; }
   .legend-scoring p strong { color: var(--text-light); }
 
+  /* ── iPhone SE / small phones (≤375px wide or ≤680px tall) ── */
+  @media (max-width: 375px), (max-height: 680px) {
+    #splash { padding: 14px 12px 20px; }
+
+    #splash-stonybrook { font-size: 0.72rem; margin-bottom: 0.1em; letter-spacing: 0.18em; }
+    #splash h1 { font-size: clamp(2.4rem, 11vw, 3.5rem); margin-bottom: 0.05em; }
+    #splash-big2 { font-size: 0.95rem; margin-bottom: 0.9rem; letter-spacing: 0.15em; }
+
+    /* Compact the card fan preview */
+    .splash-cards { display: none; }
+
+    /* Name input row */
+    #player-name-edit-row { margin-bottom: 0.5rem; }
+    #player-name-input { width: 130px; font-size: 0.88rem; padding: 4px 10px; }
+    .edit-name-label { font-size: 0.72rem; }
+
+    /* Rank badge row */
+    #splash-rank { padding: 5px 12px; margin-bottom: 0.7rem; }
+    #splash-rank .rank-badge { width: 24px; height: 24px; }
+    #splash-rank-text { font-size: 0.78rem; }
+
+    /* Mode grid: single column on very small screens, compact 2-col otherwise */
+    .mode-grid { width: 250px; gap: 5px; margin-bottom: 0.7rem; }
+    .mode-btn { padding: 7px 6px; font-size: 0.78rem; }
+    .mode-btn .mode-icon { font-size: 0.9rem; margin-bottom: 1px; }
+    .mode-btn .mode-req  { font-size: 0.58rem; }
+
+    /* Action buttons */
+    .btn-gold { padding: 0.65em 1.8em; font-size: 1rem; }
+    .btn-ghost { padding: 0.5em 1.4em; font-size: 0.82rem; }
+    #btn-multiplayer { padding: 0.6em 1.6em; font-size: 0.9rem; }
+    #legend-toggle { font-size: 0.72rem; padding: 3px 10px; margin-top: 0.3rem; }
+  }
+
+  /* ── iPhone SE 1st gen (320×568) — extra compact ── */
+  @media (max-width: 320px) {
+    #splash h1 { font-size: 2.2rem; }
+    .mode-grid { width: 220px; }
+    .mode-btn { font-size: 0.72rem; padding: 6px 4px; }
+    .btn-gold { padding: 0.55em 1.4em; font-size: 0.9rem; }
+  }
+
   /* ── MULTIPLAYER ── */
   #btn-multiplayer {
     background: linear-gradient(135deg, #1a2f6e, #2d45a0, #1a2f6e);
-    color: #a0b8ff;
-    border: none; padding: 0.75em 2em;
+    color: #a0b8ff; border: none; padding: 0.75em 2em;
     font-family: 'Playfair Display', serif;
-    font-size: 1rem; font-weight: 700;
-    border-radius: 4px; cursor: pointer;
-    box-shadow: 0 4px 18px rgba(60,100,255,0.3);
-    transition: all 0.2s; letter-spacing: 0.04em;
-    margin-top: 0.4rem;
+    font-size: 1rem; font-weight: 700; border-radius: 4px;
+    cursor: pointer; box-shadow: 0 4px 18px rgba(60,100,255,0.3);
+    transition: all 0.2s; letter-spacing: 0.04em; margin-top: 0.4rem;
   }
   #btn-multiplayer:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(60,100,255,0.5); }
 
-  /* MP lobby overlay */
   #mp-lobby {
-    display: none;
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.82);
-    z-index: 250;
-    align-items: center; justify-content: center;
-    flex-direction: column;
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.82); z-index: 250;
+    align-items: center; justify-content: center; flex-direction: column;
   }
   #mp-lobby.open { display: flex; }
   #mp-box {
     background: linear-gradient(160deg,#1a2f6e,#0d1a40);
-    border: 1px solid rgba(100,140,255,0.4);
-    border-radius: 14px;
-    padding: 2rem;
-    width: min(480px,92vw);
-    text-align: center;
-    position: relative;
-    max-height: 90vh;
-    overflow-y: auto;
+    border: 1px solid rgba(100,140,255,0.4); border-radius: 14px;
+    padding: 2rem; width: min(480px,92vw); text-align: center;
+    position: relative; max-height: 90vh; overflow-y: auto;
   }
-  #mp-box h2 {
-    font-family: 'Playfair Display', serif;
-    color: #8ab4ff;
-    font-size: 1.4rem;
-    margin-bottom: 1rem;
-  }
+  #mp-box h2 { font-family: 'Playfair Display', serif; color: #8ab4ff; font-size: 1.4rem; margin-bottom: 1rem; }
   .mp-tabs { display:flex; gap:6px; justify-content:center; margin-bottom:1.2rem; }
   .mp-tab {
     padding:6px 18px; border-radius:4px; cursor:pointer;
     background:rgba(0,0,0,0.35); border:1px solid rgba(100,140,255,0.3);
-    color:#8ab4ff; font-family:'Crimson Pro',serif; font-size:0.9rem;
-    transition:all 0.15s;
+    color:#8ab4ff; font-family:'Crimson Pro',serif; font-size:0.9rem; transition:all 0.15s;
   }
   .mp-tab.active { background:rgba(100,140,255,0.18); border-color:#8ab4ff; color:#d0e4ff; }
   .mp-section { display:none; }
   .mp-section.active { display:block; }
-
-  /* Room code display */
   .room-code-display {
-    font-family: 'Playfair Display', serif;
-    font-size: 2.2rem;
-    font-weight: 700;
-    letter-spacing: 0.3em;
-    color: #d0e4ff;
-    background: rgba(0,0,0,0.4);
-    border: 1px solid rgba(100,140,255,0.3);
-    border-radius: 8px;
-    padding: 12px 24px;
-    margin: 0.8rem auto;
-    display: inline-block;
-    cursor: pointer;
-    transition: all 0.15s;
+    font-family: 'Playfair Display', serif; font-size: 2.2rem; font-weight: 700;
+    letter-spacing: 0.3em; color: #d0e4ff;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(100,140,255,0.3);
+    border-radius: 8px; padding: 12px 24px; margin: 0.8rem auto;
+    display: inline-block; cursor: pointer; transition: all 0.15s;
   }
   .room-code-display:hover { border-color: #8ab4ff; }
   .room-code-hint { font-size:0.75rem; color:rgba(160,184,255,0.6); margin-top:4px; }
-
-  /* Join input */
   .mp-input {
-    background: rgba(0,0,0,0.4);
-    border: 1px solid rgba(100,140,255,0.35);
-    color: #d0e4ff;
-    font-family: 'Playfair Display', serif;
-    font-size: 1.6rem;
-    font-weight: 700;
-    letter-spacing: 0.3em;
-    padding: 10px 16px;
-    border-radius: 8px;
-    width: 200px;
-    text-align: center;
-    text-transform: uppercase;
-    outline: none;
-    transition: border-color 0.2s;
-    margin: 0.5rem 0;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(100,140,255,0.35);
+    color: #d0e4ff; font-family: 'Playfair Display', serif;
+    font-size: 1.6rem; font-weight: 700; letter-spacing: 0.3em;
+    padding: 10px 16px; border-radius: 8px; width: 200px;
+    text-align: center; text-transform: uppercase; outline: none;
+    transition: border-color 0.2s; margin: 0.5rem 0;
   }
   .mp-input:focus { border-color: #8ab4ff; }
-
   .btn-mp {
-    background: linear-gradient(135deg, #1a3088, #2d45a0);
-    color: #a0c0ff;
-    border: none; padding: 8px 20px;
-    font-family: 'Crimson Pro', serif;
-    font-size: 0.95rem; border-radius: 4px;
-    cursor: pointer; transition: all 0.15s;
-    margin: 4px;
+    background: linear-gradient(135deg, #1a3088, #2d45a0); color: #a0c0ff;
+    border: none; padding: 8px 20px; font-family: 'Crimson Pro', serif;
+    font-size: 0.95rem; border-radius: 4px; cursor: pointer; transition: all 0.15s; margin: 4px;
   }
   .btn-mp:hover { background: linear-gradient(135deg,#2a40a0,#3d55c0); }
   .btn-mp:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-mp-start {
-    background: linear-gradient(135deg,#1a5c38,#2d8a50);
-    color: #a0ffcc;
-  }
-
-  /* Lobby player list */
-  #mp-player-list {
-    margin: 0.8rem 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
+  .btn-mp-start { background: linear-gradient(135deg,#1a5c38,#2d8a50); color: #a0ffcc; }
+  #mp-player-list { margin: 0.8rem 0; display: flex; flex-direction: column; gap: 6px; }
   .mp-player-row {
     display: flex; align-items: center; gap: 8px;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(100,140,255,0.2);
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 0.88rem;
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(100,140,255,0.2);
+    border-radius: 6px; padding: 8px 12px; font-size: 0.88rem;
   }
   .mp-player-row .mp-seat { color: rgba(160,184,255,0.6); font-size:0.75rem; min-width:50px; }
   .mp-player-row .mp-pname { color: #d0e4ff; flex: 1; }
-  .mp-player-row .mp-status { font-size:0.72rem; }
   .mp-player-row.filled { border-color: rgba(100,255,150,0.3); }
-  .mp-player-row.open   { border-color: rgba(100,140,255,0.15); }
-
-  /* MP status message */
-  #mp-status {
-    font-size: 0.82rem;
-    font-style: italic;
-    color: rgba(160,184,255,0.8);
-    min-height: 20px;
-    margin: 6px 0;
-  }
-
-  /* In-game: show human players differently */
+  #mp-status { font-size: 0.82rem; font-style: italic; color: rgba(160,184,255,0.8); min-height: 20px; margin: 6px 0; }
   .npc-zone.mp-human .npc-name { color: #a0c0ff !important; }
-  .npc-zone.mp-human .npc-card-single { border-color: rgba(100,140,255,0.5) !important; }
 
 </style>
 </head>
@@ -1360,8 +1290,6 @@
       <div class="mp-tab active" id="mp-tab-host" onclick="mpSwitchTab('host')">Create Room</div>
       <div class="mp-tab" id="mp-tab-join" onclick="mpSwitchTab('join')">Join Room</div>
     </div>
-
-    <!-- HOST TAB -->
     <div class="mp-section active" id="mp-sec-host">
       <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.8rem">Share this code with up to 3 friends. Game starts when you click Start (min 2 players).</p>
       <div class="room-code-display" id="mp-room-code" onclick="mpCopyCode()">——</div>
@@ -1373,14 +1301,12 @@
         <button class="btn-mp" onclick="closeMpLobby()">Cancel</button>
       </div>
     </div>
-
-    <!-- JOIN TAB -->
     <div class="mp-section" id="mp-sec-join">
       <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.8rem">Enter the 4-letter room code from the host.</p>
       <input class="mp-input" id="mp-join-code" maxlength="4" placeholder="XXXX" oninput="this.value=this.value.toUpperCase()"/>
       <div id="mp-status-join" style="font-size:0.82rem;font-style:italic;color:rgba(160,184,255,0.8);min-height:20px;margin:6px 0"></div>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:0.8rem">
-        <button class="btn-mp" id="btn-mp-join" onclick="mpJoinRoom()">🔗 Join</button>
+        <button class="btn-mp" onclick="mpJoinRoom()">🔗 Join</button>
         <button class="btn-mp" onclick="closeMpLobby()">Cancel</button>
       </div>
     </div>
@@ -1686,11 +1612,11 @@
       <div id="game-rank-label" style="font-size:0.62rem;color:var(--text-dim);margin-left:6px;font-family:'Crimson Pro',serif;">Beginner</div>
     </div>
     <div id="player-controls">
-      <button class="btn-sm btn-sort" onclick="sortByRank()">Sort by Rank</button>
-      <button class="btn-sm btn-sort" onclick="sortBySuit()">Sort by Suit</button>
-      <div class="controls-gap"></div>
-      <button class="btn-sm btn-pass-big" id="btn-pass" onclick="playerPass()" disabled>Pass</button>
+      <button class="btn-sm" onclick="sortByRank()">Sort by Rank</button>
+      <button class="btn-sm" onclick="sortBySuit()">Sort by Suit</button>
+      <button class="btn-sm" onclick="groupByFive()">Group 5-Cards</button>
       <button class="btn-sm btn-play btn-play-big" id="btn-play" onclick="playerPlay()" disabled>Play</button>
+      <button class="btn-sm btn-pass-big" id="btn-pass" onclick="playerPass()" disabled>Pass</button>
     </div>
     <div id="hand-container"></div>
   </div>
@@ -2162,29 +2088,6 @@ function startGame() {
 // ════════════════════════════════════════
 //  RENDERING
 // ════════════════════════════════════════
-
-// Apply last-played highlight to whoever most recently played a card
-function updateLastPlayedHighlight() {
-  const zoneMap = [
-    'player-area',   // player 0 → player-area div
-    'npc-right',     // player 1 (NPC2) → right zone
-    'npc-top',       // player 2 (NPC3) → top zone
-    'npc-left',      // player 3 (NPC4) → left zone
-  ];
-  // Clear all first
-  zoneMap.forEach((id, i) => {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('last-played');
-  });
-
-  // Apply to whoever played last
-  if (lastPlay && typeof lastPlay.playerIdx === 'number') {
-    const id = zoneMap[lastPlay.playerIdx];
-    const el = document.getElementById(id);
-    if (el) el.classList.add('last-played');
-  }
-}
-
 function renderAll() {
   renderHand();
   renderNpc(1, 'npc-right', 'cards-p2', 'count-p2', 'name-p2');
@@ -2192,7 +2095,6 @@ function renderAll() {
   renderNpc(3, 'npc-left', 'cards-p4', 'count-p4', 'name-p4');
   renderDiscardPile();
   updateScoreboard();
-  updateLastPlayedHighlight();
 }
 
 function renderNpc(idx, zoneId, cardsId, countId, nameId) {
@@ -2229,7 +2131,7 @@ function renderHand() {
   const n = hand.length;
   // Fan angle: spread cards across an arc
   const isMobile = window.innerWidth <= 500;
-  const cardW = isMobile ? 48 : 70;
+  const cardW = isMobile ? 44 : 64;
   const maxAngle = Math.min(isMobile ? 40 : 42, n * (isMobile ? 3.4 : 3.5));
   const step = n > 1 ? (maxAngle * 2) / (n - 1) : 0;
   const w = Math.min(window.innerWidth - (isMobile ? 80 : 60), isMobile ? 320 : 720);
@@ -2350,14 +2252,13 @@ function buildPlayCard(card) {
 
 function updateTurnIndicator() {
   const extra = firstTurn ? ' – must include 3♦' : '';
-  // MP mode: use human seat names
   if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
-    const localNames = [0,1,2,3].map(i => {
-      const seatIdx = (mpMySeat + i) % 4;
-      const name = mpSeats[seatIdx] ? mpSeats[seatIdx].name : 'Player ' + (i+1);
-      return i === 0 ? 'Your turn' : name + "'s turn";
+    const names = [0,1,2,3].map(i => {
+      const si = (mpMySeat + i) % 4;
+      const n = mpSeats[si] ? mpSeats[si].name : 'Player '+(i+1);
+      return i === 0 ? 'Your turn' : n + "'s turn";
     });
-    document.getElementById('turn-indicator').textContent = localNames[currentPlayer] + extra;
+    document.getElementById('turn-indicator').textContent = names[currentPlayer] + extra;
     return;
   }
   const names = [playerCustomName+"'s turn",'NPC 2\'s turn','NPC 3\'s turn','NPC 4\'s turn'];
@@ -2505,10 +2406,8 @@ function playerPlay() {
   }
 
   executePlay(0, selectedCards, play);
-  // MP: broadcast to peers after successful play
   if (mpGameMode === 'vs_human') mpSendPlay(play);
 }
-
 
 function forfeitGame() {
   if (!gameActive) return;
@@ -2579,7 +2478,8 @@ function forfeitNewGame() {
 function forfeitMainMenu() {
   closeModal();
   document.getElementById('game').style.display = 'none';
-  clearResumeButton();
+  const sb = document.getElementById('btn-start-game');
+  if (sb) sb.style.display = '';
   document.getElementById('splash').style.display = 'flex';
 }
 
@@ -2869,108 +2769,6 @@ function bestSetPlay(hand) {
   return null;
 }
 
-
-// ════════════════════════════════════════
-//  PROFESSIONAL MODE HELPERS
-// ════════════════════════════════════════
-
-// Tracked high cards: Q, K, A, 2
-const PRO_TRACKED_RANKS = new Set(['Q','K','A','2']);
-
-// Count how many of a given rank have been discarded
-function proDiscardedOfRank(rank) {
-  return SUITS.filter(s => globalDiscardedCards.has(rank + s)).length;
-}
-
-// Count remaining live cards of a rank (not yet discarded)
-function proRemainingOfRank(rank) {
-  return 4 - proDiscardedOfRank(rank);
-}
-
-// How many Q/K/A/2 cards remain in play across all hands (not discarded)?
-function proLiveHighCount() {
-  let total = 0;
-  for (const r of PRO_TRACKED_RANKS) total += proRemainingOfRank(r);
-  return total;
-}
-
-// How many Q/K/A/2 does this hand hold?
-function proHighInHand(hand) {
-  return hand.filter(c => PRO_TRACKED_RANKS.has(c.rank)).length;
-}
-
-// Does this NPC hold the highest remaining Q/K/A/2 card overall?
-// "Highest remaining" = the highest cardVal among all non-discarded tracked cards
-function proHoldsHighestRemaining(hand) {
-  // Find highest tracked card not yet discarded
-  let highestAlive = null;
-  for (const r of ['2','A','K','Q']) { // rank order high→low
-    for (const s of ['♠','♥','♣','♦']) { // suit order high→low
-      if (!globalDiscardedCards.has(r + s)) {
-        highestAlive = { rank: r, suit: s };
-        break;
-      }
-    }
-    if (highestAlive) break;
-  }
-  if (!highestAlive) return false;
-  return hand.some(c => c.rank === highestAlive.rank && c.suit === highestAlive.suit);
-}
-
-// Should this NPC pass to set up a control move?
-// Returns true if the NPC should skip this beat and wait to play the highest remaining card.
-function proShouldPassToControl(hand, reference) {
-  if (reference.type !== 'single') return false;
-  const refVal = cardVal(reference.cards[0]);
-  // Only consider passing if reference is Q or below (not already a high card)
-  if (refVal >= RANK_VAL['K'] * 4) return false; // reference is already K/A/2 — must decide normally
-
-  // Do we hold the highest remaining tracked card?
-  if (!proHoldsHighestRemaining(hand)) return false;
-
-  // How many Q/K/A/2 are still live outside our hand?
-  const liveHigh = proLiveHighCount();
-  const myHigh   = proHighInHand(hand);
-  const othersHigh = liveHigh - myHigh;
-
-  // Pass if others still have high tracked cards — let them use them,
-  // then we come in last with the highest card for control.
-  return othersHigh > 0 && hand.length > 3;
-}
-
-// ── Multiplier trap strategy ──────────────────────────────────
-// When this NPC has < 8 cards, try to pass against players with < 8 cards
-// and beat against players with > 7 cards (keep them in multiplier range).
-// "The last player who played" is reference.playerIdx.
-// Returns: 'pass_to_trap' | 'play_to_trap' | null (no trap situation)
-function proTrapDecision(hand, reference) {
-  if (!reference) return null;
-  const myCount = hand.length;
-  if (myCount >= 8) return null; // We're not in the sub-8 zone yet — normal play
-
-  // Count each other player's cards
-  const otherCounts = [0,1,2,3].filter(i => i !== currentPlayer).map(i => ({
-    idx: i, count: hands[i].length
-  }));
-
-  const playersAbove7 = otherCounts.filter(p => p.count > 7 && p.count > 0);
-  const playersBelow8 = otherCounts.filter(p => p.count < 8 && p.count > 0);
-
-  if (playersAbove7.length === 0) return null; // no one to trap
-
-  // Who played last (who we'd be beating)?
-  const lastPlayerIdx = reference.playerIdx;
-  const lastPlayerCount = hands[lastPlayerIdx] ? hands[lastPlayerIdx].length : 0;
-
-  // If the last player has > 7 cards — try to beat them (keep them in multiplier range)
-  if (lastPlayerCount > 7) return 'play_to_trap';
-
-  // If the last player has < 8 cards — try to pass (let someone with > 7 cards beat them instead)
-  if (lastPlayerCount < 8 && playersAbove7.length > 0) return 'pass_to_trap';
-
-  return null;
-}
-
 function npcPickFreePlay(hand) {
   // When NPC controls the pile, pick the smartest play:
   const g = npcGroupHand(hand);
@@ -3122,29 +2920,6 @@ function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
 
   // ── FREE PLAY (no reference to beat) ──
   if (!reference) {
-    // ── PROFESSIONAL: if we hold the highest remaining tracked card and opponents
-    //    have used up their high cards, lead with it to seal control ──
-    if (selectedMode === 'pro' && proHoldsHighestRemaining(hand)) {
-      const liveHigh = proLiveHighCount();
-      const myHigh   = proHighInHand(hand);
-      const othersHigh = liveHigh - myHigh;
-      if (othersHigh === 0) {
-        // We have the absolute highest card and no one else has any tracked high cards
-        // Lead with a small bait first to fish, OR if hand is short, just lead the high card
-        if (hand.length > 5) {
-          const bait = findBaitSingle(hand);
-          if (bait) {
-            const baitPlay = classifyPlay([bait]);
-            return baitPlay;
-          }
-        }
-        // Hand is short or no bait — play the highest tracked card we have
-        const highCard = hand.filter(c => PRO_TRACKED_RANKS.has(c.rank))
-                            .sort(compareCards).pop();
-        if (highCard) return classifyPlay([highCard]);
-      }
-    }
-
     const freePlay = npcPickFreePlay(hand);
     // If free play would be a single and next player has 1 card,
     // upgrade to highest single or prefer multi-card
@@ -3157,39 +2932,6 @@ function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
       return allPlays.filter(p=>p.type==='single').sort((a,b)=>b.key-a.key)[0];
     }
     return freePlay;
-  }
-
-  // ── PROFESSIONAL MODE: pre-filter strategic decisions ──
-  if (selectedMode === 'pro') {
-    // 1. Multiplier trap: if we have < 8 cards and last player has > 7, try to beat;
-    //    if last player has < 8, try to pass so a high-count player beats them instead.
-    const trapDecision = proTrapDecision(hand, reference);
-    if (trapDecision === 'pass_to_trap') {
-      // We'd rather pass — but if we hold the highest remaining card, still play it
-      if (proHoldsHighestRemaining(hand)) {
-        // Fall through to normal logic — don't trap in this case
-      } else {
-        return null; // pass to let a >7 card player fight it out
-      }
-    }
-    // If trapDecision === 'play_to_trap', fall through and beat them normally.
-
-    // 2. Control setup: if we hold the highest remaining Q/K/A/2, pass to build position
-    //    unless the reference itself is already very high (K, A, 2) or hand is short.
-    if (proShouldPassToControl(hand, reference)) {
-      // Play a loner small card if we have one; otherwise pass
-      const allSingles = generateAllPlays(hand)
-        .filter(p => p.type === 'single' && beatsPlay(p, reference));
-      const rc = {};
-      for (const c of hand) rc[c.rank] = (rc[c.rank]||0)+1;
-      const lonerNonHigh = allSingles.filter(p =>
-        rc[p.cards[0].rank] === 1 &&
-        !PRO_TRACKED_RANKS.has(p.cards[0].rank) &&
-        !shouldProtectTwo(p.cards[0])
-      );
-      if (lonerNonHigh.length) return lonerNonHigh.sort((a,b)=>a.key-b.key)[0];
-      return null; // pass — preserve the highest card for next control move
-    }
   }
 
   // ── MUST BEAT REFERENCE ──
@@ -3299,30 +3041,6 @@ function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
         const hasOwnTwo = hand.some(c => c.rank === '2');
         const hasOwnAce = hand.some(c => c.rank === 'A');
         const QUEEN_VAL = RANK_VAL['Q'];
-        const KING_VAL  = RANK_VAL['K'];
-
-        // ── NEW: PASS WHEN REFERENCE IS K, A, OR 2 EARLY IN THE GAME ──
-        // If someone just played K, A, or 2, it costs too much to beat it early on.
-        // "Early" = more than half the cards in the game are still in play
-        // (i.e., globalDiscardedCards.size < 26, roughly)
-        const isEarlyGame = globalDiscardedCards.size < 26;
-        const refIsHighValue = refRankVal >= KING_VAL; // K, A, or 2
-
-        if (refIsHighValue && isEarlyGame && hand.length > 4) {
-          // Only beat it if we have a loner card of the same high tier that won't waste a 2
-          const noLoss = singlePlays.filter(p =>
-            RANK_VAL[p.cards[0].rank] >= KING_VAL && // also K/A/2
-            p.cards[0].rank !== '2' &&               // never spend a 2 here
-            !shouldProtectTwo(p.cards[0])
-          );
-          // Even then, only play if it's not our only high card
-          const ownHighCount = hand.filter(c => RANK_VAL[c.rank] >= KING_VAL && c.rank !== '2').length;
-          if (noLoss.length && ownHighCount > 1) {
-            return noLoss.sort((a,b)=>a.key-b.key)[0];
-          }
-          // Pass — let others beat this high card
-          return null;
-        }
 
         // STRATEGIC PASS: if holding a 2 or Ace and current card is below Queen,
         // let others fight — only play a cheap loner, otherwise pass.
@@ -3709,7 +3427,9 @@ function continueGame() {
 function endSession() {
   document.getElementById('winner-banner').style.display = 'none';
   document.getElementById('game').style.display = 'none';
-  clearResumeButton();
+  // Show Start New Game again (no active game to resume)
+  const sb = document.getElementById('btn-start-game');
+  if (sb) sb.style.display = '';
   document.getElementById('splash').style.display = 'flex';
 }
 
@@ -3917,7 +3637,6 @@ if (sc1n) sc1n.textContent = playerCustomName;
 
   // Inject a "Resume Game" button above the Start button on splash
   const resumeBtn = document.createElement('button');
-  resumeBtn.id = 'btn-resume-game';
   resumeBtn.className = 'btn-gold';
   resumeBtn.style.cssText = 'margin-bottom:0.5rem;background:linear-gradient(135deg,#1a5c38,#2d8a50,#1a5c38);box-shadow:0 4px 18px rgba(45,138,80,0.45);';
   resumeBtn.innerHTML = '↩ Resume Game';
@@ -3928,14 +3647,6 @@ if (sc1n) sc1n.textContent = playerCustomName;
     startBtn.style.display = 'none';
   }
 })();
-
-// Helper: remove resume button and restore start button
-function clearResumeButton() {
-  const rb = document.getElementById('btn-resume-game');
-  if (rb) rb.remove();
-  const sb = document.getElementById('btn-start-game');
-  if (sb) sb.style.display = '';
-}
 
 function resumeGame() {
   const ok = loadGameState();
@@ -3976,21 +3687,18 @@ function resumeGame() {
 // ════════════════════════════════════════════════════════════
 //  MULTIPLAYER (PeerJS WebRTC)
 // ════════════════════════════════════════════════════════════
-let mpPeer = null;        // our PeerJS peer
+let mpPeer = null;
 let mpIsHost = false;
 let mpRoomCode = null;
-let mpConnections = [];   // host: array of DataConnections to guests
-let mpHostConn = null;    // guest: DataConnection to host
-let mpSeats = [];         // [{id, name, conn|null}] — seat 0 = host
-let mpMySeat = -1;        // which seat am I?
-let mpGameMode = 'single'; // 'single' or 'vs_human' when multiplayer active
+let mpConnections = [];
+let mpHostConn = null;
+let mpSeats = [];
+let mpMySeat = -1;
+let mpGameMode = 'single'; // 'single' or 'vs_human'
 
-const MP_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I/O to avoid confusion
-
+const MP_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 function mpGenCode() {
-  let code = '';
-  for (let i = 0; i < 4; i++) code += MP_CHARS[Math.floor(Math.random()*MP_CHARS.length)];
-  return code;
+  let c=''; for(let i=0;i<4;i++) c+=MP_CHARS[Math.floor(Math.random()*MP_CHARS.length)]; return c;
 }
 
 function openMpLobby() {
@@ -3998,324 +3706,161 @@ function openMpLobby() {
   mpSwitchTab('host');
   mpInitHost();
 }
-
-function closeMpLobby() {
-  document.getElementById('mp-lobby').classList.remove('open');
-  mpDestroy();
-}
-
+function closeMpLobby() { document.getElementById('mp-lobby').classList.remove('open'); mpDestroy(); }
 function mpSwitchTab(tab) {
   ['host','join'].forEach(t => {
-    document.getElementById('mp-tab-' + t).classList.toggle('active', t===tab);
-    document.getElementById('mp-sec-' + t).classList.toggle('active', t===tab);
+    document.getElementById('mp-tab-'+t).classList.toggle('active',t===tab);
+    document.getElementById('mp-sec-'+t).classList.toggle('active',t===tab);
   });
 }
+function mpSetStatus(msg, el) { const e=document.getElementById(el||'mp-status'); if(e) e.textContent=msg; }
 
-function mpSetStatus(msg, el) {
-  const id = el || 'mp-status';
-  const e = document.getElementById(id);
-  if (e) e.textContent = msg;
-}
-
-// ── HOST ──────────────────────────────────────────────────────
 function mpInitHost() {
-  mpDestroy();
-  mpIsHost = true;
-  mpRoomCode = mpGenCode();
-  document.getElementById('mp-room-code').textContent = mpRoomCode;
+  mpDestroy(); mpIsHost=true; mpRoomCode=mpGenCode();
+  document.getElementById('mp-room-code').textContent=mpRoomCode;
   mpSetStatus('Waiting for players…');
-
-  // Seat 0 = host (me)
-  mpSeats = [{ id: 'host', name: playerCustomName, conn: null }];
-  mpMySeat = 0;
+  mpSeats=[{id:'host',name:playerCustomName,conn:null}]; mpMySeat=0;
   mpRenderSeats();
-
-  // Create peer with room code as ID prefix to make joining easy
-  const peerId = 'big2-' + mpRoomCode + '-host';
   try {
-    mpPeer = new Peer(peerId);
-    mpPeer.on('open', id => {
-      mpSetStatus('Room ready! Share code: ' + mpRoomCode);
-      document.getElementById('btn-mp-start').disabled = true;
-    });
-    mpPeer.on('connection', conn => mpHostOnConnect(conn));
-    mpPeer.on('error', err => mpSetStatus('⚠ ' + err.message));
-  } catch(e) {
-    mpSetStatus('PeerJS unavailable. Check internet connection.');
-  }
+    mpPeer=new Peer('big2-'+mpRoomCode+'-host');
+    mpPeer.on('open',()=>mpSetStatus('Room ready! Share code: '+mpRoomCode));
+    mpPeer.on('connection',conn=>mpHostOnConnect(conn));
+    mpPeer.on('error',err=>mpSetStatus('⚠ '+err.message));
+  } catch(e) { mpSetStatus('PeerJS unavailable. Check internet connection.'); }
 }
 
 function mpHostOnConnect(conn) {
-  if (mpSeats.length >= 4) { conn.send({type:'full'}); return; }
-  conn.on('open', () => {
-    const seat = mpSeats.length;
-    mpSeats.push({ id: conn.peer, name: '…', conn });
+  if(mpSeats.length>=4){conn.send({type:'full'});return;}
+  conn.on('open',()=>{
+    const seat=mpSeats.length;
+    mpSeats.push({id:conn.peer,name:'…',conn});
     mpConnections.push(conn);
-    mpMySeat = 0;
-    conn.send({ type: 'seat', seat, totalSeats: mpSeats.length });
-    mpSetStatus(mpSeats.length + '/4 players connected');
+    conn.send({type:'seat',seat});
+    mpSetStatus(mpSeats.length+'/4 players connected');
     mpBroadcastLobby();
-    document.getElementById('btn-mp-start').disabled = mpSeats.length < 2;
+    document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
   });
-  conn.on('data', data => mpHostOnData(conn, data));
-  conn.on('close', () => mpHostOnDisconnect(conn));
+  conn.on('data',data=>mpHostOnData(conn,data));
+  conn.on('close',()=>mpHostOnDisconnect(conn));
 }
-
-function mpHostOnData(conn, data) {
-  if (data.type === 'name') {
-    const seat = mpSeats.findIndex(s => s.conn === conn);
-    if (seat >= 0) { mpSeats[seat].name = data.name; mpBroadcastLobby(); }
-  }
-  if (data.type === 'play') {
-    // Relay play from a guest to all others
-    const seat = mpSeats.findIndex(s => s.conn === conn);
-    if (seat >= 0) mpProcessRemotePlay(seat, data);
-  }
-  if (data.type === 'pass') {
-    const seat = mpSeats.findIndex(s => s.conn === conn);
-    if (seat >= 0) mpProcessRemotePass(seat);
-  }
+function mpHostOnData(conn,data){
+  if(data.type==='name'){const s=mpSeats.findIndex(x=>x.conn===conn);if(s>=0){mpSeats[s].name=data.name;mpBroadcastLobby();}}
+  if(data.type==='play'){const s=mpSeats.findIndex(x=>x.conn===conn);if(s>=0){mpProcessRemotePlay(s,data);mpConnections.filter(c=>c!==conn).forEach(c=>{try{c.send(data);}catch(e){}});}}
+  if(data.type==='pass'){const s=mpSeats.findIndex(x=>x.conn===conn);if(s>=0){mpProcessRemotePass(s);mpConnections.filter(c=>c!==conn).forEach(c=>{try{c.send(data);}catch(e){}});}}
 }
-
-function mpHostOnDisconnect(conn) {
-  const seat = mpSeats.findIndex(s => s.conn === conn);
-  if (seat >= 0) {
-    mpSeats.splice(seat, 1);
-    mpConnections = mpConnections.filter(c => c !== conn);
-    mpBroadcastLobby();
-    mpSetStatus(mpSeats.length + '/4 players');
-    document.getElementById('btn-mp-start').disabled = mpSeats.length < 2;
-    if (mpSeats.length > 0) mpRenderSeats();
-  }
+function mpHostOnDisconnect(conn){
+  const s=mpSeats.findIndex(x=>x.conn===conn);
+  if(s>=0){mpSeats.splice(s,1);mpConnections=mpConnections.filter(c=>c!==conn);mpBroadcastLobby();mpRenderSeats();document.getElementById('btn-mp-start').disabled=mpSeats.length<2;}
 }
-
-function mpBroadcastLobby() {
-  const msg = {
-    type: 'lobby',
-    seats: mpSeats.map(s => ({ name: s.name }))
-  };
-  mpConnections.forEach(c => { try { c.send(msg); } catch(e){} });
+function mpBroadcastLobby(){
+  const msg={type:'lobby',seats:mpSeats.map(s=>({name:s.name}))};
+  mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
   mpRenderSeats();
 }
-
-function mpCopyCode() {
-  navigator.clipboard.writeText(mpRoomCode || '').then(() => {
-    document.getElementById('mp-copy-hint').textContent = '✓ Copied!';
-    setTimeout(() => {
-      document.getElementById('mp-copy-hint').textContent = 'Tap code to copy';
-    }, 2000);
+function mpCopyCode(){
+  navigator.clipboard.writeText(mpRoomCode||'').then(()=>{
+    document.getElementById('mp-copy-hint').textContent='✓ Copied!';
+    setTimeout(()=>document.getElementById('mp-copy-hint').textContent='Tap code to copy',2000);
   });
 }
 
-// ── GUEST ─────────────────────────────────────────────────────
-function mpJoinRoom() {
-  const code = document.getElementById('mp-join-code').value.trim().toUpperCase();
-  if (code.length !== 4) { mpSetStatus('Enter a 4-letter code', 'mp-status-join'); return; }
-  mpSetStatus('Connecting…', 'mp-status-join');
-  mpDestroy();
-  mpIsHost = false;
-  mpRoomCode = code;
-
+function mpJoinRoom(){
+  const code=document.getElementById('mp-join-code').value.trim().toUpperCase();
+  if(code.length!==4){mpSetStatus('Enter a 4-letter code','mp-status-join');return;}
+  mpSetStatus('Connecting…','mp-status-join'); mpDestroy(); mpIsHost=false; mpRoomCode=code;
   try {
-    mpPeer = new Peer();
-    mpPeer.on('open', myId => {
-      const hostId = 'big2-' + code + '-host';
-      mpHostConn = mpPeer.connect(hostId, { reliable: true });
-      mpHostConn.on('open', () => {
-        mpHostConn.send({ type: 'name', name: playerCustomName });
-        mpSetStatus('Connected! Waiting for host to start…', 'mp-status-join');
-      });
-      mpHostConn.on('data', data => mpGuestOnData(data));
-      mpHostConn.on('close', () => mpSetStatus('Disconnected from host.', 'mp-status-join'));
-      mpHostConn.on('error', e => mpSetStatus('Connection error: ' + e.message, 'mp-status-join'));
+    mpPeer=new Peer();
+    mpPeer.on('open',()=>{
+      mpHostConn=mpPeer.connect('big2-'+code+'-host',{reliable:true});
+      mpHostConn.on('open',()=>{mpHostConn.send({type:'name',name:playerCustomName});mpSetStatus('Connected! Waiting for host…','mp-status-join');});
+      mpHostConn.on('data',data=>mpGuestOnData(data));
+      mpHostConn.on('close',()=>mpSetStatus('Disconnected from host.','mp-status-join'));
+      mpHostConn.on('error',e=>mpSetStatus('Connection error: '+e.message,'mp-status-join'));
     });
-    mpPeer.on('error', err => mpSetStatus('⚠ ' + err.message, 'mp-status-join'));
-  } catch(e) {
-    mpSetStatus('PeerJS unavailable.', 'mp-status-join');
-  }
+    mpPeer.on('error',err=>mpSetStatus('⚠ '+err.message,'mp-status-join'));
+  } catch(e){mpSetStatus('PeerJS unavailable.','mp-status-join');}
+}
+function mpGuestOnData(data){
+  if(data.type==='full'){mpSetStatus('Room is full.','mp-status-join');return;}
+  if(data.type==='seat'){mpMySeat=data.seat;mpSetStatus('Joined as Player '+(mpMySeat+1)+'. Waiting for start…','mp-status-join');}
+  if(data.type==='lobby'){mpSeats=data.seats.map(s=>({name:s.name,conn:null}));mpSetStatus('Room: '+mpSeats.map(s=>s.name).join(', '),'mp-status-join');}
+  if(data.type==='start'){mpSeats=data.seats.map(s=>({name:s.name,conn:null}));document.getElementById('mp-lobby').classList.remove('open');mpStartLocalGame(data);}
+  if(data.type==='play'){mpProcessRemotePlay(data.seat,data);}
+  if(data.type==='pass'){mpProcessRemotePass(data.seat);}
 }
 
-function mpGuestOnData(data) {
-  if (data.type === 'full')  { mpSetStatus('Room is full.', 'mp-status-join'); return; }
-  if (data.type === 'seat')  {
-    mpMySeat = data.seat;
-    mpSetStatus('Joined as Player ' + (mpMySeat+1) + '. Waiting for start…', 'mp-status-join');
-  }
-  if (data.type === 'lobby') {
-    mpSeats = data.seats.map(s => ({ name: s.name, conn: null }));
-    // Update join status
-    const names = mpSeats.map(s => s.name).join(', ');
-    mpSetStatus('Room: ' + names, 'mp-status-join');
-  }
-  if (data.type === 'start') {
-    mpSeats = data.seats.map(s => ({ name: s.name, conn: null }));
-    document.getElementById('mp-lobby').classList.remove('open');
-    mpStartLocalGame(data);
-  }
-  if (data.type === 'sync')  { mpApplySync(data); }
-  if (data.type === 'play')  { mpProcessRemotePlay(data.seat, data); }
-  if (data.type === 'pass')  { mpProcessRemotePass(data.seat); }
-}
-
-// ── SEAT RENDER ───────────────────────────────────────────────
-function mpRenderSeats() {
-  const list = document.getElementById('mp-player-list');
-  if (!list) return;
-  list.innerHTML = '';
-  const maxSeats = 4;
-  for (let i = 0; i < maxSeats; i++) {
-    const row = document.createElement('div');
-    const filled = i < mpSeats.length;
-    row.className = 'mp-player-row ' + (filled ? 'filled' : 'open');
-    const seat = filled ? mpSeats[i] : null;
-    row.innerHTML = `
-      <span class="mp-seat">Seat ${i+1}${i===0?' (Host)':''}</span>
-      <span class="mp-pname">${filled ? seat.name : '<em style="opacity:0.4">Waiting…</em>'}</span>
-      <span class="mp-status">${filled ? '✓' : ''}</span>
-    `;
+function mpRenderSeats(){
+  const list=document.getElementById('mp-player-list'); if(!list)return;
+  list.innerHTML='';
+  for(let i=0;i<4;i++){
+    const row=document.createElement('div'); const filled=i<mpSeats.length;
+    row.className='mp-player-row '+(filled?'filled':'open');
+    row.innerHTML=`<span class="mp-seat">Seat ${i+1}${i===0?' (Host)':''}</span><span class="mp-pname">${filled?mpSeats[i].name:'<em style="opacity:0.4">Waiting…</em>'}</span><span>${filled?'✓':''}</span>`;
     list.appendChild(row);
   }
 }
 
-// ── START GAME ────────────────────────────────────────────────
-function mpStartGame() {
-  if (!mpIsHost || mpSeats.length < 2) return;
-  // Deal cards
-  const deck = shuffle(buildDeck());
-  const dealtHands = [[],[],[],[]];
-  for (let i = 0; i < 52; i++) dealtHands[i % 4].push(deck[i]);
-  dealtHands.forEach(h => h.sort(compareCards));
-
-  // Fill empty seats with NPC
-  const totalSeats = mpSeats.length;
-  const seatNames = mpSeats.map(s => s.name);
-  // Pad to 4 with NPC names
-  for (let i = totalSeats; i < 4; i++) seatNames.push('NPC ' + (i+1));
-
-  const startData = {
-    type: 'start',
-    seats: seatNames.map(name => ({ name })),
-    hands: dealtHands,
-    openingPlayer: dealtHands.findIndex(h => h.some(c => c.rank==='3' && c.suit==='♦')),
-    npcSeats: Array.from({length:4}, (_,i) => i >= totalSeats) // which seats are NPCs
-  };
-
-  // Send to guests
-  mpConnections.forEach((c, ci) => {
-    const guestData = { ...startData, mySeat: ci + 1 };
-    try { c.send(guestData); } catch(e){}
-  });
-
-  // Start locally as host (seat 0)
+function mpStartGame(){
+  if(!mpIsHost||mpSeats.length<2)return;
+  const deck=shuffle(buildDeck()); const dealtHands=[[],[],[],[]];
+  for(let i=0;i<52;i++) dealtHands[i%4].push(deck[i]);
+  dealtHands.forEach(h=>h.sort(compareCards));
+  const seatNames=mpSeats.map(s=>s.name);
+  while(seatNames.length<4) seatNames.push('NPC '+(seatNames.length+1));
+  const npcSeats=Array.from({length:4},(_,i)=>i>=mpSeats.length);
+  const openingP=dealtHands.findIndex(h=>h.some(c=>c.rank==='3'&&c.suit==='♦'));
+  const startData={type:'start',seats:seatNames.map(n=>({name:n})),hands:dealtHands,openingPlayer:openingP,npcSeats};
+  mpConnections.forEach((c,ci)=>{try{c.send({...startData,mySeat:ci+1});}catch(e){}});
   document.getElementById('mp-lobby').classList.remove('open');
-  mpStartLocalGame({ ...startData, mySeat: 0 });
+  mpStartLocalGame({...startData,mySeat:0});
 }
 
-function mpStartLocalGame(data) {
-  mpGameMode = 'vs_human';
-  mpSeats = data.seats.map(s => ({ name: s.name, conn: null }));
-  mpMySeat = data.mySeat || 0;
-  const npcSeats = data.npcSeats || [];
-
-  // Set up game state
-  hands = data.hands;
-  discardPile = [];
-  currentRoundPlays = [];
-  globalDiscardedCards = new Set();
-  lastPlay = null;
-  passCount = 0;
-  selectedCards = [];
-  firstTurn = true;
-  gameActive = true;
-  openingPlayer = data.openingPlayer;
-  currentPlayer = openingPlayer;
-  startingHandProfile = hands.map(h => classifyStartingHand(h));
-
-  // Remap: my hand is always seat mpMySeat
-  // We keep hands[] in seat order, but render our cards as "player hand"
-  // and others as NPC zones
-
-  // Override player names for display
-  const zoneNames = ['name-p3','name-p2','name-p4']; // top, right, left — other 3 players
-  const otherSeats = [0,1,2,3].filter(i => i !== mpMySeat);
-  otherSeats.forEach((seat, zi) => {
-    const el = document.getElementById(zoneNames[zi]);
-    if (el) el.textContent = (npcSeats[seat] ? '🤖 ' : '👤 ') + mpSeats[seat].name;
-    // Mark as human
-    const zoneIds = ['npc-top','npc-right','npc-left'];
-    const zone = document.getElementById(zoneIds[zi]);
-    if (zone) zone.classList.toggle('mp-human', !npcSeats[seat]);
+function mpStartLocalGame(data){
+  mpGameMode='vs_human'; mpSeats=data.seats.map(s=>({name:s.name,conn:null})); mpMySeat=data.mySeat||0;
+  const npcSeats=data.npcSeats||[];
+  hands=data.hands; discardPile=[]; currentRoundPlays=[]; globalDiscardedCards=new Set();
+  lastPlay=null; passCount=0; selectedCards=[]; firstTurn=true; gameActive=true;
+  openingPlayer=data.openingPlayer; currentPlayer=openingPlayer;
+  startingHandProfile=hands.map(h=>classifyStartingHand(h));
+  const otherSeats=[0,1,2,3].filter(i=>i!==mpMySeat);
+  const zoneIds=['npc-top','npc-right','npc-left'];
+  const nameIds=['name-p3','name-p2','name-p4'];
+  otherSeats.forEach((seat,zi)=>{
+    const ne=document.getElementById(nameIds[zi]); if(ne) ne.textContent=(npcSeats[seat]?'🤖 ':'👤 ')+mpSeats[seat].name;
+    const ze=document.getElementById(zoneIds[zi]); if(ze) ze.classList.toggle('mp-human',!npcSeats[seat]);
   });
-
-  document.getElementById('splash').style.display = 'none';
-  document.getElementById('game').style.display = 'block';
-
-  const lbl = document.getElementById('player-name-label');
-  if (lbl) lbl.textContent = mpSeats[mpMySeat].name + ' (You)';
-
-  renderAll();
-  // Remap hands so player's own cards are at index 0
-  mpRemapHandsForSeat(mpMySeat);
-
-  setPlayerControls(currentPlayer === mpMySeat);
-  updateTurnIndicator();
-
-  if (currentPlayer !== mpMySeat && npcSeats[currentPlayer]) {
-    setTimeout(npcTurn, 1200);
-  }
+  // Remap hands so our seat = index 0
+  const rh=[]; for(let i=0;i<4;i++) rh.push(hands[(mpMySeat+i)%4]); hands=rh;
+  currentPlayer=(currentPlayer-mpMySeat+4)%4; openingPlayer=(openingPlayer-mpMySeat+4)%4;
+  document.getElementById('splash').style.display='none';
+  document.getElementById('game').style.display='block';
+  const lbl=document.getElementById('player-name-label'); if(lbl) lbl.textContent=mpSeats[mpMySeat].name+' (You)';
+  renderAll(); setPlayerControls(currentPlayer===0); updateTurnIndicator();
+  if(currentPlayer!==0&&npcSeats[(mpMySeat+currentPlayer)%4]) setTimeout(npcTurn,1200);
 }
 
-function mpRemapHandsForSeat(mySeat) {
-  // Rotate hands array so that mySeat = index 0 (player's own hand)
-  const reordered = [];
-  for (let i = 0; i < 4; i++) reordered.push(hands[(mySeat + i) % 4]);
-  hands = reordered;
-  // Also remap currentPlayer and openingPlayer
-  currentPlayer = (currentPlayer - mySeat + 4) % 4;
-  openingPlayer  = (openingPlayer  - mySeat + 4) % 4;
-  if (lastPlay) lastPlay.playerIdx = (lastPlay.playerIdx - mySeat + 4) % 4;
+function mpSendPlay(play){
+  const msg={type:'play',seat:mpMySeat,cards:play.cards,playType:play.type,subtype:play.subtype};
+  if(mpIsHost) mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
+  else if(mpHostConn){try{mpHostConn.send(msg);}catch(e){}}
 }
-
-// ── REMOTE PLAY RELAY ─────────────────────────────────────────
-function mpSendPlay(seatPlay) {
-  const msg = { type: 'play', seat: mpMySeat, cards: seatPlay.cards, playType: seatPlay.type, subtype: seatPlay.subtype };
-  if (mpIsHost) mpConnections.forEach(c => { try { c.send(msg); } catch(e){} });
-  else if (mpHostConn) { try { mpHostConn.send(msg); } catch(e){} }
-  // Host also relays to other guests
-  if (mpIsHost) mpConnections.forEach(c => { try { c.send(msg); } catch(e){} });
+function mpSendPass(){
+  const msg={type:'pass',seat:mpMySeat};
+  if(mpIsHost) mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
+  else if(mpHostConn){try{mpHostConn.send(msg);}catch(e){}}
 }
-
-function mpSendPass() {
-  const msg = { type: 'pass', seat: mpMySeat };
-  if (mpIsHost) mpConnections.forEach(c => { try { c.send(msg); } catch(e){} });
-  else if (mpHostConn) { try { mpHostConn.send(msg); } catch(e){} }
+function mpProcessRemotePlay(seatIdx,data){
+  const localIdx=(seatIdx-mpMySeat+4)%4;
+  const play=classifyPlay(data.cards); if(!play)return;
+  executePlay(localIdx,data.cards,play);
 }
+function mpProcessRemotePass(seatIdx){ doPass((seatIdx-mpMySeat+4)%4); }
 
-function mpProcessRemotePlay(seatIdx, data) {
-  // Remap seat to local hand index
-  const localIdx = (seatIdx - mpMySeat + 4) % 4;
-  const cards = data.cards;
-  const play = classifyPlay(cards);
-  if (!play) return;
-  executePlay(localIdx, cards, play);
-}
-
-function mpProcessRemotePass(seatIdx) {
-  const localIdx = (seatIdx - mpMySeat + 4) % 4;
-  doPass(localIdx);
-}
-
-// ── CLEANUP ───────────────────────────────────────────────────
-function mpDestroy() {
-  mpConnections.forEach(c => { try { c.close(); } catch(e){} });
-  mpConnections = [];
-  if (mpHostConn) { try { mpHostConn.close(); } catch(e){} mpHostConn = null; }
-  if (mpPeer) { try { mpPeer.destroy(); } catch(e){} mpPeer = null; }
-  mpIsHost = false;
-  mpRoomCode = null;
-  mpSeats = [];
-  mpMySeat = -1;
-  mpGameMode = 'single';
+function mpDestroy(){
+  mpConnections.forEach(c=>{try{c.close();}catch(e){}});
+  mpConnections=[]; if(mpHostConn){try{mpHostConn.close();}catch(e){} mpHostConn=null;}
+  if(mpPeer){try{mpPeer.destroy();}catch(e){} mpPeer=null;}
+  mpIsHost=false; mpRoomCode=null; mpSeats=[]; mpMySeat=-1; mpGameMode='single';
 }
 
 </script>
