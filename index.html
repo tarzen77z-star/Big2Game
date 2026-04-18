@@ -163,6 +163,27 @@
     white-space: nowrap;
   }
 
+
+  /* ── LAST PLAYED HIGHLIGHT ── */
+  /* NPC zones: amber glow on name + card when they were last to play */
+  .npc-zone.last-played .npc-name {
+    color: #ffd06b !important;
+    text-shadow: 0 0 10px rgba(255,180,60,0.7), 0 0 4px rgba(255,180,60,0.4) !important;
+  }
+  .npc-zone.last-played .npc-card-single {
+    border-color: rgba(255,180,60,0.6) !important;
+    box-shadow: 0 0 12px rgba(255,160,40,0.55), 2px 2px 8px rgba(0,0,0,0.5) !important;
+  }
+  /* Player area: amber glow on name label when player was last to play */
+  #player-area.last-played #player-name-label:not(.active) {
+    color: #ffd06b !important;
+    text-shadow: 0 0 8px rgba(255,180,60,0.6);
+  }
+  #player-area.last-played.your-turn #player-name-label {
+    /* your-turn active green takes priority; add subtle amber border */
+    box-shadow: 0 0 14px rgba(100,255,150,0.55), 0 0 0 1.5px rgba(255,180,60,0.4) !important;
+  }
+
   /* ── LAST CARD GLOW ── */
   .last-card-alert .npc-name {
     color: #ff6b6b !important;
@@ -1934,6 +1955,29 @@ function startGame() {
 // ════════════════════════════════════════
 //  RENDERING
 // ════════════════════════════════════════
+
+// Apply last-played highlight to whoever most recently played a card
+function updateLastPlayedHighlight() {
+  const zoneMap = [
+    'player-area',   // player 0 → player-area div
+    'npc-right',     // player 1 (NPC2) → right zone
+    'npc-top',       // player 2 (NPC3) → top zone
+    'npc-left',      // player 3 (NPC4) → left zone
+  ];
+  // Clear all first
+  zoneMap.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('last-played');
+  });
+
+  // Apply to whoever played last
+  if (lastPlay && typeof lastPlay.playerIdx === 'number') {
+    const id = zoneMap[lastPlay.playerIdx];
+    const el = document.getElementById(id);
+    if (el) el.classList.add('last-played');
+  }
+}
+
 function renderAll() {
   renderHand();
   renderNpc(1, 'npc-right', 'cards-p2', 'count-p2', 'name-p2');
@@ -1941,6 +1985,7 @@ function renderAll() {
   renderNpc(3, 'npc-left', 'cards-p4', 'count-p4', 'name-p4');
   renderDiscardPile();
   updateScoreboard();
+  updateLastPlayedHighlight();
 }
 
 function renderNpc(idx, zoneId, cardsId, countId, nameId) {
