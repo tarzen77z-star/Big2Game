@@ -297,15 +297,20 @@
   /* ── DISCARD PILE ── */
   #discard-area {
     position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -52%);
+    top: 85px;
+    bottom: 210px;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 4px;
-    max-height: 58vh;
     z-index: 6;
+    overflow: visible;
+    pointer-events: none;
   }
+  #discard-area > * { pointer-events: auto; }
   #chinese-title {
     font-family: 'Noto Serif TC', 'SimSun', serif;
     font-size: 2rem;
@@ -335,7 +340,8 @@
     padding: 8px 12px;
     align-items: flex-start;
     overflow-y: auto;
-    max-height: 44vh;
+    overflow-x: hidden;
+    max-height: calc(100vh - 310px);
     scrollbar-width: thin;
     scrollbar-color: rgba(201,168,76,0.3) transparent;
   }
@@ -349,7 +355,7 @@
     gap: 3px;
     flex-wrap: nowrap;
     width: 100%;
-    min-height: 84px;
+    min-height: 96px;
   }
   .discard-row .play-card {
     flex-shrink: 0;
@@ -401,7 +407,7 @@
 
   /* ── PLAY CARD ── */
   .play-card {
-    width: 56px; height: 80px;
+    width: 62px; height: 88px;
     background: var(--card-bg);
     border-radius: 7px;
     display: flex; flex-direction: column;
@@ -413,8 +419,8 @@
     user-select: none;
     flex-shrink: 0;
   }
-  .play-card .rank { font-size: 1.2rem; font-weight: 700; line-height: 1; }
-  .play-card .suit { font-size: 1rem; }
+  .play-card .rank { font-size: 1.26rem; font-weight: 700; line-height: 1; }
+  .play-card .suit { font-size: 1.05rem; }
   .play-card .center-suit { font-size: 1.5rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); }
   .play-card.red .rank, .play-card.red .suit, .play-card.red .center-suit { color: var(--card-red); }
   .play-card.black .rank, .play-card.black .suit, .play-card.black .center-suit { color: var(--card-black); }
@@ -440,35 +446,44 @@
     background: rgba(0,0,0,0.4);
     border: 1px solid rgba(201,168,76,0.4);
     color: var(--gold-light);
-    padding: 5px 14px;
+    padding: 5.5px 15.5px;
     font-family: 'Crimson Pro', serif;
-    font-size: 0.9rem;
+    font-size: 0.99rem;
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.15s;
   }
   .btn-sm:hover { background: rgba(201,168,76,0.15); border-color: var(--gold); }
   .btn-sm:disabled { opacity: 0.35; cursor: not-allowed; }
+  /* Sort buttons — same as btn-sm */
+  .btn-sort { /* inherits btn-sm */ }
+  /* Play button — bright green highlight */
   .btn-play {
-    background: linear-gradient(135deg, #2d6b44, #1a4a2e);
-    border-color: var(--gold);
-    color: var(--gold);
-    font-weight: 600;
+    background: linear-gradient(135deg, #2ecc71, #1a7a40);
+    border: 2px solid #7fffaa !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 0 14px rgba(46,204,113,0.4), 0 3px 10px rgba(0,0,0,0.4);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
   }
-  .btn-play:hover { background: linear-gradient(135deg, #3d8b5a, #2d6b44); }
+  .btn-play:hover:not(:disabled) {
+    background: linear-gradient(135deg, #3ddd82, #22994e);
+    box-shadow: 0 0 22px rgba(46,204,113,0.65), 0 3px 12px rgba(0,0,0,0.4);
+    transform: translateY(-1px);
+  }
   .btn-play-big {
-    padding: 7px 22px !important;
-    font-size: 1rem !important;
+    padding: 7.7px 24px !important;
+    font-size: 1.1rem !important;
     letter-spacing: 0.04em;
   }
   .btn-pass-big {
-    padding: 7px 18px !important;
-    font-size: 1rem !important;
+    padding: 7.7px 20px !important;
+    font-size: 1.1rem !important;
     background: rgba(0,0,0,0.4) !important;
     border-color: rgba(201,168,76,0.5) !important;
     color: var(--gold-light) !important;
   }
-  .btn-pass-big:hover { background: rgba(201,168,76,0.15) !important; }
+  .btn-pass-big:hover:not(:disabled) { background: rgba(201,168,76,0.15) !important; }
   /* Forfeit — upper-left corner */
   .btn-forfeit {
     position: absolute;
@@ -508,7 +523,7 @@
 
   #hand-container {
     position: relative;
-    height: 185px;
+    height: 205px;
     width: 100%;
     display: flex;
     align-items: flex-end;
@@ -518,7 +533,7 @@
 
   .hand-card {
     position: absolute;
-    width: 64px; height: 90px;
+    width: 70px; height: 99px;
     background: var(--card-bg);
     border-radius: 8px;
     box-shadow: 2px 4px 12px rgba(0,0,0,0.6);
@@ -537,8 +552,8 @@
   }
   .hand-card.red .rank, .hand-card.red .center-suit { color: var(--card-red); }
   .hand-card.black .rank, .hand-card.black .center-suit { color: var(--card-black); }
-  .hand-card .rank { font-size: 1.1rem; font-weight: 700; align-self: flex-start; padding-left: 2px; }
-  .hand-card .center-suit { font-size: 1.8rem; }
+  .hand-card .rank { font-size: 1.21rem; font-weight: 700; align-self: flex-start; padding-left: 2px; }
+  .hand-card .center-suit { font-size: 1.98rem; }
 
   /* ── MODAL ── */
   #modal-overlay {
@@ -621,8 +636,8 @@
 
   /* Newest discard group — glowing highlight, sized to fit in pile */
   .play-card.newest {
-    width: 62px !important;
-    height: 88px !important;
+    width: 68px !important;
+    height: 96px !important;
     box-shadow: 0 0 0 2px #7fffaa, 0 0 14px rgba(100,255,150,0.5) !important;
     animation: newcard 0.38s cubic-bezier(0.22,1,0.36,1);
     position: relative;
@@ -723,10 +738,11 @@
 
     /* ── DISCARD AREA ── */
     #discard-area {
-      top: 47%;
-      transform: translate(-50%, -50%);
+      top: 62px;
+      bottom: 160px;
+      transform: translateX(-50%);
+      justify-content: center;
       gap: 2px;
-      max-height: 50vh;
     }
     #chinese-title { font-size: 1.2rem; letter-spacing: 0.08em; }
     #game-title-below { font-size: 0.65rem; letter-spacing: 0.12em; margin-top: 0; }
@@ -1234,6 +1250,83 @@
   #mp-status { font-size: 0.82rem; font-style: italic; color: rgba(160,184,255,0.8); min-height: 20px; margin: 6px 0; }
   .npc-zone.mp-human .npc-name { color: #a0c0ff !important; }
 
+  /* ── MP: player's turn highlight — stronger pulse ── */
+  #player-area.your-turn.mp-active {
+    box-shadow: 0 -4px 40px rgba(100,255,150,0.3), 0 0 0 2px rgba(100,255,150,0.4);
+    animation: mp-turn-pulse 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes mp-turn-pulse {
+    from { box-shadow: 0 -4px 30px rgba(100,255,150,0.2); }
+    to   { box-shadow: 0 -4px 50px rgba(100,255,150,0.45), 0 0 0 2px rgba(100,255,150,0.5); }
+  }
+  /* NPC zones in MP showing a human player's turn */
+  .npc-zone.active.mp-human .npc-name {
+    color: #a0c0ff !important;
+    text-shadow: 0 0 12px rgba(100,140,255,0.7) !important;
+    animation: mp-npc-pulse 1.1s ease-in-out infinite alternate;
+  }
+  .npc-zone.active.mp-human .npc-card-single {
+    border-color: rgba(100,140,255,0.6) !important;
+    box-shadow: 0 0 14px rgba(100,140,255,0.5) !important;
+  }
+  @keyframes mp-npc-pulse {
+    from { opacity: 0.85; }
+    to   { opacity: 1; filter: brightness(1.2); }
+  }
+
+  /* ── CARD ZOOM MODE ── */
+  /* Hand cards zoomed 30% */
+  #hand-container.hand-zoomed .hand-card {
+    transform-origin: bottom center;
+    transition: transform 0.25s ease, bottom 0.2s ease, box-shadow 0.2s;
+  }
+  #hand-container.hand-zoomed {
+    /* Zoomed cards need more vertical space — handled via JS scale */
+  }
+  /* Discard pile zoomed */
+  #discard-pile.discard-zoomed {
+    transform: scale(1.3);
+    transform-origin: center top;
+    z-index: 20;
+    position: relative;
+    box-shadow: 0 0 40px rgba(0,0,0,0.7);
+  }
+  /* Zoom indicator */
+  .zoom-hint {
+    position: absolute;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.65rem;
+    color: rgba(201,168,76,0.7);
+    white-space: nowrap;
+    pointer-events: none;
+    font-style: italic;
+  }
+
+  /* ── ZOOM TOGGLE BUTTON ── */
+  #btn-hand-zoom {
+    position: absolute;
+    right: 8px;
+    bottom: 0;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(201,168,76,0.35);
+    color: rgba(201,168,76,0.7);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 55;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  #btn-hand-zoom:hover { background: rgba(201,168,76,0.15); border-color: var(--gold); color: var(--gold-light); }
+  #btn-hand-zoom.zoomed { background: rgba(201,168,76,0.2); border-color: var(--gold); color: var(--gold); }
+
 </style>
 </head>
 <body>
@@ -1612,13 +1705,16 @@
       <div id="game-rank-label" style="font-size:0.62rem;color:var(--text-dim);margin-left:6px;font-family:'Crimson Pro',serif;">Beginner</div>
     </div>
     <div id="player-controls">
-      <button class="btn-sm" onclick="sortByRank()">Sort by Rank</button>
-      <button class="btn-sm" onclick="sortBySuit()">Sort by Suit</button>
-      <button class="btn-sm" onclick="groupByFive()">Group 5-Cards</button>
-      <button class="btn-sm btn-play btn-play-big" id="btn-play" onclick="playerPlay()" disabled>Play</button>
+      <button class="btn-sm btn-sort" onclick="sortByRank()">Sort by Rank</button>
+      <button class="btn-sm btn-sort" onclick="sortBySuit()">Sort by Suit</button>
+      <div style="width:20px;flex-shrink:0"></div>
       <button class="btn-sm btn-pass-big" id="btn-pass" onclick="playerPass()" disabled>Pass</button>
+      <button class="btn-sm btn-play btn-play-big" id="btn-play" onclick="playerPlay()" disabled>Play</button>
     </div>
-    <div id="hand-container"></div>
+    <div style="position:relative;width:100%">
+      <div id="hand-container"></div>
+      <button id="btn-hand-zoom" title="Toggle card zoom" onclick="toggleHandZoom()">🔍</button>
+    </div>
   </div>
 
 
@@ -1672,6 +1768,8 @@ let lastPlay = null;   // {cards, type, playerIdx}
 let passCount = 0;
 let gameActive = false;
 let selectedCards = [];
+let handZoomed = false;    // double-click zoom on player hand
+let discardZoomed = false; // double-click zoom on discard pile
 let scores = [0,0,0,0];
 let gamesPlayed = 0;
 let firstTurn = true; // first play of the game
@@ -2122,6 +2220,87 @@ function renderNpc(idx, zoneId, cardsId, countId, nameId) {
   zone.classList.toggle('last-card-alert', count === 1);
 }
 
+
+// ── Card zoom: toggle button, double-click, and pinch-to-zoom ──
+function toggleHandZoom(forceState) {
+  handZoomed = (forceState !== undefined) ? forceState : !handZoomed;
+  const container = document.getElementById('hand-container');
+  const btn = document.getElementById('btn-hand-zoom');
+  if (handZoomed) {
+    container.classList.add('hand-zoomed');
+    container.style.transform = 'scale(1.3)';
+    container.style.transformOrigin = 'bottom center';
+    container.style.zIndex = '50';
+    if (btn) { btn.textContent = '🔍'; btn.classList.add('zoomed'); btn.title = 'Zoom out'; }
+  } else {
+    container.classList.remove('hand-zoomed');
+    container.style.transform = '';
+    container.style.transformOrigin = '';
+    container.style.zIndex = '';
+    if (btn) { btn.textContent = '🔍'; btn.classList.remove('zoomed'); btn.title = 'Zoom in'; }
+  }
+}
+
+// ── Pinch-to-zoom detection ────────────────────────────────
+let _pinchStartDist = 0;
+let _pinchActive = false;
+
+function _pinchDist(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+function initPinchZoom() {
+  const container = document.getElementById('hand-container');
+  if (!container) return;
+
+  container.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      _pinchStartDist = _pinchDist(e.touches);
+      _pinchActive = true;
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  container.addEventListener('touchmove', e => {
+    if (!_pinchActive || e.touches.length !== 2) return;
+    const dist = _pinchDist(e.touches);
+    const ratio = dist / _pinchStartDist;
+    // Pinch out (ratio > 1.15) → zoom in; pinch in (ratio < 0.85) → zoom out
+    if (ratio > 1.15 && !handZoomed) {
+      toggleHandZoom(true);
+    } else if (ratio < 0.85 && handZoomed) {
+      toggleHandZoom(false);
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  container.addEventListener('touchend', e => {
+    if (e.touches.length < 2) _pinchActive = false;
+  });
+}
+
+function toggleDiscardZoom() {
+  discardZoomed = !discardZoomed;
+  const pile = document.getElementById('discard-pile');
+  if (discardZoomed) {
+    pile.classList.add('discard-zoomed');
+  } else {
+    pile.classList.remove('discard-zoomed');
+  }
+}
+
+function resetHandZoom() {
+  toggleHandZoom(false);
+}
+
+function resetDiscardZoom() {
+  discardZoomed = false;
+  const pile = document.getElementById('discard-pile');
+  if (pile) pile.classList.remove('discard-zoomed');
+}
+
 function renderHand() {
   const container = document.getElementById('hand-container');
   container.innerHTML = '';
@@ -2131,7 +2310,7 @@ function renderHand() {
   const n = hand.length;
   // Fan angle: spread cards across an arc
   const isMobile = window.innerWidth <= 500;
-  const cardW = isMobile ? 44 : 64;
+  const cardW = isMobile ? 44 : 70;
   const maxAngle = Math.min(isMobile ? 40 : 42, n * (isMobile ? 3.4 : 3.5));
   const step = n > 1 ? (maxAngle * 2) / (n - 1) : 0;
   const w = Math.min(window.innerWidth - (isMobile ? 80 : 60), isMobile ? 320 : 720);
@@ -2172,6 +2351,11 @@ function renderHand() {
     container.appendChild(el);
   });
 
+  // Double-click on hand area to zoom
+  const hc = document.getElementById('hand-container');
+  hc.ondblclick = (e) => { e.preventDefault(); toggleHandZoom(); };
+  // Initialise pinch-to-zoom (safe to call multiple times)
+  initPinchZoom();
   document.getElementById('player-name-label').classList.toggle('active', currentPlayer === 0);
   // Last card glow on player area
   const playerArea = document.getElementById('player-area');
@@ -2181,6 +2365,12 @@ function renderHand() {
 function renderDiscardPile() {
   const pile = document.getElementById('discard-pile');
   pile.innerHTML = '';
+
+  // Double-click on discard pile to zoom
+  pile.ondblclick = (e) => {
+    e.preventDefault();
+    toggleDiscardZoom();
+  };
 
   if (!currentRoundPlays.length) {
     const hint = document.createElement('div');
@@ -2344,6 +2534,9 @@ function sortBySuit() {
 }
 
 function setPlayerControls(enabled) {
+  // In MP, add mp-active class to player-area for stronger visual
+  const playerArea = document.getElementById('player-area');
+  if (playerArea) playerArea.classList.toggle('mp-active', enabled && mpGameMode === 'vs_human');
   document.getElementById('btn-play').disabled = !enabled;
   document.getElementById('btn-pass').disabled = !enabled || (firstTurn && currentPlayer === 0);
   // Visual turn indicator for player area
@@ -2530,6 +2723,7 @@ function executePlay(playerIdx, cards, play) {
     `${playerName(playerIdx)} played: ${typeLabel}`;
 
   selectedCards = [];
+  resetHandZoom(); // reset zoom after play
   advanceTurn(playerIdx);
 
   // Check win
@@ -2567,6 +2761,7 @@ function doPass(playerIdx) {
     lastPlay = null;
     passCount = 0;
     currentRoundPlays = [];
+    resetDiscardZoom(); // new round — reset zoom
     toast(playerName(currentPlayer) + ' controls the pile!');
     document.getElementById('last-play-info').textContent = 'New round – play anything!';
   }
@@ -3511,9 +3706,7 @@ function continueGame() {
 function endSession() {
   document.getElementById('winner-banner').style.display = 'none';
   document.getElementById('game').style.display = 'none';
-  // Show Start New Game again (no active game to resume)
-  const sb = document.getElementById('btn-start-game');
-  if (sb) sb.style.display = '';
+  clearResumeButton();
   document.getElementById('splash').style.display = 'flex';
 }
 
@@ -3721,6 +3914,7 @@ if (sc1n) sc1n.textContent = playerCustomName;
 
   // Inject a "Resume Game" button above the Start button on splash
   const resumeBtn = document.createElement('button');
+  resumeBtn.id = 'btn-resume-game';
   resumeBtn.className = 'btn-gold';
   resumeBtn.style.cssText = 'margin-bottom:0.5rem;background:linear-gradient(135deg,#1a5c38,#2d8a50,#1a5c38);box-shadow:0 4px 18px rgba(45,138,80,0.45);';
   resumeBtn.innerHTML = '↩ Resume Game';
@@ -3731,6 +3925,13 @@ if (sc1n) sc1n.textContent = playerCustomName;
     startBtn.style.display = 'none';
   }
 })();
+
+function clearResumeButton() {
+  const rb = document.getElementById('btn-resume-game');
+  if (rb) rb.remove();
+  const sb = document.getElementById('btn-start-game');
+  if (sb) sb.style.display = '';
+}
 
 function resumeGame() {
   const ok = loadGameState();
