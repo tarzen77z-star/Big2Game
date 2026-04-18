@@ -2321,8 +2321,18 @@ function buildPlayCard(card) {
 }
 
 function updateTurnIndicator() {
-  const names = [playerCustomName+"'s turn",'NPC 2\'s turn','NPC 3\'s turn','NPC 4\'s turn'];
   const extra = firstTurn ? ' – must include 3♦' : '';
+  // MP mode: use human seat names
+  if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
+    const localNames = [0,1,2,3].map(i => {
+      const seatIdx = (mpMySeat + i) % 4;
+      const name = mpSeats[seatIdx] ? mpSeats[seatIdx].name : 'Player ' + (i+1);
+      return i === 0 ? 'Your turn' : name + "'s turn";
+    });
+    document.getElementById('turn-indicator').textContent = localNames[currentPlayer] + extra;
+    return;
+  }
+  const names = [playerCustomName+"'s turn",'NPC 2\'s turn','NPC 3\'s turn','NPC 4\'s turn'];
   document.getElementById('turn-indicator').textContent = names[currentPlayer] + extra;
 }
 
@@ -2467,7 +2477,10 @@ function playerPlay() {
   }
 
   executePlay(0, selectedCards, play);
+  // MP: broadcast to peers after successful play
+  if (mpGameMode === 'vs_human') mpSendPlay(play);
 }
+
 
 function forfeitGame() {
   if (!gameActive) return;
@@ -2545,6 +2558,7 @@ function forfeitMainMenu() {
 function playerPass() {
   if (firstTurn) { toast('Cannot pass on first turn'); return; }
   if (!lastPlay) { toast('Cannot pass – you control the pile'); return; }
+  if (mpGameMode === 'vs_human') mpSendPass();
   doPass(0);
 }
 
@@ -3941,7 +3955,7 @@ let mpConnections = [];   // host: array of DataConnections to guests
 let mpHostConn = null;    // guest: DataConnection to host
 let mpSeats = [];         // [{id, name, conn|null}] — seat 0 = host
 let mpMySeat = -1;        // which seat am I?
-let mpGameMode = 'vs_human'; // 'vs_human' when multiplayer active
+let mpGameMode = 'single'; // 'single' or 'vs_human' when multiplayer active
 
 const MP_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I/O to avoid confusion
 
@@ -4274,52 +4288,6 @@ function mpDestroy() {
   mpSeats = [];
   mpMySeat = -1;
   mpGameMode = 'single';
-}
-
-// ── HOOK INTO playerPlay and playerPass for MP ────────────────
-const _origPlayerPlay = playerPlay;
-const _origPlayerPass = playerPass;
-
-// Override: after a valid play, broadcast to peers
-function playerPlay() {
-  if (!selectedCards.length) { toast('Select cards to play'); return; }
-  const play = classifyPlay(selectedCards);
-  if (!play) { toast('Invalid combination!'); return; }
-  if (firstTurn && !selectedCards.some(c => c.rank==='3' && c.suit==='♦')) {
-    toast('First play must include 3♦'); return;
-  }
-  if (lastPlay && !firstTurn && !beatsPlay(play, lastPlay)) {
-    toast('Must beat the last play!'); return;
-  }
-  if (nextPlayerHasLastCard() && play.type === 'single' && !isHighestSingle(play, hands[0])) {
-    toast('Next player has 1 card left — play your highest card or a multi-card combo!'); return;
-  }
-  // MP: broadcast before executing
-  if (mpGameMode === 'vs_human') mpSendPlay(play);
-  executePlay(0, selectedCards, play);
-}
-
-function playerPass() {
-  if (firstTurn) { toast('Cannot pass on first turn'); return; }
-  if (!lastPlay) { toast('Cannot pass – you control the pile'); return; }
-  if (mpGameMode === 'vs_human') mpSendPass();
-  doPass(0);
-}
-
-// updateTurnIndicator: show human names in MP
-const _origUpdateTurnIndicator = updateTurnIndicator;
-function updateTurnIndicator() {
-  if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
-    const localNames = [0,1,2,3].map(i => {
-      const seatIdx = (mpMySeat + i) % 4;
-      const name = mpSeats[seatIdx] ? mpSeats[seatIdx].name : 'Player ' + (i+1);
-      return i === 0 ? 'Your turn' : name + "'s turn";
-    });
-    const extra = firstTurn ? ' – must include 3♦' : '';
-    document.getElementById('turn-indicator').textContent = localNames[currentPlayer] + extra;
-    return;
-  }
-  _origUpdateTurnIndicator();
 }
 
 </script>
