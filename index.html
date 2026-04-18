@@ -2405,7 +2405,14 @@ function playerPlay() {
     }
   }
 
-  if (mpGameMode === 'vs_human') mpSendPlay(play);
+  if (mpGameMode === 'vs_human' && !mpIsHost) {
+    // Guest: send to host and wait for sync — don't execute locally
+    const msg = {type:'play', seat:mpMySeat, cards:[...selectedCards], playType:play.type, subtype:play.subtype};
+    if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
+    selectedCards = [];
+    return;
+  }
+  // Single-player or host: execute locally (sync happens inside executePlay)
   executePlay(0, selectedCards, play);
 }
 
@@ -2487,14 +2494,13 @@ function playerPass() {
   if (firstTurn) { toast('Cannot pass on first turn'); return; }
   if (!lastPlay) { toast('Cannot pass – you control the pile'); return; }
   if (mpGameMode === 'vs_human' && !mpIsHost) {
-    // Guest: just send to host
-    const msg={type:'pass',seat:mpMySeat};
-    if(mpHostConn){try{mpHostConn.send(msg);}catch(e){}}
+    // Guest: send to host and wait for sync
+    const msg = {type:'pass', seat:mpMySeat};
+    if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
     return;
   }
+  // Single-player or host: execute locally (sync happens inside doPass)
   doPass(0);
-  // Host: broadcast sync after pass
-  if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
 }
 
 // ════════════════════════════════════════
@@ -2530,12 +2536,13 @@ function executePlay(playerIdx, cards, play) {
 
   saveGameState();
   renderAll();
+  if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
   if (currentPlayer !== 0) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
       if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
         const token = ++mpTurnToken;
-        setTimeout(() => { if (mpTurnToken === token) npcTurn();; }, 1000 + Math.random()*600);
+        setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 1000 + Math.random()*600);
       }
     }
   } else {
@@ -2562,12 +2569,13 @@ function doPass(playerIdx) {
 
   saveGameState();
   renderAll();
+  if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
   if (currentPlayer !== 0) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
       if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
         const token = ++mpTurnToken;
-        setTimeout(() => { if (mpTurnToken === token) npcTurn();; }, 900 + Math.random()*500);
+        setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 900 + Math.random()*500);
       }
     }
   } else {
@@ -2611,8 +2619,6 @@ function npcTurn() {
       mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
     }
     doPass(idx);
-    // Host broadcasts sync after NPC pass
-    if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
   } else {
     // Host broadcasts NPC play to all guests
     if (mpGameMode === 'vs_human' && mpIsHost) {
@@ -2621,8 +2627,6 @@ function npcTurn() {
       mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
     }
     executePlay(idx, play.cards, play);
-    // Host broadcasts sync after NPC play
-    if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
   }
 }
 
