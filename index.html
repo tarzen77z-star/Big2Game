@@ -2525,7 +2525,10 @@ function executePlay(playerIdx, cards, play) {
   renderAll();
   if (currentPlayer !== 0) {
     setPlayerControls(false);
-    setTimeout(npcTurn, 1000 + Math.random()*600);
+    // In MP, only fire NPC AI for actual NPC slots
+    if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
+      setTimeout(npcTurn, 1000 + Math.random()*600);
+    }
   } else {
     setPlayerControls(true);
     updateTurnIndicator();
@@ -2552,7 +2555,10 @@ function doPass(playerIdx) {
   renderAll();
   if (currentPlayer !== 0) {
     setPlayerControls(false);
-    setTimeout(npcTurn, 900 + Math.random()*500);
+    // In MP, only fire NPC AI for actual NPC slots
+    if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
+      setTimeout(npcTurn, 900 + Math.random()*500);
+    }
   } else {
     setPlayerControls(true);
     updateTurnIndicator();
@@ -2576,6 +2582,8 @@ function advanceTurn(fromPlayer) {
 // ════════════════════════════════════════
 function npcTurn() {
   if (!gameActive || currentPlayer === 0) return;
+  // In multiplayer, skip if this local slot is a remote human (not an NPC)
+  if (mpGameMode === 'vs_human' && !mpNpcSlots[currentPlayer]) return;
   const idx = currentPlayer;
   const hand = hands[idx];
 
@@ -3815,28 +3823,58 @@ function mpStartGame(){
   mpStartLocalGame({...startData,mySeat:0});
 }
 
+// mpNpcSlots[localIdx] = true means that local seat is an NPC (AI-controlled by host)
+let mpNpcSlots = [false, false, false, false];
+
 function mpStartLocalGame(data){
-  mpGameMode='vs_human'; mpSeats=data.seats.map(s=>({name:s.name,conn:null})); mpMySeat=data.mySeat||0;
+  mpGameMode='vs_human';
+  mpSeats=data.seats.map(s=>({name:s.name,conn:null}));
+  mpMySeat=data.mySeat||0;
   const npcSeats=data.npcSeats||[];
+
   hands=data.hands; discardPile=[]; currentRoundPlays=[]; globalDiscardedCards=new Set();
   lastPlay=null; passCount=0; selectedCards=[]; firstTurn=true; gameActive=true;
   openingPlayer=data.openingPlayer; currentPlayer=openingPlayer;
   startingHandProfile=hands.map(h=>classifyStartingHand(h));
-  const otherSeats=[0,1,2,3].filter(i=>i!==mpMySeat);
-  const zoneIds=['npc-top','npc-right','npc-left'];
-  const nameIds=['name-p3','name-p2','name-p4'];
-  otherSeats.forEach((seat,zi)=>{
-    const ne=document.getElementById(nameIds[zi]); if(ne) ne.textContent=(npcSeats[seat]?'🤖 ':'👤 ')+mpSeats[seat].name;
-    const ze=document.getElementById(zoneIds[zi]); if(ze) ze.classList.toggle('mp-human',!npcSeats[seat]);
-  });
-  // Remap hands so our seat = index 0
+
+  // Remap hands so our seat (mpMySeat) = local index 0
   const rh=[]; for(let i=0;i<4;i++) rh.push(hands[(mpMySeat+i)%4]); hands=rh;
-  currentPlayer=(currentPlayer-mpMySeat+4)%4; openingPlayer=(openingPlayer-mpMySeat+4)%4;
+  currentPlayer=(currentPlayer-mpMySeat+4)%4;
+  openingPlayer=(openingPlayer-mpMySeat+4)%4;
+
+  // Build mpNpcSlots in LOCAL index space
+  // localIdx i → global seat (mpMySeat + i) % 4
+  mpNpcSlots = [false,false,false,false];
+  for(let li=0;li<4;li++){
+    const globalSeat=(mpMySeat+li)%4;
+    mpNpcSlots[li]=npcSeats[globalSeat]===true;
+  }
+  // local index 0 is always us — never an NPC from our perspective
+  mpNpcSlots[0]=false;
+
+  // Label the three NPC zones (top, right, left = local indices 2, 1, 3)
+  const zoneMap=[
+    {zoneId:'npc-right', nameId:'name-p2', localIdx:1},
+    {zoneId:'npc-top',   nameId:'name-p3', localIdx:2},
+    {zoneId:'npc-left',  nameId:'name-p4', localIdx:3},
+  ];
+  zoneMap.forEach(({zoneId,nameId,localIdx})=>{
+    const globalSeat=(mpMySeat+localIdx)%4;
+    const isNpc=mpNpcSlots[localIdx];
+    const name=mpSeats[globalSeat]?mpSeats[globalSeat].name:'Player '+(globalSeat+1);
+    const ne=document.getElementById(nameId); if(ne) ne.textContent=(isNpc?'🤖 ':'👤 ')+name;
+    const ze=document.getElementById(zoneId); if(ze) ze.classList.toggle('mp-human',!isNpc);
+  });
+
   document.getElementById('splash').style.display='none';
   document.getElementById('game').style.display='block';
-  const lbl=document.getElementById('player-name-label'); if(lbl) lbl.textContent=mpSeats[mpMySeat].name+' (You)';
+  const lbl=document.getElementById('player-name-label');
+  if(lbl) lbl.textContent=mpSeats[mpMySeat].name+' (You)';
+
   renderAll(); setPlayerControls(currentPlayer===0); updateTurnIndicator();
-  if(currentPlayer!==0&&npcSeats[(mpMySeat+currentPlayer)%4]) setTimeout(npcTurn,1200);
+
+  // Only trigger NPC AI if the opening player is an actual NPC slot
+  if(currentPlayer!==0 && mpNpcSlots[currentPlayer]) setTimeout(npcTurn,1200);
 }
 
 function mpSendPlay(play){
