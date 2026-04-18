@@ -2525,9 +2525,11 @@ function executePlay(playerIdx, cards, play) {
   renderAll();
   if (currentPlayer !== 0) {
     setPlayerControls(false);
-    // In MP, only fire NPC AI for actual NPC slots
-    if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
-      setTimeout(npcTurn, 1000 + Math.random()*600);
+    // Guests wait for host to relay moves; only host (or single-player) fires npcTurn
+    if (mpGameMode !== 'vs_human' || mpIsHost) {
+      if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
+        setTimeout(npcTurn, 1000 + Math.random()*600);
+      }
     }
   } else {
     setPlayerControls(true);
@@ -2555,9 +2557,11 @@ function doPass(playerIdx) {
   renderAll();
   if (currentPlayer !== 0) {
     setPlayerControls(false);
-    // In MP, only fire NPC AI for actual NPC slots
-    if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
-      setTimeout(npcTurn, 900 + Math.random()*500);
+    // Guests wait for host to relay moves; only host (or single-player) fires npcTurn
+    if (mpGameMode !== 'vs_human' || mpIsHost) {
+      if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
+        setTimeout(npcTurn, 900 + Math.random()*500);
+      }
     }
   } else {
     setPlayerControls(true);
@@ -2582,16 +2586,33 @@ function advanceTurn(fromPlayer) {
 // ════════════════════════════════════════
 function npcTurn() {
   if (!gameActive || currentPlayer === 0) return;
-  // In multiplayer, skip if this local slot is a remote human (not an NPC)
-  if (mpGameMode === 'vs_human' && !mpNpcSlots[currentPlayer]) return;
+
+  // In MP: guests never run NPC AI — host is authoritative for all NPC turns
+  if (mpGameMode === 'vs_human' && !mpIsHost) return;
+
+  // In MP (host): only fire AI for actual NPC slots, skip remote humans
+  if (mpGameMode === 'vs_human' && mpIsHost && !mpNpcSlots[currentPlayer]) return;
+
   const idx = currentPlayer;
   const hand = hands[idx];
 
   const play = findBestNpcPlay(hand, lastPlay, firstTurn && idx === openingPlayer);
 
   if (!play) {
+    // Host broadcasts NPC pass to all guests
+    if (mpGameMode === 'vs_human' && mpIsHost) {
+      const globalSeat = (mpMySeat + idx) % 4;
+      const msg = {type:'pass', seat:globalSeat};
+      mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
+    }
     doPass(idx);
   } else {
+    // Host broadcasts NPC play to all guests
+    if (mpGameMode === 'vs_human' && mpIsHost) {
+      const globalSeat = (mpMySeat + idx) % 4;
+      const msg = {type:'play', seat:globalSeat, cards:play.cards, playType:play.type, subtype:play.subtype};
+      mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
+    }
     executePlay(idx, play.cards, play);
   }
 }
@@ -3752,9 +3773,26 @@ function mpHostOnConnect(conn) {
   conn.on('close',()=>mpHostOnDisconnect(conn));
 }
 function mpHostOnData(conn,data){
-  if(data.type==='name'){const s=mpSeats.findIndex(x=>x.conn===conn);if(s>=0){mpSeats[s].name=data.name;mpBroadcastLobby();}}
-  if(data.type==='play'){const s=mpSeats.findIndex(x=>x.conn===conn);if(s>=0){mpProcessRemotePlay(s,data);mpConnections.filter(c=>c!==conn).forEach(c=>{try{c.send(data);}catch(e){}});}}
-  if(data.type==='pass'){const s=mpSeats.findIndex(x=>x.conn===conn);if(s>=0){mpProcessRemotePass(s);mpConnections.filter(c=>c!==conn).forEach(c=>{try{c.send(data);}catch(e){}});}}
+  if(data.type==='name'){
+    const s=mpSeats.findIndex(x=>x.conn===conn);
+    if(s>=0){mpSeats[s].name=data.name;mpBroadcastLobby();}
+  }
+  if(data.type==='play'){
+    const s=mpSeats.findIndex(x=>x.conn===conn);
+    if(s>=0){
+      // Apply to host local state
+      mpProcessRemotePlay(s,data);
+      // Relay to ALL other guests (not back to sender)
+      mpConnections.filter(c=>c!==conn).forEach(c=>{try{c.send(data);}catch(e){}});
+    }
+  }
+  if(data.type==='pass'){
+    const s=mpSeats.findIndex(x=>x.conn===conn);
+    if(s>=0){
+      mpProcessRemotePass(s);
+      mpConnections.filter(c=>c!==conn).forEach(c=>{try{c.send(data);}catch(e){}});
+    }
+  }
 }
 function mpHostOnDisconnect(conn){
   const s=mpSeats.findIndex(x=>x.conn===conn);
@@ -3793,8 +3831,13 @@ function mpGuestOnData(data){
   if(data.type==='seat'){mpMySeat=data.seat;mpSetStatus('Joined as Player '+(mpMySeat+1)+'. Waiting for start…','mp-status-join');}
   if(data.type==='lobby'){mpSeats=data.seats.map(s=>({name:s.name,conn:null}));mpSetStatus('Room: '+mpSeats.map(s=>s.name).join(', '),'mp-status-join');}
   if(data.type==='start'){mpSeats=data.seats.map(s=>({name:s.name,conn:null}));document.getElementById('mp-lobby').classList.remove('open');mpStartLocalGame(data);}
-  if(data.type==='play'){mpProcessRemotePlay(data.seat,data);}
-  if(data.type==='pass'){mpProcessRemotePass(data.seat);}
+  if(data.type==='play'){
+    // Don't process our own play relayed back (shouldn't happen, but guard)
+    if(data.seat !== mpMySeat) mpProcessRemotePlay(data.seat,data);
+  }
+  if(data.type==='pass'){
+    if(data.seat !== mpMySeat) mpProcessRemotePass(data.seat);
+  }
 }
 
 function mpRenderSeats(){
@@ -3879,20 +3922,31 @@ function mpStartLocalGame(data){
 
 function mpSendPlay(play){
   const msg={type:'play',seat:mpMySeat,cards:play.cards,playType:play.type,subtype:play.subtype};
-  if(mpIsHost) mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
-  else if(mpHostConn){try{mpHostConn.send(msg);}catch(e){}}
+  if(mpIsHost){
+    // Host broadcasts own play to all guests
+    mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
+  } else {
+    // Guest sends to host; host will relay to others
+    if(mpHostConn){try{mpHostConn.send(msg);}catch(e){}}
+  }
 }
 function mpSendPass(){
   const msg={type:'pass',seat:mpMySeat};
-  if(mpIsHost) mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
-  else if(mpHostConn){try{mpHostConn.send(msg);}catch(e){}}
+  if(mpIsHost){
+    mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
+  } else {
+    if(mpHostConn){try{mpHostConn.send(msg);}catch(e){}}
+  }
 }
 function mpProcessRemotePlay(seatIdx,data){
   const localIdx=(seatIdx-mpMySeat+4)%4;
-  const play=classifyPlay(data.cards); if(!play)return;
+  const play=classifyPlay(data.cards);
+  if(!play){ console.warn('MP: could not classify remote play',data); return; }
   executePlay(localIdx,data.cards,play);
 }
-function mpProcessRemotePass(seatIdx){ doPass((seatIdx-mpMySeat+4)%4); }
+function mpProcessRemotePass(seatIdx){
+  doPass((seatIdx-mpMySeat+4)%4);
+}
 
 function mpDestroy(){
   mpConnections.forEach(c=>{try{c.close();}catch(e){}});
