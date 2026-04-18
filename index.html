@@ -2525,10 +2525,10 @@ function executePlay(playerIdx, cards, play) {
   renderAll();
   if (currentPlayer !== 0) {
     setPlayerControls(false);
-    // Guests wait for host to relay moves; only host (or single-player) fires npcTurn
     if (mpGameMode !== 'vs_human' || mpIsHost) {
       if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
-        setTimeout(npcTurn, 1000 + Math.random()*600);
+        const token = ++mpTurnToken;
+        setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 1000 + Math.random()*600);
       }
     }
   } else {
@@ -2557,10 +2557,10 @@ function doPass(playerIdx) {
   renderAll();
   if (currentPlayer !== 0) {
     setPlayerControls(false);
-    // Guests wait for host to relay moves; only host (or single-player) fires npcTurn
     if (mpGameMode !== 'vs_human' || mpIsHost) {
       if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
-        setTimeout(npcTurn, 900 + Math.random()*500);
+        const token = ++mpTurnToken;
+        setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 900 + Math.random()*500);
       }
     }
   } else {
@@ -3868,6 +3868,7 @@ function mpStartGame(){
 
 // mpNpcSlots[localIdx] = true means that local seat is an NPC (AI-controlled by host)
 let mpNpcSlots = [false, false, false, false];
+let mpTurnToken = 0; // incremented each turn; npcTurn checks its token is still current
 
 function mpStartLocalGame(data){
   mpGameMode='vs_human';
@@ -3894,6 +3895,7 @@ function mpStartLocalGame(data){
   }
   // local index 0 is always us — never an NPC from our perspective
   mpNpcSlots[0]=false;
+  mpTurnToken=0;
 
   // Label the three NPC zones (top, right, left = local indices 2, 1, 3)
   const zoneMap=[
@@ -3917,7 +3919,7 @@ function mpStartLocalGame(data){
   renderAll(); setPlayerControls(currentPlayer===0); updateTurnIndicator();
 
   // Only trigger NPC AI if the opening player is an actual NPC slot
-  if(currentPlayer!==0 && mpNpcSlots[currentPlayer]) setTimeout(npcTurn,1200);
+  if(currentPlayer!==0 && mpNpcSlots[currentPlayer]) { const token=++mpTurnToken; setTimeout(()=>{if(mpTurnToken===token)npcTurn();},1200); }
 }
 
 function mpSendPlay(play){
