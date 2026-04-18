@@ -2405,8 +2405,8 @@ function playerPlay() {
     }
   }
 
-  executePlay(0, selectedCards, play);
   if (mpGameMode === 'vs_human') mpSendPlay(play);
+  executePlay(0, selectedCards, play);
 }
 
 function forfeitGame() {
@@ -3776,22 +3776,25 @@ function mpHostOnData(conn,data){
   if(data.type==='name'){
     const s=mpSeats.findIndex(x=>x.conn===conn);
     if(s>=0){mpSeats[s].name=data.name;mpBroadcastLobby();}
+    return;
   }
   if(data.type==='play'){
     const s=mpSeats.findIndex(x=>x.conn===conn);
-    if(s>=0){
-      // Apply to host local state
-      mpProcessRemotePlay(s,data);
-      // Relay to ALL other guests (not back to sender)
-      mpConnections.filter(c=>c!==conn).forEach(c=>{try{c.send(data);}catch(e){}});
-    }
+    if(s<0) return;
+    // Relay to all OTHER guests first (with correct seat = sender's global seat s)
+    const relayMsg={type:'play',seat:s,cards:data.cards,playType:data.playType,subtype:data.subtype};
+    mpConnections.filter(c=>c!==conn).forEach(c=>{try{c.send(relayMsg);}catch(e){}});
+    // Apply to host local state
+    mpProcessRemotePlay(s,relayMsg);
+    return;
   }
   if(data.type==='pass'){
     const s=mpSeats.findIndex(x=>x.conn===conn);
-    if(s>=0){
-      mpProcessRemotePass(s);
-      mpConnections.filter(c=>c!==conn).forEach(c=>{try{c.send(data);}catch(e){}});
-    }
+    if(s<0) return;
+    const relayMsg={type:'pass',seat:s};
+    mpConnections.filter(c=>c!==conn).forEach(c=>{try{c.send(relayMsg);}catch(e){}});
+    mpProcessRemotePass(s);
+    return;
   }
 }
 function mpHostOnDisconnect(conn){
@@ -3942,9 +3945,11 @@ function mpSendPass(){
 }
 function mpProcessRemotePlay(seatIdx,data){
   const localIdx=(seatIdx-mpMySeat+4)%4;
-  const play=classifyPlay(data.cards);
+  // Ensure cards are plain objects with rank/suit (survive JSON roundtrip)
+  const cards=data.cards.map(c=>({rank:String(c.rank),suit:String(c.suit)}));
+  const play=classifyPlay(cards);
   if(!play){ console.warn('MP: could not classify remote play',data); return; }
-  executePlay(localIdx,data.cards,play);
+  executePlay(localIdx,cards,play);
 }
 function mpProcessRemotePass(seatIdx){
   doPass((seatIdx-mpMySeat+4)%4);
