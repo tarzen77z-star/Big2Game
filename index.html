@@ -3428,29 +3428,57 @@ function endGame(winnerIdx) {
   updateScoreboard();
   updateRankUI();
 
+  // In MP mode, broadcast gameover to all guests before showing banner
+  if (mpGameMode === 'vs_human' && mpIsHost) {
+    const goMsg = {
+      type: 'gameover',
+      winnerIdx,           // host-local index; guests will remap
+      raw: raw.slice(),
+      mults: mults.slice(),
+      gameDeltas: gameDeltas.slice(),
+      seatNames: mpSeats.map(s => s.name)  // global order so guests can label correctly
+    };
+    mpConnections.forEach(c => { try { c.send(goMsg); } catch(e) {} });
+  }
+
+  mpShowEndBanner(winnerIdx, raw, mults, gameDeltas);
+}
+
+// Show end-of-game banner — works for both host and guest
+// winnerLocalIdx is local to THIS player's perspective (0 = "you")
+// names[] is in local order (0=you, 1=right, 2=top, 3=left)
+function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas) {
+  // Build display names in local index order
+  let names;
+  if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
+    names = [0,1,2,3].map(li => {
+      const globalSeat = (mpMySeat + li) % 4;
+      return (li === 0 ? '' : '') + (mpSeats[globalSeat] ? mpSeats[globalSeat].name : 'Player '+(globalSeat+1));
+    });
+  } else {
+    names = [playerCustomName, 'NPC 2', 'NPC 3', 'NPC 4'];
+  }
+
   const banner = document.getElementById('winner-banner');
   banner.style.display = 'flex';
   document.getElementById('winner-title').textContent =
-    winnerIdx === 0 ? '🏆 You Win!' : '🃏 ' + playerName(winnerIdx) + ' Wins!';
+    winnerLocalIdx === 0 ? '🏆 You Win!' : '🃏 ' + names[winnerLocalIdx] + ' Wins!';
   document.getElementById('winner-sub').textContent =
-    winnerIdx === 0 ? 'Congratulations!' : 'Better luck next time!';
+    winnerLocalIdx === 0 ? 'Congratulations!' : 'Better luck next time!';
 
-  // Commentary
   const commentary = document.getElementById('game-commentary');
-  if (commentary) commentary.innerHTML = generateCommentary(winnerIdx, raw, mults, gameDeltas);
+  if (commentary) commentary.innerHTML = generateCommentary(winnerLocalIdx, raw, mults, gameDeltas);
 
-  // Build score summary showing each player's game delta and card info
   const summary = document.getElementById('score-summary');
   summary.innerHTML = '';
-  const names = [playerCustomName, 'NPC 2', 'NPC 3', 'NPC 4'];
   for (let i = 0; i < 4; i++) {
     const row = document.createElement('div');
     row.className = 'score-line';
     const delta = gameDeltas[i];
     const sign  = delta >= 0 ? '+' : '';
-    const color = i === winnerIdx ? '#7fffaa' : delta >= 0 ? '#aaffcc' : '#ff9999';
+    const color = i === winnerLocalIdx ? '#7fffaa' : delta >= 0 ? '#aaffcc' : '#ff9999';
     const multLabel = mults[i] > 1 ? ` ×${mults[i]}` : '';
-    const cardInfo  = i === winnerIdx
+    const cardInfo  = i === winnerLocalIdx
       ? '0 cards left 🏆'
       : `${raw[i]} card${raw[i] !== 1 ? 's' : ''}${multLabel} left`;
     row.innerHTML =
@@ -3934,6 +3962,10 @@ function mpGuestOnData(data){
     mpGuestApplySync(data);
     return;
   }
+  if(data.type==='gameover'){
+    mpGuestShowGameover(data);
+    return;
+  }
 }
 
 // ── Start game ────────────────────────────────────────────
@@ -4069,7 +4101,9 @@ function mpGuestApplySync(snap){
   updateTurnIndicator();
 
   if(!gameActive){
-    // Game ended — host will have broadcast endGame info separately (for now just re-render)
+    // Game ended — gameover message will show the banner
+    // Just ensure controls are disabled
+    setPlayerControls(false);
   }
 }
 
@@ -4102,6 +4136,23 @@ function mpRenderSeats(){
     row.innerHTML=`<span class="mp-seat">Seat ${i+1}${i===0?' (Host)':''}</span><span class="mp-pname">${filled?mpSeats[i].name:'<em style="opacity:0.4">Waiting…</em>'}</span><span>${filled?'✓':''}</span>`;
     list.appendChild(row);
   }
+}
+
+// Guest receives gameover from host and displays end banner
+function mpGuestShowGameover(data) {
+  gameActive = false;
+
+  // data.winnerIdx is in HOST-local space (global seat index since host=seat 0)
+  // We need to convert to GUEST-local space
+  const hostWinnerGlobal = data.winnerIdx; // host local = global (host is seat 0)
+  const guestWinnerLocal = (hostWinnerGlobal - mpMySeat + 4) % 4;
+
+  // data.raw, mults, gameDeltas are in host-local order — remap to guest-local
+  const raw     = [0,1,2,3].map(li => data.raw[   (mpMySeat + li) % 4]);
+  const mults   = [0,1,2,3].map(li => data.mults[ (mpMySeat + li) % 4]);
+  const deltas  = [0,1,2,3].map(li => data.gameDeltas[(mpMySeat + li) % 4]);
+
+  mpShowEndBanner(guestWinnerLocal, raw, mults, deltas);
 }
 
 function mpDestroy(){
