@@ -2314,8 +2314,7 @@ function forfeitNewGame() {
 function forfeitMainMenu() {
   closeModal();
   document.getElementById('game').style.display = 'none';
-  const sb = document.getElementById('btn-start-game');
-  if (sb) sb.style.display = '';
+  clearResumeButton();
   document.getElementById('splash').style.display = 'flex';
 }
 
@@ -3444,9 +3443,7 @@ function continueGame() {
 function endSession() {
   document.getElementById('winner-banner').style.display = 'none';
   document.getElementById('game').style.display = 'none';
-  // Show Start New Game again (no active game to resume)
-  const sb = document.getElementById('btn-start-game');
-  if (sb) sb.style.display = '';
+  clearResumeButton();
   document.getElementById('splash').style.display = 'flex';
 }
 
@@ -3654,6 +3651,7 @@ if (sc1n) sc1n.textContent = playerCustomName;
 
   // Inject a "Resume Game" button above the Start button on splash
   const resumeBtn = document.createElement('button');
+  resumeBtn.id = 'btn-resume-game';
   resumeBtn.className = 'btn-gold';
   resumeBtn.style.cssText = 'margin-bottom:0.5rem;background:linear-gradient(135deg,#1a5c38,#2d8a50,#1a5c38);box-shadow:0 4px 18px rgba(45,138,80,0.45);';
   resumeBtn.innerHTML = '↩ Resume Game';
@@ -3664,6 +3662,14 @@ if (sc1n) sc1n.textContent = playerCustomName;
     startBtn.style.display = 'none';
   }
 })();
+
+// Helper: remove resume button and restore start button
+function clearResumeButton() {
+  const rb = document.getElementById('btn-resume-game');
+  if (rb) rb.remove();
+  const sb = document.getElementById('btn-start-game');
+  if (sb) sb.style.display = '';
+}
 
 function resumeGame() {
   const ok = loadGameState();
