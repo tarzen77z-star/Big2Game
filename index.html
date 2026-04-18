@@ -1275,13 +1275,20 @@
   }
 
   /* ── CARD ZOOM MODE ── */
-  /* Hand cards zoomed 30% */
-  #hand-container.hand-zoomed .hand-card {
-    transform-origin: bottom center;
-    transition: transform 0.25s ease, bottom 0.2s ease, box-shadow 0.2s;
+  /* Scrollable wrapper for zoomed hand */
+  #hand-scroll-wrap {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
   }
-  #hand-container.hand-zoomed {
-    /* Zoomed cards need more vertical space — handled via JS scale */
+  #hand-scroll-wrap::-webkit-scrollbar { display: none; }
+  #hand-container.hand-zoomed .hand-card {
+    transition: bottom 0.2s ease, transform 0.2s ease, box-shadow 0.2s;
   }
   /* Discard pile zoomed */
   #discard-pile.discard-zoomed {
@@ -1712,7 +1719,9 @@
       <button class="btn-sm btn-play btn-play-big" id="btn-play" onclick="playerPlay()" disabled>Play</button>
     </div>
     <div style="position:relative;width:100%">
-      <div id="hand-container"></div>
+      <div id="hand-scroll-wrap">
+        <div id="hand-container"></div>
+      </div>
       <button id="btn-hand-zoom" title="Toggle card zoom" onclick="toggleHandZoom()">🔍</button>
     </div>
   </div>
@@ -2225,19 +2234,22 @@ function renderNpc(idx, zoneId, cardsId, countId, nameId) {
 function toggleHandZoom(forceState) {
   handZoomed = (forceState !== undefined) ? forceState : !handZoomed;
   const container = document.getElementById('hand-container');
+  const wrap = document.getElementById('hand-scroll-wrap');
   const btn = document.getElementById('btn-hand-zoom');
   if (handZoomed) {
     container.classList.add('hand-zoomed');
-    container.style.transform = 'scale(1.3)';
-    container.style.transformOrigin = 'bottom center';
-    container.style.zIndex = '50';
-    if (btn) { btn.textContent = '🔍'; btn.classList.add('zoomed'); btn.title = 'Zoom out'; }
+    if (btn) { btn.classList.add('zoomed'); btn.title = 'Zoom out'; }
   } else {
     container.classList.remove('hand-zoomed');
-    container.style.transform = '';
-    container.style.transformOrigin = '';
-    container.style.zIndex = '';
-    if (btn) { btn.textContent = '🔍'; btn.classList.remove('zoomed'); btn.title = 'Zoom in'; }
+    if (btn) { btn.classList.remove('zoomed'); btn.title = 'Zoom in'; }
+  }
+  // Re-render hand with new card size — scroll will handle overflow
+  renderHand();
+  // After zoom-in, scroll to centre of the wider hand
+  if (handZoomed && wrap) {
+    setTimeout(() => {
+      wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2;
+    }, 50);
   }
 }
 
@@ -2292,7 +2304,7 @@ function toggleDiscardZoom() {
 }
 
 function resetHandZoom() {
-  toggleHandZoom(false);
+  if (handZoomed) toggleHandZoom(false);
 }
 
 function resetDiscardZoom() {
@@ -2308,35 +2320,71 @@ function renderHand() {
   if (!hand.length) return;
 
   const n = hand.length;
-  // Fan angle: spread cards across an arc
   const isMobile = window.innerWidth <= 500;
-  const cardW = isMobile ? 44 : 70;
+  const zoom = handZoomed ? 1.3 : 1.0;
+
+  // Card dimensions (zoomed or normal)
+  const baseCardW = isMobile ? 44 : 70;
+  const cardW = Math.round(baseCardW * zoom);
+  const cardH = Math.round((isMobile ? 62 : 99) * zoom);
+
+  // Fan parameters — zoomed fan uses wider spread
   const maxAngle = Math.min(isMobile ? 40 : 42, n * (isMobile ? 3.4 : 3.5));
   const step = n > 1 ? (maxAngle * 2) / (n - 1) : 0;
-  const w = Math.min(window.innerWidth - (isMobile ? 80 : 60), isMobile ? 320 : 720);
-  const spread = Math.min(isMobile ? 32 : 48, w / (n + 1));
-  // Arc rise: center cards lift up more (parabolic)
-  const arcHeight = isMobile ? Math.min(42, n * 3.2) : Math.min(48, n * 3.5);
+  // Available width: for zoomed, use a larger virtual width so fan spreads out
+  const viewW = window.innerWidth;
+  const fanW = handZoomed
+    ? Math.max(viewW * 1.5, n * cardW * 0.9)   // wider fan, scrollable
+    : Math.min(viewW - (isMobile ? 80 : 60), isMobile ? 320 : 720);
+  const spread = Math.min(isMobile ? 32 : 48, fanW / (n + 1)) * zoom;
+  const arcHeight = (isMobile ? Math.min(42, n * 3.2) : Math.min(48, n * 3.5)) * zoom;
+
+  // Set container width to match fan extent so scroll works
+  const totalFanW = Math.max(viewW, spread * (n + 1) + cardW);
+  if (handZoomed) {
+    container.style.width = totalFanW + 'px';
+    container.style.height = (cardH + arcHeight + 30) + 'px';
+    container.style.minWidth = totalFanW + 'px';
+  } else {
+    container.style.width = '100%';
+    container.style.height = '';
+    container.style.minWidth = '';
+  }
 
   hand.forEach((card, i) => {
     const angle = n > 1 ? -maxAngle + step * i : 0;
     const xOffset = (i - (n-1)/2) * spread;
-    // Parabolic lift: highest at center, 0 at edges
-    const t = n > 1 ? (i / (n-1)) * 2 - 1 : 0; // -1 to 1
+    const t = n > 1 ? (i / (n-1)) * 2 - 1 : 0;
     const arcLift = arcHeight * (1 - t*t);
-    const baseBottom = 2 + arcLift; // arc lifts center cards
+    const baseBottom = 2 + arcLift;
     const zIdx = i + 1;
 
     const el = document.createElement('div');
     el.className = 'hand-card ' + (RED_SUITS.has(card.suit) ? 'red' : 'black');
     el.dataset.idx = i;
 
+    // Larger font when zoomed
+    const rankSize = (isMobile ? 0.78 : 1.21) * zoom;
+    const suitSize = (isMobile ? 1.2 : 1.98) * zoom;
     el.innerHTML = `
-      <div class="rank">${card.rank}</div>
-      <div class="center-suit">${card.suit}</div>
+      <div class="rank" style="font-size:${rankSize}rem">${card.rank}</div>
+      <div class="center-suit" style="font-size:${suitSize}rem">${card.suit}</div>
     `;
 
-    el.style.left = `calc(50% + ${xOffset}px - ${cardW/2}px)`;
+    // Apply zoom dimensions inline
+    if (handZoomed) {
+      el.style.width = cardW + 'px';
+      el.style.height = cardH + 'px';
+    } else {
+      el.style.width = '';
+      el.style.height = '';
+    }
+
+    // Position relative to container centre
+    const containerCentre = handZoomed ? totalFanW / 2 : 0;
+    el.style.left = handZoomed
+      ? (containerCentre + xOffset - cardW / 2) + 'px'
+      : `calc(50% + ${xOffset}px - ${cardW/2}px)`;
     el.style.bottom = baseBottom + 'px';
     el.style.transform = `rotate(${angle}deg)`;
     el.style.zIndex = zIdx;
