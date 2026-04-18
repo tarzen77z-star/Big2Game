@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Big 2 – Card Game</title>
 <style>
@@ -1134,6 +1135,147 @@
   .legend-scoring p em { color: var(--gold-light); font-style: normal; }
   .legend-scoring p strong { color: var(--text-light); }
 
+  /* ── MULTIPLAYER ── */
+  #btn-multiplayer {
+    background: linear-gradient(135deg, #1a2f6e, #2d45a0, #1a2f6e);
+    color: #a0b8ff;
+    border: none; padding: 0.75em 2em;
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem; font-weight: 700;
+    border-radius: 4px; cursor: pointer;
+    box-shadow: 0 4px 18px rgba(60,100,255,0.3);
+    transition: all 0.2s; letter-spacing: 0.04em;
+    margin-top: 0.4rem;
+  }
+  #btn-multiplayer:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(60,100,255,0.5); }
+
+  /* MP lobby overlay */
+  #mp-lobby {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.82);
+    z-index: 250;
+    align-items: center; justify-content: center;
+    flex-direction: column;
+  }
+  #mp-lobby.open { display: flex; }
+  #mp-box {
+    background: linear-gradient(160deg,#1a2f6e,#0d1a40);
+    border: 1px solid rgba(100,140,255,0.4);
+    border-radius: 14px;
+    padding: 2rem;
+    width: min(480px,92vw);
+    text-align: center;
+    position: relative;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  #mp-box h2 {
+    font-family: 'Playfair Display', serif;
+    color: #8ab4ff;
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+  }
+  .mp-tabs { display:flex; gap:6px; justify-content:center; margin-bottom:1.2rem; }
+  .mp-tab {
+    padding:6px 18px; border-radius:4px; cursor:pointer;
+    background:rgba(0,0,0,0.35); border:1px solid rgba(100,140,255,0.3);
+    color:#8ab4ff; font-family:'Crimson Pro',serif; font-size:0.9rem;
+    transition:all 0.15s;
+  }
+  .mp-tab.active { background:rgba(100,140,255,0.18); border-color:#8ab4ff; color:#d0e4ff; }
+  .mp-section { display:none; }
+  .mp-section.active { display:block; }
+
+  /* Room code display */
+  .room-code-display {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    color: #d0e4ff;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(100,140,255,0.3);
+    border-radius: 8px;
+    padding: 12px 24px;
+    margin: 0.8rem auto;
+    display: inline-block;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .room-code-display:hover { border-color: #8ab4ff; }
+  .room-code-hint { font-size:0.75rem; color:rgba(160,184,255,0.6); margin-top:4px; }
+
+  /* Join input */
+  .mp-input {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(100,140,255,0.35);
+    color: #d0e4ff;
+    font-family: 'Playfair Display', serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    padding: 10px 16px;
+    border-radius: 8px;
+    width: 200px;
+    text-align: center;
+    text-transform: uppercase;
+    outline: none;
+    transition: border-color 0.2s;
+    margin: 0.5rem 0;
+  }
+  .mp-input:focus { border-color: #8ab4ff; }
+
+  .btn-mp {
+    background: linear-gradient(135deg, #1a3088, #2d45a0);
+    color: #a0c0ff;
+    border: none; padding: 8px 20px;
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.95rem; border-radius: 4px;
+    cursor: pointer; transition: all 0.15s;
+    margin: 4px;
+  }
+  .btn-mp:hover { background: linear-gradient(135deg,#2a40a0,#3d55c0); }
+  .btn-mp:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-mp-start {
+    background: linear-gradient(135deg,#1a5c38,#2d8a50);
+    color: #a0ffcc;
+  }
+
+  /* Lobby player list */
+  #mp-player-list {
+    margin: 0.8rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .mp-player-row {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(100,140,255,0.2);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.88rem;
+  }
+  .mp-player-row .mp-seat { color: rgba(160,184,255,0.6); font-size:0.75rem; min-width:50px; }
+  .mp-player-row .mp-pname { color: #d0e4ff; flex: 1; }
+  .mp-player-row .mp-status { font-size:0.72rem; }
+  .mp-player-row.filled { border-color: rgba(100,255,150,0.3); }
+  .mp-player-row.open   { border-color: rgba(100,140,255,0.15); }
+
+  /* MP status message */
+  #mp-status {
+    font-size: 0.82rem;
+    font-style: italic;
+    color: rgba(160,184,255,0.8);
+    min-height: 20px;
+    margin: 6px 0;
+  }
+
+  /* In-game: show human players differently */
+  .npc-zone.mp-human .npc-name { color: #a0c0ff !important; }
+  .npc-zone.mp-human .npc-card-single { border-color: rgba(100,140,255,0.5) !important; }
+
 </style>
 </head>
 <body>
@@ -1177,7 +1319,44 @@
   </div>
   <button class="btn-gold" id="btn-start-game" onclick="startGame()">▶ Start New Game</button>
   <button class="btn-ghost" onclick="showScoreboard()">📊 View Standings</button>
+  <button id="btn-multiplayer" onclick="openMpLobby()">👥 Multiplayer</button>
   <button id="legend-toggle" onclick="document.getElementById('legend-panel').classList.add('open')">📖 Rank &amp; Mode Guide</button>
+</div>
+
+<!-- MULTIPLAYER LOBBY -->
+<div id="mp-lobby">
+  <div id="mp-box">
+    <button style="position:absolute;top:10px;right:14px;background:none;border:none;color:rgba(160,184,255,0.6);font-size:1.3rem;cursor:pointer" onclick="closeMpLobby()">✕</button>
+    <h2>👥 Multiplayer</h2>
+    <div class="mp-tabs">
+      <div class="mp-tab active" id="mp-tab-host" onclick="mpSwitchTab('host')">Create Room</div>
+      <div class="mp-tab" id="mp-tab-join" onclick="mpSwitchTab('join')">Join Room</div>
+    </div>
+
+    <!-- HOST TAB -->
+    <div class="mp-section active" id="mp-sec-host">
+      <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.8rem">Share this code with up to 3 friends. Game starts when you click Start (min 2 players).</p>
+      <div class="room-code-display" id="mp-room-code" onclick="mpCopyCode()">——</div>
+      <div class="room-code-hint" id="mp-copy-hint">Tap code to copy</div>
+      <div id="mp-status">Generating room…</div>
+      <div id="mp-player-list"></div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:0.8rem">
+        <button class="btn-mp btn-mp-start" id="btn-mp-start" onclick="mpStartGame()" disabled>▶ Start Game</button>
+        <button class="btn-mp" onclick="closeMpLobby()">Cancel</button>
+      </div>
+    </div>
+
+    <!-- JOIN TAB -->
+    <div class="mp-section" id="mp-sec-join">
+      <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.8rem">Enter the 4-letter room code from the host.</p>
+      <input class="mp-input" id="mp-join-code" maxlength="4" placeholder="XXXX" oninput="this.value=this.value.toUpperCase()"/>
+      <div id="mp-status-join" style="font-size:0.82rem;font-style:italic;color:rgba(160,184,255,0.8);min-height:20px;margin:6px 0"></div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:0.8rem">
+        <button class="btn-mp" id="btn-mp-join" onclick="mpJoinRoom()">🔗 Join</button>
+        <button class="btn-mp" onclick="closeMpLobby()">Cancel</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- LEGEND PANEL -->
@@ -3751,6 +3930,398 @@ function resumeGame() {
     setTimeout(npcTurn, 1400);
   }
 }
+
+// ════════════════════════════════════════════════════════════
+//  MULTIPLAYER (PeerJS WebRTC)
+// ════════════════════════════════════════════════════════════
+let mpPeer = null;        // our PeerJS peer
+let mpIsHost = false;
+let mpRoomCode = null;
+let mpConnections = [];   // host: array of DataConnections to guests
+let mpHostConn = null;    // guest: DataConnection to host
+let mpSeats = [];         // [{id, name, conn|null}] — seat 0 = host
+let mpMySeat = -1;        // which seat am I?
+let mpGameMode = 'vs_human'; // 'vs_human' when multiplayer active
+
+const MP_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I/O to avoid confusion
+
+function mpGenCode() {
+  let code = '';
+  for (let i = 0; i < 4; i++) code += MP_CHARS[Math.floor(Math.random()*MP_CHARS.length)];
+  return code;
+}
+
+function openMpLobby() {
+  document.getElementById('mp-lobby').classList.add('open');
+  mpSwitchTab('host');
+  mpInitHost();
+}
+
+function closeMpLobby() {
+  document.getElementById('mp-lobby').classList.remove('open');
+  mpDestroy();
+}
+
+function mpSwitchTab(tab) {
+  ['host','join'].forEach(t => {
+    document.getElementById('mp-tab-' + t).classList.toggle('active', t===tab);
+    document.getElementById('mp-sec-' + t).classList.toggle('active', t===tab);
+  });
+}
+
+function mpSetStatus(msg, el) {
+  const id = el || 'mp-status';
+  const e = document.getElementById(id);
+  if (e) e.textContent = msg;
+}
+
+// ── HOST ──────────────────────────────────────────────────────
+function mpInitHost() {
+  mpDestroy();
+  mpIsHost = true;
+  mpRoomCode = mpGenCode();
+  document.getElementById('mp-room-code').textContent = mpRoomCode;
+  mpSetStatus('Waiting for players…');
+
+  // Seat 0 = host (me)
+  mpSeats = [{ id: 'host', name: playerCustomName, conn: null }];
+  mpMySeat = 0;
+  mpRenderSeats();
+
+  // Create peer with room code as ID prefix to make joining easy
+  const peerId = 'big2-' + mpRoomCode + '-host';
+  try {
+    mpPeer = new Peer(peerId);
+    mpPeer.on('open', id => {
+      mpSetStatus('Room ready! Share code: ' + mpRoomCode);
+      document.getElementById('btn-mp-start').disabled = true;
+    });
+    mpPeer.on('connection', conn => mpHostOnConnect(conn));
+    mpPeer.on('error', err => mpSetStatus('⚠ ' + err.message));
+  } catch(e) {
+    mpSetStatus('PeerJS unavailable. Check internet connection.');
+  }
+}
+
+function mpHostOnConnect(conn) {
+  if (mpSeats.length >= 4) { conn.send({type:'full'}); return; }
+  conn.on('open', () => {
+    const seat = mpSeats.length;
+    mpSeats.push({ id: conn.peer, name: '…', conn });
+    mpConnections.push(conn);
+    mpMySeat = 0;
+    conn.send({ type: 'seat', seat, totalSeats: mpSeats.length });
+    mpSetStatus(mpSeats.length + '/4 players connected');
+    mpBroadcastLobby();
+    document.getElementById('btn-mp-start').disabled = mpSeats.length < 2;
+  });
+  conn.on('data', data => mpHostOnData(conn, data));
+  conn.on('close', () => mpHostOnDisconnect(conn));
+}
+
+function mpHostOnData(conn, data) {
+  if (data.type === 'name') {
+    const seat = mpSeats.findIndex(s => s.conn === conn);
+    if (seat >= 0) { mpSeats[seat].name = data.name; mpBroadcastLobby(); }
+  }
+  if (data.type === 'play') {
+    // Relay play from a guest to all others
+    const seat = mpSeats.findIndex(s => s.conn === conn);
+    if (seat >= 0) mpProcessRemotePlay(seat, data);
+  }
+  if (data.type === 'pass') {
+    const seat = mpSeats.findIndex(s => s.conn === conn);
+    if (seat >= 0) mpProcessRemotePass(seat);
+  }
+}
+
+function mpHostOnDisconnect(conn) {
+  const seat = mpSeats.findIndex(s => s.conn === conn);
+  if (seat >= 0) {
+    mpSeats.splice(seat, 1);
+    mpConnections = mpConnections.filter(c => c !== conn);
+    mpBroadcastLobby();
+    mpSetStatus(mpSeats.length + '/4 players');
+    document.getElementById('btn-mp-start').disabled = mpSeats.length < 2;
+    if (mpSeats.length > 0) mpRenderSeats();
+  }
+}
+
+function mpBroadcastLobby() {
+  const msg = {
+    type: 'lobby',
+    seats: mpSeats.map(s => ({ name: s.name }))
+  };
+  mpConnections.forEach(c => { try { c.send(msg); } catch(e){} });
+  mpRenderSeats();
+}
+
+function mpCopyCode() {
+  navigator.clipboard.writeText(mpRoomCode || '').then(() => {
+    document.getElementById('mp-copy-hint').textContent = '✓ Copied!';
+    setTimeout(() => {
+      document.getElementById('mp-copy-hint').textContent = 'Tap code to copy';
+    }, 2000);
+  });
+}
+
+// ── GUEST ─────────────────────────────────────────────────────
+function mpJoinRoom() {
+  const code = document.getElementById('mp-join-code').value.trim().toUpperCase();
+  if (code.length !== 4) { mpSetStatus('Enter a 4-letter code', 'mp-status-join'); return; }
+  mpSetStatus('Connecting…', 'mp-status-join');
+  mpDestroy();
+  mpIsHost = false;
+  mpRoomCode = code;
+
+  try {
+    mpPeer = new Peer();
+    mpPeer.on('open', myId => {
+      const hostId = 'big2-' + code + '-host';
+      mpHostConn = mpPeer.connect(hostId, { reliable: true });
+      mpHostConn.on('open', () => {
+        mpHostConn.send({ type: 'name', name: playerCustomName });
+        mpSetStatus('Connected! Waiting for host to start…', 'mp-status-join');
+      });
+      mpHostConn.on('data', data => mpGuestOnData(data));
+      mpHostConn.on('close', () => mpSetStatus('Disconnected from host.', 'mp-status-join'));
+      mpHostConn.on('error', e => mpSetStatus('Connection error: ' + e.message, 'mp-status-join'));
+    });
+    mpPeer.on('error', err => mpSetStatus('⚠ ' + err.message, 'mp-status-join'));
+  } catch(e) {
+    mpSetStatus('PeerJS unavailable.', 'mp-status-join');
+  }
+}
+
+function mpGuestOnData(data) {
+  if (data.type === 'full')  { mpSetStatus('Room is full.', 'mp-status-join'); return; }
+  if (data.type === 'seat')  {
+    mpMySeat = data.seat;
+    mpSetStatus('Joined as Player ' + (mpMySeat+1) + '. Waiting for start…', 'mp-status-join');
+  }
+  if (data.type === 'lobby') {
+    mpSeats = data.seats.map(s => ({ name: s.name, conn: null }));
+    // Update join status
+    const names = mpSeats.map(s => s.name).join(', ');
+    mpSetStatus('Room: ' + names, 'mp-status-join');
+  }
+  if (data.type === 'start') {
+    mpSeats = data.seats.map(s => ({ name: s.name, conn: null }));
+    document.getElementById('mp-lobby').classList.remove('open');
+    mpStartLocalGame(data);
+  }
+  if (data.type === 'sync')  { mpApplySync(data); }
+  if (data.type === 'play')  { mpProcessRemotePlay(data.seat, data); }
+  if (data.type === 'pass')  { mpProcessRemotePass(data.seat); }
+}
+
+// ── SEAT RENDER ───────────────────────────────────────────────
+function mpRenderSeats() {
+  const list = document.getElementById('mp-player-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const maxSeats = 4;
+  for (let i = 0; i < maxSeats; i++) {
+    const row = document.createElement('div');
+    const filled = i < mpSeats.length;
+    row.className = 'mp-player-row ' + (filled ? 'filled' : 'open');
+    const seat = filled ? mpSeats[i] : null;
+    row.innerHTML = `
+      <span class="mp-seat">Seat ${i+1}${i===0?' (Host)':''}</span>
+      <span class="mp-pname">${filled ? seat.name : '<em style="opacity:0.4">Waiting…</em>'}</span>
+      <span class="mp-status">${filled ? '✓' : ''}</span>
+    `;
+    list.appendChild(row);
+  }
+}
+
+// ── START GAME ────────────────────────────────────────────────
+function mpStartGame() {
+  if (!mpIsHost || mpSeats.length < 2) return;
+  // Deal cards
+  const deck = shuffle(buildDeck());
+  const dealtHands = [[],[],[],[]];
+  for (let i = 0; i < 52; i++) dealtHands[i % 4].push(deck[i]);
+  dealtHands.forEach(h => h.sort(compareCards));
+
+  // Fill empty seats with NPC
+  const totalSeats = mpSeats.length;
+  const seatNames = mpSeats.map(s => s.name);
+  // Pad to 4 with NPC names
+  for (let i = totalSeats; i < 4; i++) seatNames.push('NPC ' + (i+1));
+
+  const startData = {
+    type: 'start',
+    seats: seatNames.map(name => ({ name })),
+    hands: dealtHands,
+    openingPlayer: dealtHands.findIndex(h => h.some(c => c.rank==='3' && c.suit==='♦')),
+    npcSeats: Array.from({length:4}, (_,i) => i >= totalSeats) // which seats are NPCs
+  };
+
+  // Send to guests
+  mpConnections.forEach((c, ci) => {
+    const guestData = { ...startData, mySeat: ci + 1 };
+    try { c.send(guestData); } catch(e){}
+  });
+
+  // Start locally as host (seat 0)
+  document.getElementById('mp-lobby').classList.remove('open');
+  mpStartLocalGame({ ...startData, mySeat: 0 });
+}
+
+function mpStartLocalGame(data) {
+  mpGameMode = 'vs_human';
+  mpSeats = data.seats.map(s => ({ name: s.name, conn: null }));
+  mpMySeat = data.mySeat || 0;
+  const npcSeats = data.npcSeats || [];
+
+  // Set up game state
+  hands = data.hands;
+  discardPile = [];
+  currentRoundPlays = [];
+  globalDiscardedCards = new Set();
+  lastPlay = null;
+  passCount = 0;
+  selectedCards = [];
+  firstTurn = true;
+  gameActive = true;
+  openingPlayer = data.openingPlayer;
+  currentPlayer = openingPlayer;
+  startingHandProfile = hands.map(h => classifyStartingHand(h));
+
+  // Remap: my hand is always seat mpMySeat
+  // We keep hands[] in seat order, but render our cards as "player hand"
+  // and others as NPC zones
+
+  // Override player names for display
+  const zoneNames = ['name-p3','name-p2','name-p4']; // top, right, left — other 3 players
+  const otherSeats = [0,1,2,3].filter(i => i !== mpMySeat);
+  otherSeats.forEach((seat, zi) => {
+    const el = document.getElementById(zoneNames[zi]);
+    if (el) el.textContent = (npcSeats[seat] ? '🤖 ' : '👤 ') + mpSeats[seat].name;
+    // Mark as human
+    const zoneIds = ['npc-top','npc-right','npc-left'];
+    const zone = document.getElementById(zoneIds[zi]);
+    if (zone) zone.classList.toggle('mp-human', !npcSeats[seat]);
+  });
+
+  document.getElementById('splash').style.display = 'none';
+  document.getElementById('game').style.display = 'block';
+
+  const lbl = document.getElementById('player-name-label');
+  if (lbl) lbl.textContent = mpSeats[mpMySeat].name + ' (You)';
+
+  renderAll();
+  // Remap hands so player's own cards are at index 0
+  mpRemapHandsForSeat(mpMySeat);
+
+  setPlayerControls(currentPlayer === mpMySeat);
+  updateTurnIndicator();
+
+  if (currentPlayer !== mpMySeat && npcSeats[currentPlayer]) {
+    setTimeout(npcTurn, 1200);
+  }
+}
+
+function mpRemapHandsForSeat(mySeat) {
+  // Rotate hands array so that mySeat = index 0 (player's own hand)
+  const reordered = [];
+  for (let i = 0; i < 4; i++) reordered.push(hands[(mySeat + i) % 4]);
+  hands = reordered;
+  // Also remap currentPlayer and openingPlayer
+  currentPlayer = (currentPlayer - mySeat + 4) % 4;
+  openingPlayer  = (openingPlayer  - mySeat + 4) % 4;
+  if (lastPlay) lastPlay.playerIdx = (lastPlay.playerIdx - mySeat + 4) % 4;
+}
+
+// ── REMOTE PLAY RELAY ─────────────────────────────────────────
+function mpSendPlay(seatPlay) {
+  const msg = { type: 'play', seat: mpMySeat, cards: seatPlay.cards, playType: seatPlay.type, subtype: seatPlay.subtype };
+  if (mpIsHost) mpConnections.forEach(c => { try { c.send(msg); } catch(e){} });
+  else if (mpHostConn) { try { mpHostConn.send(msg); } catch(e){} }
+  // Host also relays to other guests
+  if (mpIsHost) mpConnections.forEach(c => { try { c.send(msg); } catch(e){} });
+}
+
+function mpSendPass() {
+  const msg = { type: 'pass', seat: mpMySeat };
+  if (mpIsHost) mpConnections.forEach(c => { try { c.send(msg); } catch(e){} });
+  else if (mpHostConn) { try { mpHostConn.send(msg); } catch(e){} }
+}
+
+function mpProcessRemotePlay(seatIdx, data) {
+  // Remap seat to local hand index
+  const localIdx = (seatIdx - mpMySeat + 4) % 4;
+  const cards = data.cards;
+  const play = classifyPlay(cards);
+  if (!play) return;
+  executePlay(localIdx, cards, play);
+}
+
+function mpProcessRemotePass(seatIdx) {
+  const localIdx = (seatIdx - mpMySeat + 4) % 4;
+  doPass(localIdx);
+}
+
+// ── CLEANUP ───────────────────────────────────────────────────
+function mpDestroy() {
+  mpConnections.forEach(c => { try { c.close(); } catch(e){} });
+  mpConnections = [];
+  if (mpHostConn) { try { mpHostConn.close(); } catch(e){} mpHostConn = null; }
+  if (mpPeer) { try { mpPeer.destroy(); } catch(e){} mpPeer = null; }
+  mpIsHost = false;
+  mpRoomCode = null;
+  mpSeats = [];
+  mpMySeat = -1;
+  mpGameMode = 'single';
+}
+
+// ── HOOK INTO playerPlay and playerPass for MP ────────────────
+const _origPlayerPlay = playerPlay;
+const _origPlayerPass = playerPass;
+
+// Override: after a valid play, broadcast to peers
+function playerPlay() {
+  if (!selectedCards.length) { toast('Select cards to play'); return; }
+  const play = classifyPlay(selectedCards);
+  if (!play) { toast('Invalid combination!'); return; }
+  if (firstTurn && !selectedCards.some(c => c.rank==='3' && c.suit==='♦')) {
+    toast('First play must include 3♦'); return;
+  }
+  if (lastPlay && !firstTurn && !beatsPlay(play, lastPlay)) {
+    toast('Must beat the last play!'); return;
+  }
+  if (nextPlayerHasLastCard() && play.type === 'single' && !isHighestSingle(play, hands[0])) {
+    toast('Next player has 1 card left — play your highest card or a multi-card combo!'); return;
+  }
+  // MP: broadcast before executing
+  if (mpGameMode === 'vs_human') mpSendPlay(play);
+  executePlay(0, selectedCards, play);
+}
+
+function playerPass() {
+  if (firstTurn) { toast('Cannot pass on first turn'); return; }
+  if (!lastPlay) { toast('Cannot pass – you control the pile'); return; }
+  if (mpGameMode === 'vs_human') mpSendPass();
+  doPass(0);
+}
+
+// updateTurnIndicator: show human names in MP
+const _origUpdateTurnIndicator = updateTurnIndicator;
+function updateTurnIndicator() {
+  if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
+    const localNames = [0,1,2,3].map(i => {
+      const seatIdx = (mpMySeat + i) % 4;
+      const name = mpSeats[seatIdx] ? mpSeats[seatIdx].name : 'Player ' + (i+1);
+      return i === 0 ? 'Your turn' : name + "'s turn";
+    });
+    const extra = firstTurn ? ' – must include 3♦' : '';
+    document.getElementById('turn-indicator').textContent = localNames[currentPlayer] + extra;
+    return;
+  }
+  _origUpdateTurnIndicator();
+}
+
 </script>
 </body>
 </html>
