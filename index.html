@@ -2528,7 +2528,8 @@ function executePlay(playerIdx, cards, play) {
     if (mpGameMode !== 'vs_human' || mpIsHost) {
       if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
         const token = ++mpTurnToken;
-        setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 1000 + Math.random()*600);
+        if (mpGameMode === 'vs_human') console.log('[MP executePlay] scheduling npcTurn token', token, 'for cp=', currentPlayer, 'npcSlots[cp]=', mpNpcSlots[currentPlayer]);
+        setTimeout(() => { if (mpTurnToken === token) npcTurn(); else console.log('[MP npcTurn] token', token, 'stale (current:', mpTurnToken, '), skipped'); }, 1000 + Math.random()*600);
       }
     }
   } else {
@@ -2560,7 +2561,8 @@ function doPass(playerIdx) {
     if (mpGameMode !== 'vs_human' || mpIsHost) {
       if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
         const token = ++mpTurnToken;
-        setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 900 + Math.random()*500);
+        if (mpGameMode === 'vs_human') console.log('[MP doPass] scheduling npcTurn token', token, 'for cp=', currentPlayer, 'npcSlots[cp]=', mpNpcSlots[currentPlayer]);
+        setTimeout(() => { if (mpTurnToken === token) npcTurn(); else console.log('[MP npcTurn] token', token, 'stale (current:', mpTurnToken, '), skipped'); }, 900 + Math.random()*500);
       }
     }
   } else {
@@ -2585,13 +2587,25 @@ function advanceTurn(fromPlayer) {
 //  NPC AI
 // ════════════════════════════════════════
 function npcTurn() {
-  if (!gameActive || currentPlayer === 0) return;
+  const _dbg = mpGameMode === 'vs_human';
+  if (_dbg) console.log('[MP npcTurn] currentPlayer:', currentPlayer, 'gameActive:', gameActive, 'isHost:', mpIsHost, 'npcSlots:', JSON.stringify(mpNpcSlots), 'lastPlay:', lastPlay?.type, 'hands[cp].len:', hands[currentPlayer]?.length);
+
+  if (!gameActive || currentPlayer === 0) {
+    if (_dbg) console.log('[MP npcTurn] EARLY EXIT: gameActive=', gameActive, 'currentPlayer=', currentPlayer);
+    return;
+  }
 
   // In MP: guests never run NPC AI — host is authoritative for all NPC turns
-  if (mpGameMode === 'vs_human' && !mpIsHost) return;
+  if (mpGameMode === 'vs_human' && !mpIsHost) {
+    console.log('[MP npcTurn] EARLY EXIT: not host');
+    return;
+  }
 
   // In MP (host): only fire AI for actual NPC slots, skip remote humans
-  if (mpGameMode === 'vs_human' && mpIsHost && !mpNpcSlots[currentPlayer]) return;
+  if (mpGameMode === 'vs_human' && mpIsHost && !mpNpcSlots[currentPlayer]) {
+    console.log('[MP npcTurn] EARLY EXIT: slot', currentPlayer, 'is human (mpNpcSlots=', JSON.stringify(mpNpcSlots), ')');
+    return;
+  }
 
   const idx = currentPlayer;
   const hand = hands[idx];
@@ -3781,11 +3795,11 @@ function mpHostOnData(conn,data){
   if(data.type==='play'){
     const s=mpSeats.findIndex(x=>x.conn===conn);
     if(s<0) return;
-    // Relay to all OTHER guests first (with correct seat = sender's global seat s)
+    console.log('[MP host] received play from global seat', s, 'cards:', data.cards?.length, 'currentPlayer before:', currentPlayer);
     const relayMsg={type:'play',seat:s,cards:data.cards,playType:data.playType,subtype:data.subtype};
     mpConnections.filter(c=>c!==conn).forEach(c=>{try{c.send(relayMsg);}catch(e){}});
-    // Apply to host local state
     mpProcessRemotePlay(s,relayMsg);
+    console.log('[MP host] after processing guest play, currentPlayer:', currentPlayer, 'mpNpcSlots[cp]:', mpNpcSlots[currentPlayer]);
     return;
   }
   if(data.type==='pass'){
