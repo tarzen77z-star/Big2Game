@@ -1362,6 +1362,52 @@
   #btn-hand-zoom:hover { background: rgba(201,168,76,0.15); border-color: var(--gold); color: var(--gold-light); }
   #btn-hand-zoom.zoomed { background: rgba(201,168,76,0.2); border-color: var(--gold); color: var(--gold); }
 
+  /* ── MP Room Standing tabs on winner banner ── */
+  #winner-tabs {
+    display: none;
+    gap: 6px;
+    margin-bottom: 12px;
+    justify-content: center;
+  }
+  #winner-tabs.visible { display: flex; }
+  .winner-tab {
+    padding: 4px 16px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-family: 'Crimson Pro', serif;
+    border: 1px solid rgba(201,168,76,0.3);
+    background: rgba(0,0,0,0.3);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .winner-tab.active {
+    border-color: var(--gold);
+    background: rgba(201,168,76,0.12);
+    color: var(--gold-light);
+  }
+  #winner-room-standing { display: none; }
+  #winner-room-standing.visible { display: block; }
+  .room-standing-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 0.85rem;
+  }
+  .room-standing-row:last-child { border-bottom: none; }
+  .room-standing-header {
+    color: var(--gold);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(201,168,76,0.3);
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+  }
+
 </style>
 </head>
 <body>
@@ -1417,6 +1463,7 @@
     <div class="mp-tabs">
       <div class="mp-tab active" id="mp-tab-host" onclick="mpSwitchTab('host')">Create Room</div>
       <div class="mp-tab" id="mp-tab-join" onclick="mpSwitchTab('join')">Join Room</div>
+      <div class="mp-tab" id="mp-tab-rejoin" onclick="mpSwitchTab('rejoin')">↩ Rejoin</div>
     </div>
     <div class="mp-section active" id="mp-sec-host">
       <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.8rem">Share this code with up to 3 friends. Game starts when you click Start (min 2 players).</p>
@@ -1435,6 +1482,16 @@
       <div id="mp-status-join" style="font-size:0.82rem;font-style:italic;color:rgba(160,184,255,0.8);min-height:20px;margin:6px 0"></div>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:0.8rem">
         <button class="btn-mp" onclick="mpJoinRoom()">🔗 Join</button>
+        <button class="btn-mp" onclick="closeMpLobby()">Cancel</button>
+      </div>
+    </div>
+    <div class="mp-section" id="mp-sec-rejoin">
+      <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.8rem">Reconnect to a game you were disconnected from.</p>
+      <div id="mp-rejoin-info" style="font-size:0.85rem;color:rgba(160,184,255,0.9);margin-bottom:0.5rem;min-height:1.2em;text-align:center;"></div>
+      <input class="mp-input" id="mp-rejoin-code" maxlength="4" placeholder="XXXX" oninput="this.value=this.value.toUpperCase()"/>
+      <div id="mp-status-rejoin" style="font-size:0.82rem;font-style:italic;color:rgba(160,184,255,0.8);min-height:20px;margin:6px 0"></div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:0.8rem">
+        <button class="btn-mp" onclick="mpRejoinRoom()">↩ Rejoin</button>
         <button class="btn-mp" onclick="closeMpLobby()">Cancel</button>
       </div>
     </div>
@@ -1501,12 +1558,12 @@
         <p style="margin-top:6px;"><em>Example — P1 finishes (0 cards), P2 has 2, P3 has 5, P4 has 7:</em></p>
       <div style="margin-top:10px;padding:8px 10px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:8px;">
         <strong style="color:var(--gold-light)">✦ Rank Score</strong>
-        <p style="margin-top:4px;">Your Rank Score tracks how much you've earned within your current rank tier. It caps at:</p>
-        <p>• <strong>Normal</strong> rank: max <em>150</em></p>
-        <p>• <strong>Bronze</strong> rank: max <em>1200</em></p>
-        <p>• <strong>Silver</strong> rank: max <em>1200</em></p>
-        <p>• <strong>Gold</strong> rank: <em>unlimited</em></p>
-        <p style="margin-top:4px;color:var(--text-dim);font-style:italic;">Rank Score is shown next to your name during the game and on the main screen.</p>
+        <p style="margin-top:4px;">Your Rank Score tracks cumulative progress across all modes. Each mode contributes up to its cap:</p>
+        <p>• <strong>Beginner</strong> mode: contributes up to <em>100</em> (cumulative max: 100)</p>
+        <p>• <strong>Intermediate</strong> mode: contributes up to <em>1,000</em> (cumulative max: 1,100)</p>
+        <p>• <strong>Hard</strong> mode: contributes up to <em>5,000</em> (cumulative max: 6,100)</p>
+        <p>• <strong>Professional</strong> mode: <em>unlimited</em></p>
+        <p style="margin-top:4px;color:var(--text-dim);font-style:italic;">Rank Score never decreases — it only rises as you reach new highs in each mode.</p>
       </div>
         <p>• P1: +2+5+7 = <em>+14 pts</em></p>
         <p>• P2: gains (5−2)+(7−2) from P3/P4, loses 2 to P1 = <em>+6 pts</em></p>
@@ -1819,11 +1876,18 @@
   <div id="winner-box">
     <h2 id="winner-title">🏆 Winner!</h2>
     <p id="winner-sub"></p>
-    <div id="game-commentary"></div>
-    <div id="score-summary"></div>
+    <div id="winner-tabs">
+      <div class="winner-tab active" id="wtab-result" onclick="winnerTabSwitch('result')">This Game</div>
+      <div class="winner-tab" id="wtab-room" onclick="winnerTabSwitch('room')">Room Standing</div>
+    </div>
+    <div id="winner-game-result">
+      <div id="game-commentary"></div>
+      <div id="score-summary"></div>
+    </div>
+    <div id="winner-room-standing"></div>
     <div class="modal-buttons" style="margin-top:1.5rem">
       <button class="btn-gold" onclick="continueGame()">Continue Playing</button>
-      <button class="btn-ghost" onclick="endSession()">End Session</button>
+      <button class="btn-ghost" id="btn-end-session" onclick="endSession()">End Session</button>
     </div>
   </div>
 </div>
@@ -1867,6 +1931,8 @@ let mpMySeat      = -1;
 let mpGameMode    = 'single';
 let mpNpcSlots    = [false,false,false,false];
 let mpTurnToken   = 0;
+let mpSessionHistory = []; // tracks all games in current MP room
+let mpSessionNames   = []; // player names for the session
 let gamesPlayed = 0;
 let firstTurn = true; // first play of the game
 let openingPlayer = 0; // who has diamond 3
@@ -1902,25 +1968,59 @@ function trophySVG(rankCls) {
 }
 
 const RANKS_DEF = [
-  { name:'Normal',       cls:'beginner',    minPts:    0, mode:'beginner',     rankScoreCap:  150 },
-  { name:'Bronze',       cls:'bronze',      minPts:  100, mode:'intermediate', rankScoreCap: 1200 },
-  { name:'Silver',       cls:'silver',      minPts: 1000, mode:'hard',         rankScoreCap: 1200 },
+  { name:'Normal',       cls:'beginner',    minPts:    0, mode:'beginner',     rankScoreCap:  100 },
+  { name:'Bronze',       cls:'bronze',      minPts:  100, mode:'intermediate', rankScoreCap: 1000 },
+  { name:'Silver',       cls:'silver',      minPts: 1000, mode:'hard',         rankScoreCap: 5000 },
   { name:'Gold',         cls:'gold',        minPts: 5000, mode:'pro',          rankScoreCap: Infinity },
 ];
 
 // Rank Score: points accumulated, capped per rank tier
 let rankScore = 0;
 
-function getRankScoreCap() {
-  // Cap depends on current mode being played
-  const modeDef = RANKS_DEF.find(r => r.mode === selectedMode) || RANKS_DEF[0];
-  return modeDef.rankScoreCap;
+// ── Rank Score: cumulative across all modes ──────────────
+// Each mode contributes min(max(mode_best_net, 0), mode_cap) to total rank score.
+// Total rank score never decreases — it only goes up as you improve per mode.
+
+const MODE_ORDER = ['beginner','intermediate','hard','pro'];
+
+function getModeContribution(mode) {
+  // Best net score the player has ever had in this mode (stored as big2_rankscore_<mode>)
+  const best = parseInt(localStorage.getItem('big2_modebest_' + mode)) || 0;
+  const modeDef = RANKS_DEF.find(r => r.mode === mode) || RANKS_DEF[0];
+  const cap = modeDef.rankScoreCap === Infinity ? Infinity : modeDef.rankScoreCap;
+  return Math.min(Math.max(best, 0), cap === Infinity ? best : cap);
+}
+
+function calcTotalRankScore() {
+  // Sum contributions from all modes
+  let total = 0;
+  for (const m of MODE_ORDER) {
+    const contrib = getModeContribution(m);
+    total += contrib === Infinity ? 0 : contrib;
+    if (!isFinite(contrib)) { total += getModeContribution(m); break; }
+  }
+  return total;
+}
+
+function updateModeBest(mode, playerNetScore) {
+  // Update the stored best net for this mode if current net is higher
+  const key = 'big2_modebest_' + mode;
+  const prev = parseInt(localStorage.getItem(key)) || 0;
+  if (playerNetScore > prev) {
+    localStorage.setItem(key, playerNetScore);
+  }
 }
 
 function updateRankScore(delta) {
-  // Add delta to rankScore, capped by current mode's cap (floor at 0)
-  const cap = getRankScoreCap();
-  rankScore = Math.max(0, Math.min(cap, rankScore + delta));
+  // Called after each game: update mode best and recalculate total rank score
+  const currentNet = scores[0]; // player's running net in current mode
+  updateModeBest(selectedMode, currentNet);
+  rankScore = calcTotalRankScore();
+}
+
+function getRankScoreCap() {
+  const modeDef = RANKS_DEF.find(r => r.mode === selectedMode) || RANKS_DEF[0];
+  return modeDef.rankScoreCap;
 }
 
 function getPlayerRank(pts) {
@@ -1975,87 +2075,114 @@ function selectMode(mode) {
   updateRankUI();
 }
 
-// Storage
-function saveScores() {
-  localStorage.setItem('big2_rankscore', rankScore);
-  // Track all-time high for rank retention
-  if (scores[0] > highestPts) highestPts = scores[0];
-  localStorage.setItem('big2_scores', JSON.stringify(scores));
-  localStorage.setItem('big2_games', gamesPlayed);
+// ── Per-mode storage ───────────────────────────────────
+function modeKey(mode, base) { return base + '_' + mode; }
+
+function saveScoresForMode(mode) {
+  const m = mode || selectedMode;
+  if (m === selectedMode && scores[0] > highestPts) highestPts = scores[0];
+  // Save mode best for rank score calculation
+  updateModeBest(m, scores[0]);
+  localStorage.setItem('big2_rankscore_total', rankScore); // total rank score
+  localStorage.setItem(modeKey(m,'big2_rankscore'), rankScore); // legacy
+  localStorage.setItem(modeKey(m,'big2_scores'), JSON.stringify(scores));
+  localStorage.setItem(modeKey(m,'big2_games'), gamesPlayed);
+  localStorage.setItem(modeKey(m,'big2_highpts'), highestPts);
+  localStorage.setItem(modeKey(m,'big2_history'), JSON.stringify(gameHistory));
   localStorage.setItem('big2_pname', playerCustomName);
-  localStorage.setItem('big2_highpts', highestPts);
-  localStorage.setItem('big2_history', JSON.stringify(gameHistory));
-}
-function loadScores() {
-  const rs = localStorage.getItem('big2_rankscore');
-  if (rs !== null) rankScore = parseInt(rs) || 0;
-  const s  = localStorage.getItem('big2_scores');
-  const g  = localStorage.getItem('big2_games');
-  const n  = localStorage.getItem('big2_pname');
-  const hp = localStorage.getItem('big2_highpts');
-  if (s)  scores = JSON.parse(s);
-  if (g)  gamesPlayed = parseInt(g);
-  if (n)  playerCustomName = n;
-  if (hp) highestPts = parseInt(hp);
-  const hist = localStorage.getItem('big2_history');
-  if (hist) { try { gameHistory = JSON.parse(hist); } catch(e) { gameHistory = []; } }
+  const allHigh = ['beginner','intermediate','hard','pro']
+    .map(md => parseInt(localStorage.getItem(modeKey(md,'big2_highpts')))||0);
+  localStorage.setItem('big2_highpts', Math.max(...allHigh));
 }
 
+function loadScoresForMode(mode) {
+  const m = mode || selectedMode;
+  // Rank score is always recalculated from all mode bests
+  const s  = localStorage.getItem(modeKey(m,'big2_scores'));
+  const g  = localStorage.getItem(modeKey(m,'big2_games'));
+  const hp = localStorage.getItem(modeKey(m,'big2_highpts'));
+  scores      = s  ? JSON.parse(s)   : [0,0,0,0];
+  gamesPlayed = g  ? parseInt(g)     : 0;
+  highestPts  = hp ? parseInt(hp)    : 0;
+  const hist  = localStorage.getItem(modeKey(m,'big2_history'));
+  gameHistory = hist ? (()=>{try{return JSON.parse(hist);}catch(e){return [];}})() : [];
+  // Recalculate rank score from all mode bests
+  rankScore = calcTotalRankScore();
+}
 
-// ════════════════════════════════════════
-//  GAME STATE PERSISTENCE
-// ════════════════════════════════════════
-function saveGameState() {
-  if (!gameActive) {
-    localStorage.removeItem('big2_gamestate');
-    return;
-  }
+function saveGameStateForMode() {
+  const m = selectedMode;
+  if (!gameActive) { localStorage.removeItem(modeKey(m,'big2_gamestate')); return; }
   const state = {
-    hands: hands,
-    currentPlayer,
-    discardPile,
-    lastPlay,
-    passCount,
-    firstTurn,
-    openingPlayer,
-    currentRoundPlays,
+    hands, currentPlayer, discardPile, lastPlay, passCount, firstTurn,
+    openingPlayer, currentRoundPlays,
     globalDiscardedCards: [...globalDiscardedCards],
-    selectedMode,
-    gameActive,
-    handZoomed,
-    discardZoomed
+    selectedMode: m, gameActive, handZoomed, discardZoomed
   };
-  localStorage.setItem('big2_gamestate', JSON.stringify(state));
+  localStorage.setItem(modeKey(m,'big2_gamestate'), JSON.stringify(state));
 }
 
-function loadGameState() {
+function loadGameStateForMode() {
+  const m = selectedMode;
   try {
-    const raw = localStorage.getItem('big2_gamestate');
+    const raw = localStorage.getItem(modeKey(m,'big2_gamestate'));
     if (!raw) return false;
     const state = JSON.parse(raw);
     if (!state || !state.gameActive || !state.hands) return false;
-  // Restore zoom states
-  if (state.handZoomed) { handZoomed = true; }
-  if (state.discardZoomed) { discardZoomed = true; }
-
-    hands                = state.hands;
-    currentPlayer        = state.currentPlayer;
-    discardPile          = state.discardPile || [];
-    lastPlay             = state.lastPlay || null;
-    passCount            = state.passCount || 0;
-    firstTurn            = state.firstTurn !== undefined ? state.firstTurn : true;
-    openingPlayer        = state.openingPlayer || 0;
-    currentRoundPlays    = state.currentRoundPlays || [];
-    globalDiscardedCards = new Set(state.globalDiscardedCards || []);
-    selectedMode         = state.selectedMode || 'beginner';
-    gameActive           = true;
-    selectedCards        = [];
+    if (state.handZoomed)    handZoomed    = true;
+    if (state.discardZoomed) discardZoomed = true;
+    hands               = state.hands;
+    currentPlayer       = state.currentPlayer;
+    discardPile         = state.discardPile        || [];
+    lastPlay            = state.lastPlay           || null;
+    passCount           = state.passCount          || 0;
+    firstTurn           = state.firstTurn !== undefined ? state.firstTurn : true;
+    openingPlayer       = state.openingPlayer      || 0;
+    currentRoundPlays   = state.currentRoundPlays  || [];
+    globalDiscardedCards= new Set(state.globalDiscardedCards || []);
+    selectedMode        = state.selectedMode       || m;
+    gameActive          = true;
+    startingHandProfile = hands.map(h => classifyStartingHand(h));
     return true;
-  } catch(e) {
-    localStorage.removeItem('big2_gamestate');
-    return false;
+  } catch(e) { return false; }
+}
+
+function hasSavedGameForMode(mode) {
+  const m = mode || selectedMode;
+  const raw = localStorage.getItem(modeKey(m,'big2_gamestate'));
+  if (!raw) return false;
+  try { const s = JSON.parse(raw); return !!(s && s.gameActive && s.hands); }
+  catch(e) { return false; }
+}
+
+function updateResumeButton() {
+  const hasSaved = hasSavedGameForMode(selectedMode);
+  let rb = document.getElementById('btn-resume-game');
+  const sb = document.getElementById('btn-start-game');
+  if (hasSaved) {
+    if (!rb) {
+      rb = document.createElement('button');
+      rb.id = 'btn-resume-game';
+      rb.className = 'btn-gold';
+      rb.style.cssText = 'margin-bottom:0.5rem;background:linear-gradient(135deg,#1a5c38,#2d8a50,#1a5c38);box-shadow:0 4px 18px rgba(45,138,80,0.45);';
+      rb.innerHTML = '↩ Resume Game';
+      rb.onclick = resumeGame;
+      if (sb) { sb.parentNode.insertBefore(rb, sb); sb.style.display = 'none'; }
+    }
+  } else {
+    clearResumeButton();
   }
 }
+
+// Storage — delegates to per-mode
+function saveScores() { saveScoresForMode(selectedMode); }
+function loadScores() {
+  const n = localStorage.getItem('big2_pname');
+  if (n) playerCustomName = n;
+  loadScoresForMode(selectedMode);
+}
+function saveGameState() { saveGameStateForMode(); }
+function loadGameState() { return loadGameStateForMode(); }
 
 function clearGameState() {
   localStorage.removeItem('big2_gamestate');
@@ -2847,7 +2974,7 @@ function confirmForfeit() {
     forfeit: true
   });
   // Update rank score (player's delta = gameDeltas[0])
-  updateRankScore(gameDeltas[0]);
+  updateRankScore(-30); // forfeit penalty
   saveScores();
   clearGameState();
   updateScoreboard();
@@ -2881,8 +3008,7 @@ function forfeitNewGame() {
 function forfeitMainMenu() {
   closeModal();
   document.getElementById('game').style.display = 'none';
-  const sb = document.getElementById('btn-start-game');
-  if (sb) sb.style.display = '';
+  clearResumeButton();
   document.getElementById('splash').style.display = 'flex';
 }
 
@@ -3860,6 +3986,15 @@ function endGame(winnerIdx) {
         return n;
       })
     : null;
+  // Record in MP session history
+  if (mpGameMode === 'vs_human') {
+    mpSessionHistory.push({
+      winnerLocalIdx: winnerIdx,
+      gameDeltas: gameDeltas.slice(),
+      raw: raw.slice()
+    });
+    if (!mpSessionNames.length && mpNames) mpSessionNames = mpNames.slice();
+  }
   mpShowEndBanner(winnerIdx, raw, mults, gameDeltas, mpNames);
 }
 
@@ -3883,6 +4018,10 @@ function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas, namesOverride) 
 
   const banner = document.getElementById('winner-banner');
   banner.style.display = 'flex';
+  // Show/hide MP tabs
+  const tabs = document.getElementById('winner-tabs');
+  if (tabs) tabs.classList.toggle('visible', mpGameMode === 'vs_human');
+  winnerTabSwitch('result'); // always start on This Game tab
   document.getElementById('winner-title').textContent =
     winnerLocalIdx === 0 ? '🏆 You Win!' : '🃏 ' + names[winnerLocalIdx] + ' Wins!';
   document.getElementById('winner-sub').textContent =
@@ -3911,147 +4050,206 @@ function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas, namesOverride) 
   }
 }
 
+function winnerTabSwitch(tab) {
+  document.getElementById('wtab-result').classList.toggle('active', tab==='result');
+  document.getElementById('wtab-room').classList.toggle('active', tab==='room');
+  document.getElementById('winner-game-result').style.display = tab==='result'?'block':'none';
+  const roomDiv = document.getElementById('winner-room-standing');
+  if (tab === 'room') {
+    roomDiv.classList.add('visible');
+    roomDiv.innerHTML = buildMpRoomStanding();
+  } else {
+    roomDiv.classList.remove('visible');
+  }
+}
+
+function buildMpRoomStanding() {
+  if (!mpSessionHistory.length) return '<div style="color:var(--text-dim);font-style:italic;text-align:center;padding:10px">No games yet</div>';
+  const names = mpSessionNames.length ? mpSessionNames : [playerCustomName,'Ace','Rex','Ivy'];
+  // Calculate cumulative deltas per player
+  const totals = [0,0,0,0];
+  const wins   = [0,0,0,0];
+  mpSessionHistory.forEach(g => {
+    g.gameDeltas.forEach((d,i) => totals[i]+=d);
+    if (g.winnerLocalIdx >= 0 && g.winnerLocalIdx < 4) wins[g.winnerLocalIdx]++;
+  });
+
+  let html2 = '<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:6px;text-align:center">'+
+    mpSessionHistory.length+' game'+(mpSessionHistory.length>1?'s':'')+' this session</div>';
+
+  // Header
+  html2 += '<div class="room-standing-header"><span>Player</span><span>Total</span><span>Wins</span></div>';
+
+  // Rows sorted by total descending
+  const order = [0,1,2,3].sort((a,b) => totals[b]-totals[a]);
+  order.forEach((i, rank) => {
+    const col = totals[i]>0?'#7fffaa':totals[i]<0?'#ff9999':'var(--text-light)';
+    const medal = rank===0?'🥇':rank===1?'🥈':rank===2?'🥉':'';
+    html2 += `<div class="room-standing-row">
+      <span style="color:var(--text-light)">${medal} ${names[i]}</span>
+      <span style="color:${col};font-weight:700">${totals[i]>0?'+':''}${totals[i]}</span>
+      <span style="color:var(--gold-light)">${wins[i]} win${wins[i]!==1?'s':''}</span>
+    </div>`;
+  });
+
+  // Per-game history (compact)
+  html2 += '<div style="margin-top:10px;font-size:0.75rem;color:var(--text-dim)">Game history:</div>';
+  mpSessionHistory.forEach((g, gi) => {
+    const winName = g.winnerLocalIdx>=0?names[g.winnerLocalIdx]:'?';
+    const pts = g.gameDeltas.map((d,i)=>(d>0?'+':'')+d+' '+names[i]).join(' · ');
+    html2 += `<div style="font-size:0.72rem;padding:3px 8px;border-bottom:1px solid rgba(255,255,255,0.04);color:var(--text-dim)">
+      G${gi+1}: <span style="color:var(--gold-light)">${winName}</span> wins · ${pts}
+    </div>`;
+  });
+
+  return html2;
+}
+
 function continueGame() {
   document.getElementById('winner-banner').style.display = 'none';
   startGame();
 }
 
 function endSession() {
+  // In MP with session history: show final standings before leaving
+  if (mpGameMode === 'vs_human' && mpSessionHistory.length > 0) {
+    // Switch to room standing tab and update button to "Leave Room"
+    winnerTabSwitch('room');
+    document.getElementById('winner-banner').style.display = 'flex';
+    document.getElementById('winner-title').textContent = '🏆 Session Summary';
+    document.getElementById('winner-sub').textContent = 'Room: ' + (mpRoomCode || '');
+    const tabs = document.getElementById('winner-tabs');
+    if (tabs) tabs.classList.add('visible');
+    document.getElementById('btn-end-session').textContent = '🏠 Leave Room';
+    document.getElementById('btn-end-session').onclick = endSessionFinal;
+    return;
+  }
+  endSessionFinal();
+}
+
+function endSessionFinal() {
   document.getElementById('winner-banner').style.display = 'none';
   document.getElementById('game').style.display = 'none';
   clearResumeButton();
   document.getElementById('splash').style.display = 'flex';
+  // Reset button text for next time
+  const btn = document.getElementById('btn-end-session');
+  if (btn) { btn.textContent = 'End Session'; btn.onclick = endSession; }
+  mpDestroy();
 }
 
 function showScoreboard() {
-  loadScores();
+  const modeLabels = { beginner:'Beginner', intermediate:'Intermediate', hard:'Hard', pro:'Pro' };
+  const modes = ['beginner','intermediate','hard','pro'];
   const pnames = [playerCustomName, 'Ace', 'Rex', 'Ivy'];
   const pshort = [playerCustomName.length > 5 ? playerCustomName.slice(0,5)+'…' : playerCustomName, 'Ace', 'Rex', 'Ivy'];
-  const modeLabels = { beginner:'Beginner', intermediate:'Intermediate', hard:'Hard', pro:'Pro' };
 
-  // ── Summary table ──────────────────────────────────────────
-  let summaryHTML = `
-  <div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:6px">Games played: <strong style="color:var(--text-light)">${gamesPlayed}</strong></div>
-  <table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:14px">
-    <thead>
-      <tr style="color:var(--gold);border-bottom:1px solid rgba(201,168,76,0.3)">
+  function buildModeSection(mode) {
+    const rs    = parseInt(localStorage.getItem(modeKey(mode,'big2_rankscore')))||0;
+    const s     = localStorage.getItem(modeKey(mode,'big2_scores'));
+    const g     = localStorage.getItem(modeKey(mode,'big2_games'));
+    const hist  = localStorage.getItem(modeKey(mode,'big2_history'));
+    const mScores  = s ? JSON.parse(s) : [0,0,0,0];
+    const mGames   = g ? parseInt(g)   : 0;
+    let   mHistory = [];
+    if (hist) { try { mHistory = JSON.parse(hist); } catch(e) {} }
+
+    if (mGames === 0 && mHistory.length === 0) {
+      return `<div style="color:var(--text-dim);font-style:italic;font-size:0.82rem;padding:10px 0;text-align:center;">No games played in ${modeLabels[mode]} mode yet.</div>`;
+    }
+    const wins = [0,0,0,0];
+    mHistory.forEach(gh => {
+      if (gh.forfeit) return;
+      if (typeof gh.winnerIdx==='number'&&gh.winnerIdx>=0&&gh.winnerIdx<=3) wins[gh.winnerIdx]++;
+      else if (gh.cards) { const wi=gh.cards.indexOf(0); if(wi>=0) wins[wi]++; }
+    });
+    let h = `<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:6px">Games: <strong style="color:var(--text-light)">${mGames}</strong>
+      &nbsp;|&nbsp; Rank Score: <strong style="color:var(--gold-light)">✦ ${rs}</strong></div>
+    <table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:14px">
+      <thead><tr style="color:var(--gold);border-bottom:1px solid rgba(201,168,76,0.3)">
         <th style="text-align:left;padding:4px 6px">Player</th>
         <th style="text-align:right;padding:4px 6px">Total Pts</th>
         <th style="text-align:right;padding:4px 6px">Wins</th>
         <th style="text-align:right;padding:4px 6px">Avg Pts</th>
-      </tr>
-    </thead>
-    <tbody>`;
-
-  const wins = [0,0,0,0];
-  gameHistory.forEach(g => {
-    if (g.forfeit) return;
-    // winnerIdx may be stored directly, or we can detect from cards (0 cards = winner)
-    if (typeof g.winnerIdx === 'number' && g.winnerIdx >= 0 && g.winnerIdx <= 3) {
-      wins[g.winnerIdx]++;
-    } else if (g.cards) {
-      // fallback: whoever has 0 cards won
-      const wi = g.cards.indexOf(0);
-      if (wi >= 0) wins[wi]++;
+      </tr></thead><tbody>`;
+    for (let i=0;i<4;i++) {
+      const avg = mGames>0 ? (mScores[i]/mGames).toFixed(1) : '0.0';
+      const col = mScores[i]>0?'#7fffaa':mScores[i]<0?'#ff9999':'var(--text-light)';
+      h += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+        <td style="padding:4px 6px;color:var(--text-light)">${pnames[i]}${i===0?' 👤':''}</td>
+        <td style="text-align:right;padding:4px 6px;color:${col};font-weight:700">${mScores[i]>0?'+':''}${mScores[i]}</td>
+        <td style="text-align:right;padding:4px 6px;color:var(--gold-light)">${wins[i]}</td>
+        <td style="text-align:right;padding:4px 6px;color:var(--text-dim)">${avg>0?'+':''}${avg}</td>
+      </tr>`;
     }
+    h += '</tbody></table>';
+    if (mHistory.length) {
+      h += `<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px">Recent games:</div>
+      <table style="width:100%;border-collapse:collapse;font-size:0.75rem">
+        <thead><tr style="color:var(--gold-light);border-bottom:1px solid rgba(201,168,76,0.2)">
+          <th style="text-align:left;padding:3px 4px">#</th>
+          <th style="text-align:left;padding:3px 4px">Winner</th>`;
+      for(let i=0;i<4;i++) h+=`<th style="text-align:right;padding:3px 4px">${pshort[i]}</th>`;
+      h+=`<th style="text-align:right;padding:3px 4px">Cards</th></tr></thead><tbody>`;
+      [...mHistory].reverse().slice(0,15).forEach(gh => {
+        const wl = gh.forfeit?'🏳 Forfeit':(gh.winnerIdx===0?'👤 '+pnames[0]:(gh.winnerIdx>=0&&gh.winnerIdx<=3?pnames[gh.winnerIdx]:'?'));
+        h+=`<tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+          <td style="padding:3px 4px;color:var(--text-dim)">${gh.gameNum||'?'}</td>
+          <td style="padding:3px 4px;color:var(--gold-light)">${wl}</td>`;
+        for(let i=0;i<4;i++){const d=gh.deltas?.[i]??0;const c=d>0?'#7fffaa':d<0?'#ff9999':'var(--text-dim)';h+=`<td style="text-align:right;padding:3px 4px;color:${c}">${d>0?'+':''}${d}</td>`;}
+        const iw=typeof gh.winnerIdx==='number'&&gh.winnerIdx>=0;
+        const cs=gh.cards?gh.cards.map((c,i)=>i===(iw?gh.winnerIdx:-1)?'🏆':c).join('/'):'?';
+        h+=`<td style="text-align:right;padding:3px 4px;color:var(--text-dim)">${cs}</td></tr>`;
+      });
+      h+='</tbody></table>';
+    }
+    return h;
+  }
+
+  // Build tabbed view
+  let tabsHTML='<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">';
+  modes.forEach(m=>{
+    const active=m===selectedMode;
+    tabsHTML+=`<div onclick="sbShowTab('${m}')" id="sb-tab-${m}" style="cursor:pointer;padding:4px 12px;border-radius:4px;font-size:0.78rem;font-family:'Crimson Pro',serif;border:1px solid rgba(201,168,76,${active?'0.6':'0.25'});background:rgba(0,0,0,${active?'0.5':'0.2'});color:${active?'var(--gold-light)':'var(--text-dim)'};">${modeLabels[m]}</div>`;
+  });
+  tabsHTML+='</div>';
+  let contentHTML='';
+  modes.forEach(m=>{
+    contentHTML+=`<div id="sb-content-${m}" style="display:${m===selectedMode?'block':'none'}">${buildModeSection(m)}</div>`;
   });
 
-  for (let i = 0; i < 4; i++) {
-    const avg = gamesPlayed > 0 ? (scores[i] / gamesPlayed).toFixed(1) : '0.0';
-    const col = scores[i] > 0 ? '#7fffaa' : scores[i] < 0 ? '#ff9999' : 'var(--text-light)';
-    summaryHTML += `<tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
-      <td style="padding:4px 6px;color:var(--text-light)">${pnames[i]}${i===0?' 👤':''}</td>
-      <td style="text-align:right;padding:4px 6px;color:${col};font-weight:700">${scores[i] > 0 ? '+' : ''}${scores[i]}</td>
-      <td style="text-align:right;padding:4px 6px;color:var(--gold-light)">${wins[i]}</td>
-      <td style="text-align:right;padding:4px 6px;color:var(--text-dim)">${avg > 0 ? '+' : ''}${avg}</td>
-    </tr>`;
-  }
-  summaryHTML += '</tbody></table>';
-
-  // ── Per-game history ────────────────────────────────────────
-  let histHTML = '';
-  if (gameHistory.length > 0) {
-    histHTML = `<div style="font-size:0.8rem;color:var(--gold-light);margin-bottom:6px;font-family:'Playfair Display',serif">Game History</div>
-    <div style="max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(201,168,76,0.3) transparent">`;
-
-    // Most recent first
-    const histReversed = [...gameHistory].reverse();
-    histReversed.forEach((g, gi) => {
-      const effectiveWinnerIdx = g.forfeit ? -1
-        : (typeof g.winnerIdx === 'number' && g.winnerIdx >= 0) ? g.winnerIdx
-        : (g.cards ? g.cards.indexOf(0) : -1);
-      const gameLabel = g.forfeit
-        ? `<span style="color:#ff8888">🏳 Forfeit</span>`
-        : effectiveWinnerIdx >= 0
-          ? `<span style="color:#7fffaa">🏆 ${pshort[effectiveWinnerIdx]} wins</span>`
-          : `<span style="color:var(--text-dim)">—</span>`;
-      const modeStr = g.mode ? `<span style="font-size:0.65rem;color:var(--text-dim);margin-left:4px">[${modeLabels[g.mode]||g.mode}]</span>` : '';
-
-      histHTML += `<div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:7px 9px;margin-bottom:6px;border:1px solid rgba(255,255,255,0.06)">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-          <span style="font-size:0.72rem;color:var(--text-dim)">Game ${g.gameNum}</span>
-          <span style="font-size:0.8rem">${gameLabel}${modeStr}</span>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:0.75rem">
-          <thead>
-            <tr style="color:var(--text-dim);border-bottom:1px solid rgba(255,255,255,0.07)">
-              <th style="text-align:left;padding:2px 4px">Player</th>
-              <th style="text-align:center;padding:2px 4px">Cards</th>
-              <th style="text-align:center;padding:2px 4px">Mult</th>
-              <th style="text-align:right;padding:2px 4px">Pts</th>
-              <th style="text-align:right;padding:2px 4px">Total</th>
-            </tr>
-          </thead>
-          <tbody>`;
-
-      for (let i = 0; i < 4; i++) {
-      const isWinner = !g.forfeit && (
-        g.winnerIdx === i ||
-        (typeof g.winnerIdx !== 'number' && g.cards && g.cards[i] === 0)
-      );
-        const delta = g.deltas[i];
-        const dSign = delta >= 0 ? '+' : '';
-        const dCol = delta > 0 ? '#7fffaa' : delta < 0 ? '#ff9999' : 'var(--text-dim)';
-        const runScore = g.runningScores ? g.runningScores[i] : '—';
-        const multLabel = g.mults && g.mults[i] > 1 ? `×${g.mults[i]}` : '—';
-        const cardsStr = isWinner ? '🏆' : (g.cards[i] !== undefined ? g.cards[i] : '?');
-        const nameCol = isWinner ? '#7fffaa' : 'var(--text-light)';
-
-        histHTML += `<tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
-          <td style="padding:2px 4px;color:${nameCol}">${pshort[i]}</td>
-          <td style="text-align:center;padding:2px 4px;color:var(--text-dim)">${cardsStr}</td>
-          <td style="text-align:center;padding:2px 4px;color:${g.mults&&g.mults[i]>1?'#ffcc44':'var(--text-dim)'}">${multLabel}</td>
-          <td style="text-align:right;padding:2px 4px;color:${dCol};font-weight:600">${dSign}${delta}</td>
-          <td style="text-align:right;padding:2px 4px;color:var(--text-dim)">${runScore > 0 ? '+' : ''}${runScore}</td>
-        </tr>`;
-      }
-
-      histHTML += `</tbody></table></div>`;
-    });
-    histHTML += '</div>';
-  } else {
-    histHTML = `<div style="color:var(--text-dim);font-size:0.8rem;font-style:italic;text-align:center;padding:10px 0">No games played yet.</div>`;
-  }
-
-  const overlay = document.getElementById('modal-overlay');
-  overlay.style.display = 'flex';
+  const overlay=document.getElementById('modal-overlay');
+  overlay.style.display='flex';
   document.getElementById('modal-close-x').classList.add('hidden');
-  document.getElementById('modal-title').textContent = '📊 Standings';
-  document.getElementById('modal-body').innerHTML = summaryHTML + histHTML;
-  document.getElementById('modal-buttons').innerHTML = `
+  document.getElementById('modal-title').textContent='📊 Standings';
+  document.getElementById('modal-body').innerHTML=tabsHTML+contentHTML;
+  document.getElementById('modal-buttons').innerHTML=`
     <button class="btn-gold" onclick="closeModal()">Close</button>
-    <button class="btn-ghost" onclick="resetScores()">Reset All</button>
+    <button class="btn-ghost" onclick="resetScores()">Reset Mode</button>
   `;
+}
+
+function sbShowTab(mode) {
+  ['beginner','intermediate','hard','pro'].forEach(m=>{
+    const tab=document.getElementById('sb-tab-'+m);
+    const content=document.getElementById('sb-content-'+m);
+    const active=m===mode;
+    if(tab){tab.style.borderColor=`rgba(201,168,76,${active?'0.6':'0.25'})`;tab.style.background=`rgba(0,0,0,${active?'0.5':'0.2'})`;tab.style.color=active?'var(--gold-light)':'var(--text-dim)';}
+    if(content) content.style.display=active?'block':'none';
+  });
 }
 
 function resetScores() {
   scores = [0,0,0,0];
   gamesPlayed = 0;
   gameHistory = [];
+  // Reset mode best for current mode only
+  localStorage.removeItem('big2_modebest_' + selectedMode);
   saveScores();
+  rankScore = calcTotalRankScore();
   closeModal();
   updateRankUI();
-  toast('Scores reset!');
+  toast(selectedMode.charAt(0).toUpperCase()+selectedMode.slice(1)+' mode scores reset!');
 }
 
 function closeModal() {
@@ -4195,19 +4393,38 @@ const MP_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 function mpGenCode(){let c='';for(let i=0;i<4;i++)c+=MP_CHARS[Math.floor(Math.random()*MP_CHARS.length)];return c;}
 
 // ── Lobby ─────────────────────────────────────────────────
-function openMpLobby(){document.getElementById('mp-lobby').classList.add('open');mpSwitchTab('host');mpInitHost();}
+function openMpLobby(){
+  document.getElementById('mp-lobby').classList.add('open');
+  // Show rejoin tab with indicator if there's a saved room
+  const savedRoom=localStorage.getItem('mp_last_room');
+  const rejoinTab=document.getElementById('mp-tab-rejoin');
+  if(rejoinTab) rejoinTab.textContent=savedRoom?'↩ Rejoin ('+savedRoom+')':'↩ Rejoin';
+  mpSwitchTab('host');
+  mpInitHost();
+}
 function closeMpLobby(){document.getElementById('mp-lobby').classList.remove('open');mpDestroy();}
 function mpSwitchTab(tab){
-  ['host','join'].forEach(t=>{
-    document.getElementById('mp-tab-'+t).classList.toggle('active',t===tab);
-    document.getElementById('mp-sec-'+t).classList.toggle('active',t===tab);
+  ['host','join','rejoin'].forEach(t=>{
+    const tabEl=document.getElementById('mp-tab-'+t);
+    const secEl=document.getElementById('mp-sec-'+t);
+    if(tabEl) tabEl.classList.toggle('active',t===tab);
+    if(secEl) secEl.classList.toggle('active',t===tab);
   });
+  // Pre-fill rejoin code if available
+  if(tab==='rejoin'){
+    const saved=localStorage.getItem('mp_last_room')||'';
+    const inp=document.getElementById('mp-rejoin-code');
+    if(inp&&saved) inp.value=saved;
+    const info=document.getElementById('mp-rejoin-info');
+    if(info) info.textContent=saved?'Last room: '+saved:'No recent room found.';
+  }
 }
 function mpSetStatus(msg,el){const e=document.getElementById(el||'mp-status');if(e)e.textContent=msg;}
 
 // ── Host setup ────────────────────────────────────────────
 function mpInitHost(){
   mpDestroy(); mpIsHost=true; mpRoomCode=mpGenCode();
+  mpSessionHistory=[]; mpSessionNames=[];
   document.getElementById('mp-room-code').textContent=mpRoomCode;
   mpSetStatus('Waiting for players…');
   mpSeats=[{name:playerCustomName,conn:null}]; mpMySeat=0;
@@ -4241,6 +4458,20 @@ function mpHostOnData(conn,data){
     if(s>=0){mpSeats[s].name=data.name;mpBroadcastLobby();}
     return;
   }
+  if(data.type==='rejoin'){
+    // Find the disconnected seat by name
+    const s=mpSeats.findIndex(x=>x.disconnected&&x.name===data.name);
+    if(s<0){conn.send({type:'rejoin_fail',reason:'Seat not found or not disconnected'});return;}
+    // Restore the connection
+    mpSeats[s].conn=conn;
+    mpSeats[s].disconnected=false;
+    mpConnections.push(conn);
+    conn.send({type:'seat',seat:s});
+    toast(data.name+' rejoined!');
+    // Send full sync to the rejoining player
+    mpBroadcastSync();
+    return;
+  }
   // Guest played a card — validate it's their turn then execute on host
   if(data.type==='play'){
     const guestSeat=mpSeats.findIndex(x=>x.conn===conn);
@@ -4270,12 +4501,34 @@ function mpHostOnData(conn,data){
 function mpHostOnDisconnect(conn){
   const s=mpSeats.findIndex(x=>x.conn===conn);
   if(s>=0){
-    mpSeats.splice(s,1);
-    mpConnections=mpConnections.filter(c=>c!==conn);
-    mpBroadcastLobby();
-    mpRenderSeats();
-    document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
+    if(gameActive){
+      // During game: mark seat as disconnected but keep the slot
+      mpSeats[s].conn=null;
+      mpSeats[s].disconnected=true;
+      mpConnections=mpConnections.filter(c=>c!==conn);
+      toast(mpSeats[s].name+' disconnected');
+      // Save resume state so they can rejoin
+      mpSaveResumeState();
+    } else {
+      // In lobby: fully remove the seat
+      mpSeats.splice(s,1);
+      mpConnections=mpConnections.filter(c=>c!==conn);
+      mpBroadcastLobby();
+      mpRenderSeats();
+      document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
+    }
   }
+}
+
+function mpSaveResumeState(){
+  if(!mpIsHost||!gameActive) return;
+  const state={
+    roomCode:mpRoomCode,
+    seats:mpSeats.map(s=>({name:s.name,disconnected:!!s.disconnected})),
+    npcSlots:mpNpcSlots.slice(),
+    mySeat:mpMySeat
+  };
+  localStorage.setItem('mp_resume_host',JSON.stringify(state));
 }
 
 function mpBroadcastLobby(){
@@ -4350,9 +4603,12 @@ function mpJoinRoom(){
       mpHostConn.on('open',()=>{
         mpHostConn.send({type:'name',name:playerCustomName});
         mpSetStatus('Connected! Waiting for host…','mp-status-join');
+        localStorage.setItem('mp_last_room', code);
+        localStorage.setItem('mp_last_name', playerCustomName);
+        mpSessionHistory=[]; mpSessionNames=[];
       });
       mpHostConn.on('data',data=>mpGuestOnData(data));
-      mpHostConn.on('close',()=>mpSetStatus('Disconnected.','mp-status-join'));
+      mpHostConn.on('close',()=>{mpSetStatus('Disconnected.','mp-status-join');localStorage.setItem('mp_last_room',code);});
       mpHostConn.on('error',e=>mpSetStatus('Error: '+e.message,'mp-status-join'));
     });
     mpPeer.on('error',err=>mpSetStatus('⚠ '+err.message,'mp-status-join'));
@@ -4379,6 +4635,10 @@ function mpGuestOnData(data){
   }
   if(data.type==='sync'){
     mpGuestApplySync(data);
+    return;
+  }
+  if(data.type==='rejoin_fail'){
+    mpSetStatus('Rejoin failed: '+(data.reason||'unknown'),'mp-status-rejoin');
     return;
   }
   if(data.type==='gameover'){
@@ -4612,7 +4872,38 @@ function mpGuestShowGameover(data) {
     return n;
   });
 
+  // Record in guest session history
+  mpSessionHistory.push({
+    winnerLocalIdx: guestWinnerLocal,
+    gameDeltas: deltas.slice(),
+    raw: raw.slice()
+  });
+  if (!mpSessionNames.length) mpSessionNames = names.slice();
   mpShowEndBanner(guestWinnerLocal, raw, mults, deltas, names);
+}
+
+function mpRejoinRoom(){
+  const code=(document.getElementById('mp-rejoin-code').value||'').trim().toUpperCase();
+  if(code.length!==4){mpSetStatus('Enter a 4-letter code','mp-status-rejoin');return;}
+  const name=playerCustomName||localStorage.getItem('mp_last_name')||'Player';
+  mpSetStatus('Reconnecting…','mp-status-rejoin');
+  mpDestroy(); mpIsHost=false; mpRoomCode=code;
+  try{
+    mpPeer=new Peer();
+    mpPeer.on('open',()=>{
+      mpHostConn=mpPeer.connect('big2-'+code+'-host',{reliable:true});
+      mpHostConn.on('open',()=>{
+        // Send rejoin message instead of name
+        mpHostConn.send({type:'rejoin',name});
+        mpSetStatus('Reconnecting as '+name+'…','mp-status-rejoin');
+        localStorage.setItem('mp_last_room',code);
+      });
+      mpHostConn.on('data',data=>mpGuestOnData(data));
+      mpHostConn.on('close',()=>mpSetStatus('Disconnected.','mp-status-rejoin'));
+      mpHostConn.on('error',e=>mpSetStatus('Error: '+e.message,'mp-status-rejoin'));
+    });
+    mpPeer.on('error',err=>mpSetStatus('⚠ '+err.message,'mp-status-rejoin'));
+  }catch(e){mpSetStatus('PeerJS unavailable.','mp-status-rejoin');}
 }
 
 function mpDestroy(){
