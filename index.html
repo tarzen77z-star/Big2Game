@@ -4291,6 +4291,11 @@ function updatePlayerName(val) {
 }
 
 function playerName(idx) {
+  if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
+    // In MP, idx is local index — map to global seat then get name
+    const globalSeat = (mpMySeat + idx) % 4;
+    return mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('Player ' + (globalSeat + 1));
+  }
   return [playerCustomName,'Ace','Rex','Ivy'][idx];
 }
 
