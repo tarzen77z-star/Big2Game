@@ -4970,10 +4970,17 @@ function mpGuestApplySync(snap){
     if(gl) gl.textContent='✦ '+snapRankScores[0];
   }
   // Update opponent zones (local idx 1→score-p2, 2→score-p3, 3→score-p4)
+  // Always show and update for any human player (non-zero score or known seat)
   const zoneScoreMap=[{localIdx:1,scoreId:'score-p2'},{localIdx:2,scoreId:'score-p3'},{localIdx:3,scoreId:'score-p4'}];
   zoneScoreMap.forEach(({localIdx,scoreId})=>{
     const el=document.getElementById(scoreId);
-    if(el&&el.style.display!=='none') el.textContent='✦ '+(snapRankScores[localIdx]||0);
+    if(!el) return;
+    const globalSeat=(mpMySeat+localIdx)%4;
+    const isNpc=mpNpcSlots[globalSeat]!==false&&mpNpcSlots[globalSeat]!==undefined&&mpNpcSlots[globalSeat]===true;
+    if(!isNpc){
+      el.style.display='block'; // ensure visible for human players
+      el.textContent='✦ '+(snapRankScores[localIdx]||0);
+    }
   });
   // Enable controls only if it's THIS guest's turn (local index 0)
   setPlayerControls(currentPlayer===0&&gameActive);
