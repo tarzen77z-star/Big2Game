@@ -537,8 +537,8 @@
   }
   .hand-card.red .rank, .hand-card.red .center-suit { color: var(--card-red); }
   .hand-card.black .rank, .hand-card.black .center-suit { color: var(--card-black); }
-  .hand-card .rank { font-size: 1.21rem; font-weight: 700; align-self: flex-start; padding-left: 2px; position: relative; z-index: 1; }
-  .hand-card .center-suit { font-size: 1.98rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+  .hand-card .rank { font-size: 1.39rem; font-weight: 700; align-self: flex-start; padding-left: 2px; position: relative; z-index: 1; }
+  .hand-card .center-suit { font-size: 2.28rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 
   /* ── MODAL ── */
   #modal-overlay {
@@ -828,8 +828,8 @@
       width: 44px !important; height: 62px !important;
       border-radius: 6px; padding: 3px;
     }
-    .hand-card .rank { font-size: 0.94rem !important; }
-    .hand-card .center-suit { font-size: 1.2rem !important; }
+    .hand-card .rank { font-size: 1.08rem !important; }
+    .hand-card .center-suit { font-size: 1.38rem !important; }
 
     /* ── RANK BADGE (inline next to player name) ── */
     #player-name-row .rank-badge-sm { width: 22px !important; height: 22px !important; }
@@ -1314,12 +1314,13 @@
     transition: bottom 0.2s ease, transform 0.2s ease, box-shadow 0.2s;
   }
   /* Discard pile zoomed */
-  #discard-pile.discard-zoomed {
-    transform: scale(1.3);
-    transform-origin: center top;
-    z-index: 20;
-    position: relative;
-    box-shadow: 0 0 40px rgba(0,0,0,0.7);
+  /* Discard zoom: only enlarge card numbers, no scale transform */
+  #discard-pile.discard-zoomed .play-card .rank { font-size: 1.57rem !important; }
+  #discard-pile.discard-zoomed .play-card .center-suit { font-size: 2.57rem !important; }
+  /* Mobile */
+  @media (max-width: 500px) {
+    #discard-pile.discard-zoomed .play-card .rank { font-size: 1.1rem !important; }
+    #discard-pile.discard-zoomed .play-card .center-suit { font-size: 1.56rem !important; }
   }
   /* Zoom indicator */
   .zoom-hint {
@@ -1378,11 +1379,11 @@
   </div>
   <div id="splash-rank">
     <div class="rank-badge beginner" id="splash-badge"></div>
-    <div id="splash-rank-text">Rank: <strong id="splash-rank-name">Beginner</strong> &nbsp;|&nbsp; Points: <strong id="splash-pts">0</strong></div>
+    <div id="splash-rank-text">Rank: <strong id="splash-rank-name">Normal</strong> &nbsp;|&nbsp; Points: <strong id="splash-pts">0</strong></div>
   </div>
   <div class="mode-grid" id="mode-grid">
     <button class="mode-btn active-mode" id="mode-beginner" onclick="selectMode('beginner')">
-      <span class="mode-icon">🌱</span>Beginner
+      <span class="mode-icon">🌱</span>Normal
       <span class="mode-req">Open to all</span>
     </button>
     <button class="mode-btn" id="mode-intermediate" onclick="selectMode('intermediate')" disabled>
@@ -1449,7 +1450,7 @@
       <div class="legend-row">
         <div class="legend-badge beginner" id="lgd-b0"></div>
         <div class="legend-info">
-          <div class="legend-name">Beginner</div>
+          <div class="legend-name">Normal</div>
           <div class="legend-detail">Starting rank. Play games and earn points to advance.</div>
         </div>
         <div class="legend-arrow">0 pts<strong>START</strong></div>
@@ -1514,7 +1515,7 @@
       <div class="legend-mode-row">
         <div class="legend-mode-icon">🌱</div>
         <div style="flex:1;">
-          <div class="legend-mode-name">Beginner Mode</div>
+          <div class="legend-mode-name">Normal Mode</div>
           <div class="legend-mode-desc">Open to all players. NPCs play straightforward — no card counting, no advanced strategy.</div>
         </div>
         <div class="legend-mode-lock unlocked">✔ Always<br>unlocked</div>
@@ -1767,7 +1768,7 @@
     <div id="player-name-row">
       <div class="rank-badge-sm beginner" id="game-rank-badge" style="width:28px;height:28px;margin-right:6px;flex-shrink:0;"></div>
       <div id="player-name-label">You</div>
-      <div id="game-rank-label" style="font-size:0.62rem;color:var(--text-dim);margin-left:6px;font-family:'Crimson Pro',serif;">Beginner</div>
+      <div id="game-rank-label" style="font-size:0.62rem;color:var(--text-dim);margin-left:6px;font-family:'Crimson Pro',serif;">Normal</div>
     </div>
     <div id="player-controls">
       <button class="btn-sm btn-sort" onclick="sortByRank()">Sort by Rank</button>
@@ -1885,7 +1886,7 @@ function trophySVG(rankCls) {
 }
 
 const RANKS_DEF = [
-  { name:'Beginner',     cls:'beginner',    minPts:    0, mode:'beginner'     },
+  { name:'Normal',       cls:'beginner',    minPts:    0, mode:'beginner'     },
   { name:'Bronze',       cls:'bronze',      minPts:  100, mode:'intermediate' },
   { name:'Silver',       cls:'silver',      minPts: 1000, mode:'hard'         },
   { name:'Gold',         cls:'gold',        minPts: 5000, mode:'pro'          },
@@ -2326,24 +2327,14 @@ function renderNpc(idx, zoneId, cardsId, countId, nameId) {
 // ── Card zoom: toggle button, double-click, and pinch-to-zoom ──
 function toggleHandZoom(forceState) {
   handZoomed = (forceState !== undefined) ? forceState : !handZoomed;
-  const container = document.getElementById('hand-container');
-  const wrap = document.getElementById('hand-scroll-wrap');
   const btn = document.getElementById('btn-hand-zoom');
   if (handZoomed) {
-    container.classList.add('hand-zoomed');
-    if (btn) { btn.classList.add('zoomed'); btn.title = 'Zoom out'; }
+    if (btn) { btn.classList.add('zoomed'); btn.title = 'Normal size'; }
   } else {
-    container.classList.remove('hand-zoomed');
-    if (btn) { btn.classList.remove('zoomed'); btn.title = 'Zoom in'; }
+    if (btn) { btn.classList.remove('zoomed'); btn.title = 'Bigger numbers'; }
   }
-  // Re-render hand with new card size — scroll will handle overflow
+  // Re-render with larger/normal font — card size and fan layout stay the same
   renderHand();
-  // After zoom-in, scroll to centre of the wider hand
-  if (handZoomed && wrap) {
-    setTimeout(() => {
-      wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2;
-    }, 50);
-  }
 }
 
 // ── Pinch-to-zoom detection ────────────────────────────────
@@ -2414,36 +2405,25 @@ function renderHand() {
 
   const n = hand.length;
   const isMobile = window.innerWidth <= 500;
-  const zoom = handZoomed ? 1.3 : 1.0;
+  // Font zoom only — card size and fan layout never change
+  const fontZoom = handZoomed ? 1.3 : 1.0;
 
-  // Card dimensions (zoomed or normal) — match CSS values exactly
-  const baseCardW = isMobile ? 44 : 70;
-  const baseCardH = isMobile ? 62 : 99;
-  const cardW = Math.round(baseCardW * zoom);
-  const cardH = Math.round(baseCardH * zoom);
+  // Card dimensions always fixed (no size change on zoom)
+  const cardW = isMobile ? 44 : 70;
+  const cardH = isMobile ? 62 : 99;
 
-  // Fan parameters — zoomed fan uses wider spread
+  // Fan parameters — always the same regardless of zoom
   const maxAngle = Math.min(isMobile ? 40 : 42, n * (isMobile ? 3.4 : 3.5));
   const step = n > 1 ? (maxAngle * 2) / (n - 1) : 0;
-  // Available width: for zoomed, use a larger virtual width so fan spreads out
   const viewW = window.innerWidth;
-  const fanW = handZoomed
-    ? Math.max(viewW * 1.5, n * cardW * 0.9)   // wider fan, scrollable
-    : Math.min(viewW - (isMobile ? 80 : 60), isMobile ? 320 : 720);
-  const spread = Math.min(isMobile ? 32 : 48, fanW / (n + 1)) * zoom;
-  const arcHeight = (isMobile ? Math.min(42, n * 3.2) : Math.min(48, n * 3.5)) * zoom;
+  const fanW = Math.min(viewW - (isMobile ? 80 : 60), isMobile ? 320 : 720);
+  const spread = Math.min(isMobile ? 32 : 48, fanW / (n + 1));
+  const arcHeight = isMobile ? Math.min(42, n * 3.2) : Math.min(48, n * 3.5);
 
-  // Set container width to match fan extent so scroll works
-  const totalFanW = Math.max(viewW, spread * (n + 1) + cardW);
-  if (handZoomed) {
-    container.style.width = totalFanW + 'px';
-    container.style.height = (cardH + arcHeight + 30) + 'px';
-    container.style.minWidth = totalFanW + 'px';
-  } else {
-    container.style.width = '100%';
-    container.style.height = '';
-    container.style.minWidth = '';
-  }
+  // Container always normal size
+  container.style.width = '100%';
+  container.style.height = '';
+  container.style.minWidth = '';
 
   hand.forEach((card, i) => {
     const angle = n > 1 ? -maxAngle + step * i : 0;
@@ -2457,9 +2437,9 @@ function renderHand() {
     el.className = 'hand-card ' + (RED_SUITS.has(card.suit) ? 'red' : 'black');
     el.dataset.idx = i;
 
-    // Larger font when zoomed
-    const rankSize = (isMobile ? 0.94 : 1.21) * zoom;
-    const suitSize = (isMobile ? 1.2 : 1.98) * zoom;
+    // Font size: 30% bigger when zoomed, fixed card layout
+    const rankSize = (isMobile ? 1.08 : 1.39) * fontZoom;
+    const suitSize = (isMobile ? 1.38 : 2.28) * fontZoom;
     el.innerHTML = `
       <div class="rank" style="font-size:${rankSize}rem">${card.rank}</div>
       <div class="center-suit" style="font-size:${suitSize}rem">${card.suit}</div>
@@ -2469,11 +2449,8 @@ function renderHand() {
     el.style.width = cardW + 'px';
     el.style.height = cardH + 'px';
 
-    // Position relative to container centre
-    const containerCentre = handZoomed ? totalFanW / 2 : 0;
-    el.style.left = handZoomed
-      ? (containerCentre + xOffset - cardW / 2) + 'px'
-      : `calc(50% + ${xOffset}px - ${cardW/2}px)`;
+    // Position always relative to 50% centre (no wide container)
+    el.style.left = `calc(50% + ${xOffset}px - ${cardW/2}px)`;
     el.style.bottom = baseBottom + 'px';
     el.style.transform = `rotate(${angle}deg)`;
     el.style.zIndex = zIdx;
@@ -2488,9 +2465,6 @@ function renderHand() {
     container.appendChild(el);
   });
 
-  // Double-click on hand area to zoom
-  const hc = document.getElementById('hand-container');
-  hc.ondblclick = (e) => { e.preventDefault(); toggleHandZoom(); };
   // Initialise pinch-to-zoom (safe to call multiple times)
   initPinchZoom();
   document.getElementById('player-name-label').classList.toggle('active', currentPlayer === 0);
@@ -3883,7 +3857,7 @@ function showScoreboard() {
   loadScores();
   const pnames = [playerCustomName, 'Ace', 'Rex', 'Ivy'];
   const pshort = [playerCustomName.length > 5 ? playerCustomName.slice(0,5)+'…' : playerCustomName, 'Ace', 'Rex', 'Ivy'];
-  const modeLabels = { beginner:'Beginner', intermediate:'Intermediate', hard:'Hard', pro:'Pro' };
+  const modeLabels = { beginner:'Normal', intermediate:'Intermediate', hard:'Hard', pro:'Pro' };
 
   // ── Summary table ──────────────────────────────────────────
   let summaryHTML = `
