@@ -1337,16 +1337,13 @@
 
   /* ── ZOOM TOGGLE BUTTON ── */
   #btn-hand-zoom {
-    position: absolute;
-    right: 8px;
-    bottom: 0;
     background: rgba(0,0,0,0.45);
     border: 1px solid rgba(201,168,76,0.35);
     color: rgba(201,168,76,0.7);
     border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    font-size: 0.85rem;
+    width: 32px;
+    height: 32px;
+    font-size: 0.9rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1354,6 +1351,9 @@
     z-index: 55;
     transition: all 0.2s;
     user-select: none;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
   #btn-hand-zoom:hover { background: rgba(201,168,76,0.15); border-color: var(--gold); color: var(--gold-light); }
   #btn-hand-zoom.zoomed { background: rgba(201,168,76,0.2); border-color: var(--gold); color: var(--gold); }
@@ -1383,7 +1383,7 @@
   </div>
   <div class="mode-grid" id="mode-grid">
     <button class="mode-btn active-mode" id="mode-beginner" onclick="selectMode('beginner')">
-      <span class="mode-icon">🌱</span>Normal
+      <span class="mode-icon">🌱</span>Beginner
       <span class="mode-req">Open to all</span>
     </button>
     <button class="mode-btn" id="mode-intermediate" onclick="selectMode('intermediate')" disabled>
@@ -1515,7 +1515,7 @@
       <div class="legend-mode-row">
         <div class="legend-mode-icon">🌱</div>
         <div style="flex:1;">
-          <div class="legend-mode-name">Normal Mode</div>
+          <div class="legend-mode-name">Beginner Mode</div>
           <div class="legend-mode-desc">Open to all players. NPCs play straightforward — no card counting, no advanced strategy.</div>
         </div>
         <div class="legend-mode-lock unlocked">✔ Always<br>unlocked</div>
@@ -1777,11 +1777,11 @@
       <button class="btn-sm btn-pass-big" id="btn-pass" onclick="playerPass()" disabled>Pass</button>
       <button class="btn-sm btn-play btn-play-big" id="btn-play" onclick="playerPlay()" disabled>Play</button>
     </div>
-    <div style="position:relative;width:100%">
-      <div id="hand-scroll-wrap">
-        <div id="hand-container"></div>
-      </div>
+    <div style="position:relative;width:100%;display:flex;justify-content:flex-end;padding-right:8px;margin-bottom:2px;">
       <button id="btn-hand-zoom" title="Toggle card zoom" onclick="toggleHandZoom()">🔍</button>
+    </div>
+    <div id="hand-scroll-wrap">
+      <div id="hand-container"></div>
     </div>
   </div>
 
@@ -3857,7 +3857,7 @@ function showScoreboard() {
   loadScores();
   const pnames = [playerCustomName, 'Ace', 'Rex', 'Ivy'];
   const pshort = [playerCustomName.length > 5 ? playerCustomName.slice(0,5)+'…' : playerCustomName, 'Ace', 'Rex', 'Ivy'];
-  const modeLabels = { beginner:'Normal', intermediate:'Intermediate', hard:'Hard', pro:'Pro' };
+  const modeLabels = { beginner:'Beginner', intermediate:'Intermediate', hard:'Hard', pro:'Pro' };
 
   // ── Summary table ──────────────────────────────────────────
   let summaryHTML = `
