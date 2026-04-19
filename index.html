@@ -837,6 +837,7 @@
 
     /* ── FORFEIT BUTTON ── */
     .btn-forfeit { left: 4px; top: 4px; padding: 3px 8px; font-size: 0.68rem; }
+    #btn-hand-zoom { left: 4px; top: 38px; width: 26px; height: 26px; font-size: 0.75rem; }
 
     /* ── TOAST ── */
     #toast { top: calc(14vh + 44px); bottom: auto; font-size: 0.76rem; padding: 5px 12px; }
@@ -1308,6 +1309,7 @@
     display: flex;
     align-items: flex-end;
     justify-content: center;
+    position: relative;
   }
   #hand-scroll-wrap::-webkit-scrollbar { display: none; }
   #hand-container.hand-zoomed .hand-card {
@@ -1337,21 +1339,23 @@
 
   /* ── ZOOM TOGGLE BUTTON ── */
   #btn-hand-zoom {
+    position: absolute;
+    left: 12px;
+    top: 52px;
     background: rgba(0,0,0,0.45);
-    border: 1px solid rgba(201,168,76,0.35);
-    color: rgba(201,168,76,0.7);
+    border: 1px solid rgba(201,168,76,0.4);
+    color: rgba(201,168,76,0.75);
     border-radius: 50%;
-    width: 32px;
-    height: 32px;
-    font-size: 0.9rem;
+    width: 30px;
+    height: 30px;
+    font-size: 0.85rem;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    z-index: 55;
+    z-index: 15;
     transition: all 0.2s;
     user-select: none;
-    flex-shrink: 0;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
@@ -1740,6 +1744,7 @@
 
   <!-- Forfeit button: upper-left -->
   <button class="btn-forfeit" id="btn-forfeit" onclick="forfeitGame()">🏳 Forfeit</button>
+  <button id="btn-hand-zoom" title="Toggle card zoom" onclick="toggleHandZoom()">🔍</button>
 
   <!-- Top NPC (Player 3) -->
   <div id="npc-top" class="npc-zone">
@@ -1790,9 +1795,6 @@
       <button class="btn-sm btn-pass-big" id="btn-pass" onclick="playerPass()" disabled>Pass</button>
       <div style="width:10px;flex-shrink:0"></div>
       <button class="btn-sm btn-play btn-play-big" id="btn-play" onclick="playerPlay()" disabled>Play</button>
-    </div>
-    <div style="position:relative;width:100%;display:flex;justify-content:flex-end;padding-right:8px;margin-bottom:2px;">
-      <button id="btn-hand-zoom" title="Toggle card zoom" onclick="toggleHandZoom()">🔍</button>
     </div>
     <div id="hand-scroll-wrap">
       <div id="hand-container"></div>
@@ -2366,13 +2368,17 @@ function renderNpc(idx, zoneId, cardsId, countId, nameId) {
 // ── Card zoom: toggle button, double-click, and pinch-to-zoom ──
 function toggleHandZoom(forceState) {
   handZoomed = (forceState !== undefined) ? forceState : !handZoomed;
+  // Sync discard zoom to match hand zoom
+  discardZoomed = handZoomed;
+  const pile = document.getElementById('discard-pile');
+  if (pile) pile.classList.toggle('discard-zoomed', discardZoomed);
   const btn = document.getElementById('btn-hand-zoom');
   if (handZoomed) {
     if (btn) { btn.classList.add('zoomed'); btn.title = 'Normal size'; }
   } else {
     if (btn) { btn.classList.remove('zoomed'); btn.title = 'Bigger numbers'; }
   }
-  // Re-render with larger/normal font — card size and fan layout stay the same
+  // Re-render hand with larger/normal font
   renderHand();
 }
 
@@ -2427,7 +2433,11 @@ function toggleDiscardZoom() {
 }
 
 function resetHandZoom() {
-  if (handZoomed) toggleHandZoom(false);
+  if (handZoomed) {
+    toggleHandZoom(false); // also resets discardZoomed via toggleHandZoom
+  } else if (discardZoomed) {
+    resetDiscardZoom();
+  }
 }
 
 function resetDiscardZoom() {
@@ -2479,9 +2489,11 @@ function renderHand() {
     // Font size: 30% bigger when zoomed, fixed card layout
     const rankSize = (isMobile ? 1.08 : 1.39) * fontZoom;
     const suitSize = (isMobile ? 1.38 : 2.28) * fontZoom;
+    // When zoomed, push suit down so it doesn't overlap the rank number
+    const suitTopOffset = handZoomed ? '58%' : '50%';
     el.innerHTML = `
       <div class="rank" style="font-size:${rankSize}rem">${card.rank}</div>
-      <div class="center-suit" style="font-size:${suitSize}rem">${card.suit}</div>
+      <div class="center-suit" style="font-size:${suitSize}rem;top:${suitTopOffset}">${card.suit}</div>
     `;
 
     // Always set dimensions inline so JS positioning matches visual size
@@ -2527,6 +2539,9 @@ function renderHand() {
 function renderDiscardPile() {
   const pile = document.getElementById('discard-pile');
   pile.innerHTML = '';
+
+  // Re-apply zoom class based on current state
+  pile.classList.toggle('discard-zoomed', discardZoomed);
 
   // Double-click on discard pile to zoom
   pile.ondblclick = (e) => {
@@ -4460,6 +4475,12 @@ function mpGuestStartGame(data){
 function mpSetupGameScreen(seats){
   document.getElementById('splash').style.display='none';
   document.getElementById('game').style.display='block';
+  // Hide forfeit in MP — abandoning mid-game would break it for others
+  const ff = document.getElementById('btn-forfeit');
+  if (ff) ff.style.display = 'none';
+  // Move zoom button up since forfeit is hidden
+  const zb = document.getElementById('btn-hand-zoom');
+  if (zb) zb.style.top = '12px';
   const lbl=document.getElementById('player-name-label');
   if(lbl)lbl.textContent=mpSeats[mpMySeat].name;
 
@@ -4601,6 +4622,12 @@ function mpDestroy(){
   if(mpPeer){try{mpPeer.destroy();}catch(e){}mpPeer=null;}
   mpIsHost=false;mpRoomCode=null;mpSeats=[];mpMySeat=-1;mpGameMode='single';
   mpNpcSlots=[false,false,false,false];mpTurnToken=0;
+  // Restore forfeit button for single-player
+  const ff = document.getElementById('btn-forfeit');
+  if (ff) ff.style.display = '';
+  // Restore zoom button position
+  const zb = document.getElementById('btn-hand-zoom');
+  if (zb) zb.style.top = '';
 }
 
 </script>
