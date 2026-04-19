@@ -805,7 +805,7 @@
       width: 44px; height: 62px;
       border-radius: 6px; padding: 3px;
     }
-    .hand-card .rank { font-size: 0.78rem; }
+    .hand-card .rank { font-size: 0.85rem; }
     .hand-card .center-suit { font-size: 1.2rem; }
 
     /* ── RANK BADGE (inline next to player name) ── */
@@ -2364,7 +2364,7 @@ function renderHand() {
     el.dataset.idx = i;
 
     // Larger font when zoomed
-    const rankSize = (isMobile ? 0.78 : 1.21) * zoom;
+    const rankSize = (isMobile ? 0.85 : 1.21) * zoom;
     const suitSize = (isMobile ? 1.2 : 1.98) * zoom;
     el.innerHTML = `
       <div class="rank" style="font-size:${rankSize}rem">${card.rank}</div>
