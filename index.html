@@ -3159,20 +3159,8 @@ function npcTurn() {
   const play = findBestNpcPlay(hand, lastPlay, firstTurn && idx === openingPlayer);
 
   if (!play) {
-    // Host broadcasts NPC pass to all guests
-    if (mpGameMode === 'vs_human' && mpIsHost) {
-      const globalSeat = (mpMySeat + idx) % 4;
-      const msg = {type:'pass', seat:globalSeat};
-      mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
-    }
     doPass(idx);
   } else {
-    // Host broadcasts NPC play to all guests
-    if (mpGameMode === 'vs_human' && mpIsHost) {
-      const globalSeat = (mpMySeat + idx) % 4;
-      const msg = {type:'play', seat:globalSeat, cards:play.cards, playType:play.type, subtype:play.subtype};
-      mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
-    }
     executePlay(idx, play.cards, play);
   }
 }
@@ -4895,7 +4883,8 @@ function mpGuestStartGame(data){
   mpGameMode='vs_human';
   mpSeats=data.seats.map(s=>({name:s.name,conn:null}));
   mpMySeat=data.mySeat;
-  mpNpcSlots=data.npcSeats.slice();
+  // Rotate npcSlots to guest-local perspective
+  mpNpcSlots=[0,1,2,3].map(li=>data.npcSeats[(mpMySeat+li)%4]);
   mpTurnToken=0;
 
   // Guest just sets up hands temporarily until first sync arrives
