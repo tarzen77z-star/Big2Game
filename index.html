@@ -298,7 +298,7 @@
   #discard-area {
     position: absolute;
     top: 85px;
-    bottom: 210px;
+    bottom: 315px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -332,8 +332,8 @@
     display: flex;
     flex-direction: column;
     gap: 5px;
-    min-width: 380px;
-    max-width: 480px;
+    min-width: 400px;
+    max-width: 520px;
     background: rgba(0,0,0,0.28);
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 10px;
@@ -341,7 +341,7 @@
     align-items: flex-start;
     overflow-y: auto;
     overflow-x: hidden;
-    max-height: calc(100vh - 310px);
+    max-height: calc(100vh - 460px);
     scrollbar-width: thin;
     scrollbar-color: rgba(201,168,76,0.3) transparent;
   }
@@ -355,7 +355,7 @@
     gap: 3px;
     flex-wrap: nowrap;
     width: 100%;
-    min-height: 96px;
+    min-height: 107px;
   }
   .discard-row .play-card {
     flex-shrink: 0;
@@ -407,21 +407,21 @@
 
   /* ── PLAY CARD ── */
   .play-card {
-    width: 62px; height: 88px;
+    width: 70px; height: 99px;
     background: var(--card-bg);
-    border-radius: 7px;
+    border-radius: 8px;
     display: flex; flex-direction: column;
     align-items: center; justify-content: space-between;
-    padding: 4px;
+    padding: 5px;
     box-shadow: 2px 3px 10px rgba(0,0,0,0.5);
     position: relative;
     cursor: default;
     user-select: none;
     flex-shrink: 0;
   }
-  .play-card .rank { font-size: 1.26rem; font-weight: 700; line-height: 1; }
+  .play-card .rank { font-size: 1.21rem; font-weight: 700; line-height: 1; align-self: flex-start; padding-left: 2px; }
   .play-card .suit { font-size: 1.05rem; }
-  .play-card .center-suit { font-size: 1.5rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); }
+  .play-card .center-suit { font-size: 1.98rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); }
   .play-card.red .rank, .play-card.red .suit, .play-card.red .center-suit { color: var(--card-red); }
   .play-card.black .rank, .play-card.black .suit, .play-card.black .center-suit { color: var(--card-black); }
   .corner-top { position: absolute; top: 3px; left: 4px; text-align: center; }
@@ -552,8 +552,8 @@
   }
   .hand-card.red .rank, .hand-card.red .center-suit { color: var(--card-red); }
   .hand-card.black .rank, .hand-card.black .center-suit { color: var(--card-black); }
-  .hand-card .rank { font-size: 1.21rem; font-weight: 700; align-self: flex-start; padding-left: 2px; }
-  .hand-card .center-suit { font-size: 1.98rem; }
+  .hand-card .rank { font-size: 1.21rem; font-weight: 700; align-self: flex-start; padding-left: 2px; position: relative; z-index: 1; }
+  .hand-card .center-suit { font-size: 1.98rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 
   /* ── MODAL ── */
   #modal-overlay {
@@ -636,16 +636,15 @@
 
   /* Newest discard group — glowing highlight, sized to fit in pile */
   .play-card.newest {
-    width: 68px !important;
-    height: 96px !important;
+    width: 76px !important;
+    height: 107px !important;
     box-shadow: 0 0 0 2px #7fffaa, 0 0 14px rgba(100,255,150,0.5) !important;
     animation: newcard 0.38s cubic-bezier(0.22,1,0.36,1);
     position: relative;
     z-index: 5;
   }
-  .play-card.newest .corner-top,
-  .play-card.newest .corner-bot { font-size: 1.05rem; }
-  .play-card.newest .center-suit { font-size: 1.6rem !important; }
+  .play-card.newest .rank { font-size: 1.3rem !important; }
+  .play-card.newest .center-suit { font-size: 2.1rem !important; }
   @keyframes newcard {
     0%  { transform: scale(0.78) translateY(-8px); opacity: 0.2; }
     60% { transform: scale(1.04) translateY(1px);  opacity: 1;   }
@@ -739,7 +738,7 @@
     /* ── DISCARD AREA ── */
     #discard-area {
       top: 62px;
-      bottom: 160px;
+      bottom: 230px;
       transform: translateX(-50%);
       justify-content: center;
       gap: 2px;
@@ -760,14 +759,15 @@
     .singles-row { gap: 3px !important; }
 
     /* ── DISCARD PLAY CARDS ── */
-    .play-card { width: 38px !important; height: 54px !important; padding: 2px; }
+    .play-card { width: 44px !important; height: 62px !important; padding: 3px; }
     .play-card .rank { font-size: 0.68rem; }
     .play-card .suit { font-size: 0.6rem; }
-    .play-card .center-suit { font-size: 0.95rem !important; }
+    .play-card .rank { font-size: 0.85rem !important; }
+    .play-card .center-suit { font-size: 1.2rem !important; }
     .corner-top { top: 2px; left: 2px; }
     .corner-bot { bottom: 2px; right: 2px; }
-    .play-card.newest { width: 44px !important; height: 62px !important; }
-    .play-card.newest .center-suit { font-size: 1.1rem !important; }
+    .play-card.newest { width: 48px !important; height: 68px !important; }
+    .play-card.newest .center-suit { font-size: 1.35rem !important; }
 
     /* ── LAST PLAY INFO ── */
     #last-play-info {
@@ -1665,9 +1665,9 @@
   <div id="scoreboard">
     <h3>🏆 Standings</h3>
     <div class="score-row"><span style="display:flex;align-items:center;gap:4px;"><span id="sc-p1-name">You</span><div class="rank-badge-sm beginner" id="sc-p1-badge"></div></span><span id="sc-p1">0</span></div>
-    <div class="score-row"><span>NPC 2</span><span id="sc-p2">0</span></div>
-    <div class="score-row"><span>NPC 3</span><span id="sc-p3">0</span></div>
-    <div class="score-row"><span>NPC 4</span><span id="sc-p4">0</span></div>
+    <div class="score-row"><span>Ace</span><span id="sc-p2">0</span></div>
+    <div class="score-row"><span>Rex</span><span id="sc-p3">0</span></div>
+    <div class="score-row"><span>Ivy</span><span id="sc-p4">0</span></div>
     <div id="games-played">Games played: 0</div>
   </div>
 
@@ -1676,7 +1676,7 @@
 
   <!-- Top NPC (Player 3) -->
   <div id="npc-top" class="npc-zone">
-    <div class="npc-name" id="name-p3">NPC 3</div>
+    <div class="npc-name" id="name-p3">Rex</div>
     <div class="npc-cards" id="cards-p3"></div>
   </div>
 
@@ -1685,14 +1685,14 @@
 
   <!-- Right NPC (Player 2) -->
   <div id="npc-right" class="npc-zone">
-    <div class="npc-name" id="name-p2">NPC 2</div>
+    <div class="npc-name" id="name-p2">Ace</div>
     <div class="npc-cards" id="cards-p2"></div>
     <span id="count-p2" style="display:none">13</span>
   </div>
 
   <!-- Left NPC (Player 4) -->
   <div id="npc-left" class="npc-zone">
-    <div class="npc-name" id="name-p4">NPC 4</div>
+    <div class="npc-name" id="name-p4">Ivy</div>
     <div class="npc-cards" id="cards-p4"></div>
     <span id="count-p4" style="display:none">13</span>
   </div>
@@ -2482,8 +2482,8 @@ function buildPlayCard(card) {
   const el = document.createElement('div');
   el.className = 'play-card ' + (RED_SUITS.has(card.suit) ? 'red' : 'black');
   el.innerHTML = `
-    <div class="corner-top"><div class="rank">${card.rank}</div><div class="suit">${card.suit}</div></div>
-    <div class="corner-bot"><div class="rank">${card.rank}</div><div class="suit">${card.suit}</div></div>
+    <div class="rank">${card.rank}</div>
+    <div class="center-suit">${card.suit}</div>
   `;
   return el;
 }
@@ -2499,7 +2499,7 @@ function updateTurnIndicator() {
     document.getElementById('turn-indicator').textContent = names[currentPlayer] + extra;
     return;
   }
-  const names = [playerCustomName+"'s turn",'NPC 2\'s turn','NPC 3\'s turn','NPC 4\'s turn'];
+  const names = [playerCustomName+"'s turn",'Ace\'s turn','Rex\'s turn','Ivy\'s turn'];
   document.getElementById('turn-indicator').textContent = names[currentPlayer] + extra;
 }
 
@@ -3488,7 +3488,7 @@ function combinations(arr, k) {
 //  GAME COMMENTARY
 // ════════════════════════════════════════
 function generateCommentary(winnerIdx, raw, mults, gameDeltas) {
-  const names = [playerCustomName, 'NPC 2', 'NPC 3', 'NPC 4'];
+  const names = [playerCustomName, 'Ace', 'Rex', 'Ivy'];
   const wName = names[winnerIdx];
   const isHuman = winnerIdx === 0;
 
@@ -3713,7 +3713,7 @@ function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas, namesOverride) 
       return li === 0 ? n + ' (You)' : n;
     });
   } else {
-    names = [playerCustomName + ' (You)', 'NPC 2', 'NPC 3', 'NPC 4'];
+    names = [playerCustomName + ' (You)', 'Ace', 'Rex', 'Ivy'];
   }
 
   const banner = document.getElementById('winner-banner');
@@ -3760,8 +3760,8 @@ function endSession() {
 
 function showScoreboard() {
   loadScores();
-  const pnames = [playerCustomName, 'NPC 2', 'NPC 3', 'NPC 4'];
-  const pshort = [playerCustomName.length > 5 ? playerCustomName.slice(0,5)+'…' : playerCustomName, 'NPC2', 'NPC3', 'NPC4'];
+  const pnames = [playerCustomName, 'Ace', 'Rex', 'Ivy'];
+  const pshort = [playerCustomName.length > 5 ? playerCustomName.slice(0,5)+'…' : playerCustomName, 'Ace', 'Rex', 'Ivy'];
   const modeLabels = { beginner:'Beginner', intermediate:'Intermediate', hard:'Hard', pro:'Pro' };
 
   // ── Summary table ──────────────────────────────────────────
@@ -3913,7 +3913,7 @@ function updatePlayerName(val) {
 }
 
 function playerName(idx) {
-  return [playerCustomName,'NPC 2','NPC 3','NPC 4'][idx];
+  return [playerCustomName,'Ace','Rex','Ivy'][idx];
 }
 
 // ════════════════════════════════════════
