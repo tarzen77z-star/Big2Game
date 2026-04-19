@@ -1721,7 +1721,7 @@
 
   <!-- Scoreboard -->
   <div id="scoreboard">
-    <h3>🏆 Standings</h3>
+    <h3>Standings</h3>
     <div class="score-row"><span style="display:flex;align-items:center;gap:4px;"><span id="sc-p1-name">You</span><div class="rank-badge-sm beginner" id="sc-p1-badge"></div></span><span id="sc-p1">0</span></div>
     <div class="score-row"><span id="sc-p2-name">Ace</span><span id="sc-p2">0</span></div>
     <div class="score-row"><span id="sc-p3-name">Rex</span><span id="sc-p3">0</span></div>
@@ -1773,8 +1773,10 @@
     <div id="player-controls">
       <button class="btn-sm btn-sort" onclick="sortByRank()">Sort by Rank</button>
       <button class="btn-sm btn-sort" onclick="sortBySuit()">Sort by Suit</button>
-      <div style="width:20px;flex-shrink:0"></div>
+      <div id="player-card-count" style="min-width:36px;text-align:center;font-family:'Playfair Display',serif;font-size:0.95rem;font-weight:700;color:var(--gold-light);background:rgba(0,0,0,0.35);border:1px solid rgba(201,168,76,0.3);border-radius:12px;padding:3px 10px;flex-shrink:0;">13</div>
+      <div style="width:12px;flex-shrink:0"></div>
       <button class="btn-sm btn-pass-big" id="btn-pass" onclick="playerPass()" disabled>Pass</button>
+      <div style="width:10px;flex-shrink:0"></div>
       <button class="btn-sm btn-play btn-play-big" id="btn-play" onclick="playerPlay()" disabled>Play</button>
     </div>
     <div style="position:relative;width:100%;display:flex;justify-content:flex-end;padding-right:8px;margin-bottom:2px;">
@@ -1987,7 +1989,9 @@ function saveGameState() {
     currentRoundPlays,
     globalDiscardedCards: [...globalDiscardedCards],
     selectedMode,
-    gameActive
+    gameActive,
+    handZoomed,
+    discardZoomed
   };
   localStorage.setItem('big2_gamestate', JSON.stringify(state));
 }
@@ -1998,6 +2002,9 @@ function loadGameState() {
     if (!raw) return false;
     const state = JSON.parse(raw);
     if (!state || !state.gameActive || !state.hands) return false;
+  // Restore zoom states
+  if (state.handZoomed) { handZoomed = true; }
+  if (state.discardZoomed) { discardZoomed = true; }
 
     hands                = state.hands;
     currentPlayer        = state.currentPlayer;
@@ -2231,6 +2238,8 @@ function beatsPlay(play, reference) {
 //  DEAL & START
 // ════════════════════════════════════════
 function startGame() {
+  resetHandZoom();
+  resetDiscardZoom();
   loadScores();
   const deck = shuffle(buildDeck());
   hands = [[],[],[],[]];
@@ -2468,6 +2477,18 @@ function renderHand() {
   // Initialise pinch-to-zoom (safe to call multiple times)
   initPinchZoom();
   document.getElementById('player-name-label').classList.toggle('active', currentPlayer === 0);
+  // Update card counter with colour based on count
+  const countEl = document.getElementById('player-card-count');
+  if (countEl) {
+    const cnt = hands[0].length;
+    countEl.textContent = cnt;
+    const color = cnt >= 13 ? '#ff6b6b'
+                : cnt >= 10 ? '#ff9f40'
+                : cnt >= 8  ? '#ffd700'
+                :              '#7fffaa';
+    countEl.style.color = color;
+    countEl.style.borderColor = color.replace(')', ',0.4)').replace('rgb', 'rgba');
+  }
   // Last card glow on player area
   const playerArea = document.getElementById('player-area');
   playerArea.classList.toggle('last-card-alert', hands[0].length === 1);
@@ -2866,7 +2887,6 @@ function executePlay(playerIdx, cards, play) {
     `${playerName(playerIdx)} played: ${typeLabel}`;
 
   selectedCards = [];
-  resetHandZoom(); // reset zoom after play
   advanceTurn(playerIdx);
 
   // Check win
@@ -2904,7 +2924,6 @@ function doPass(playerIdx) {
     lastPlay = null;
     passCount = 0;
     currentRoundPlays = [];
-    resetDiscardZoom(); // new round — reset zoom
     toast(playerName(currentPlayer) + ' controls the pile!');
     document.getElementById('last-play-info').textContent = 'New round – play anything!';
   }
@@ -3729,6 +3748,8 @@ function penaltyMultiplier(cardCount) {
 
 function endGame(winnerIdx) {
   gameActive = false;
+  resetHandZoom();
+  resetDiscardZoom();
   gamesPlayed++;
 
   // Step 1: Apply multiplier to each player's raw card count
@@ -3831,7 +3852,7 @@ function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas, namesOverride) 
     const color = i === winnerLocalIdx ? '#7fffaa' : delta >= 0 ? '#aaffcc' : '#ff9999';
     const multLabel = mults[i] > 1 ? ` ×${mults[i]}` : '';
     const cardInfo  = i === winnerLocalIdx
-      ? '0 cards left 🏆'
+      ? '🏆'
       : `${raw[i]} card${raw[i] !== 1 ? 's' : ''}${multLabel} left`;
     row.innerHTML =
       `<span>${names[i]}</span>` +
@@ -3944,7 +3965,7 @@ function showScoreboard() {
         const dCol = delta > 0 ? '#7fffaa' : delta < 0 ? '#ff9999' : 'var(--text-dim)';
         const runScore = g.runningScores ? g.runningScores[i] : '—';
         const multLabel = g.mults && g.mults[i] > 1 ? `×${g.mults[i]}` : '—';
-        const cardsStr = isWinner ? '0 🏆' : (g.cards[i] !== undefined ? g.cards[i] : '?');
+        const cardsStr = isWinner ? '🏆' : (g.cards[i] !== undefined ? g.cards[i] : '?');
         const nameCol = isWinner ? '#7fffaa' : 'var(--text-light)';
 
         histHTML += `<tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
