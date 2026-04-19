@@ -4669,7 +4669,8 @@ function mpBroadcastSync(){
     globalDiscardedCards:[...globalDiscardedCards],
     gameActive,
     mpSessionScores: mpSessionScores.slice(),  // cumulative session scores (host-local)
-    mpSeatNames: mpSeats.map(s=>s.name)        // seat names (host-local)
+    mpSeatNames: mpSeats.map(s=>s.name),       // seat names (host-local)
+    npcSeats: Array.from({length:4},(_,i)=>i>=mpSeats.length) // which seats are NPCs (host-local)
   };
   mpConnections.forEach((conn,ci)=>{
     // Rotate snapshot so that guest's own hand is at index 0
@@ -4706,7 +4707,8 @@ function mpBroadcastSync(){
       mySeatOnHost:guestLocalFromHost,
       mpSessionScores: guestSessionScores,
       mpSeatNames: guestSeatNames,
-      seatRankScores: guestSeatRankScores
+      seatRankScores: guestSeatRankScores,
+      npcSeats: guestNpcSeats
     };
     try{conn.send(guestSnapshot);}catch(e){}
   });
@@ -4959,11 +4961,15 @@ function mpGuestApplySync(snap){
   }
   if(snap.mpSeatNames){
     mpSessionNames=[...snap.mpSeatNames];
-    // Update mpSeats names
     snap.mpSeatNames.forEach((name,li)=>{
       const globalSeat=(mpMySeat+li)%4;
       if(mpSeats[globalSeat]) mpSeats[globalSeat].name=name;
     });
+  }
+  // Always update NPC slots from sync so score labels hide correctly
+  if(snap.npcSeats){
+    mpNpcSlots=snap.npcSeats.slice();
+    mpNpcSlots[0]=false; // local 0 is always the guest themselves
   }
   // snap.hands[0] is already the guest's own hand (rotated by host)
   hands=snap.hands.map(h=>h.map(c=>({rank:String(c.rank),suit:String(c.suit)})));
@@ -4997,16 +5003,16 @@ function mpGuestApplySync(snap){
     if(gl) gl.textContent='✦ '+snapRankScores[0];
   }
   // Update opponent zones (local idx 1→score-p2, 2→score-p3, 3→score-p4)
-  // Always show and update for any human player (non-zero score or known seat)
   const zoneScoreMap=[{localIdx:1,scoreId:'score-p2'},{localIdx:2,scoreId:'score-p3'},{localIdx:3,scoreId:'score-p4'}];
   zoneScoreMap.forEach(({localIdx,scoreId})=>{
     const el=document.getElementById(scoreId);
     if(!el) return;
-    const globalSeat=(mpMySeat+localIdx)%4;
-    const isNpc=mpNpcSlots[globalSeat]!==false&&mpNpcSlots[globalSeat]!==undefined&&mpNpcSlots[globalSeat]===true;
+    const isNpc = mpNpcSlots[localIdx]===true;
     if(!isNpc){
-      el.style.display='block'; // ensure visible for human players
+      el.style.display='block';
       el.textContent='✦ '+(snapRankScores[localIdx]||0);
+    } else {
+      el.style.display='none';
     }
   });
   // Enable controls only if it's THIS guest's turn (local index 0)
