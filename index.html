@@ -2185,6 +2185,9 @@ function saveGameState() { saveGameStateForMode(); }
 function loadGameState() { return loadGameStateForMode(); }
 
 function clearGameState() {
+  // Clear per-mode key (current selected mode)
+  localStorage.removeItem(modeKey(selectedMode, 'big2_gamestate'));
+  // Also clear legacy key in case it exists from old save
   localStorage.removeItem('big2_gamestate');
 }
 
@@ -4320,7 +4323,8 @@ if (sc1n) sc1n.textContent = playerCustomName;
 
 // ── Resume saved game on page load ────────────────────────
 (function checkResume() {
-  const hasSaved = !!localStorage.getItem('big2_gamestate');
+  // Check per-mode key for current selected mode
+  const hasSaved = hasSavedGameForMode(selectedMode);
   if (!hasSaved) return;
 
   // Inject a "Resume Game" button above the Start button on splash
