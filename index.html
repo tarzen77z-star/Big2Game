@@ -603,24 +603,68 @@
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   /* ── ACTIVE PLAYER HIGHLIGHT ── */
-  .npc-zone.active .npc-name { color: #7fffaa; text-shadow: 0 0 10px rgba(100,255,150,0.6); }
-  .npc-zone.active .npc-card-single {
-    border-color: rgba(100,255,150,0.5) !important;
-    box-shadow: 0 0 12px rgba(100,255,150,0.4), 2px 2px 8px rgba(0,0,0,0.5) !important;
+  @keyframes zone-pulse {
+    0%   { box-shadow: 0 0 0 2px rgba(100,255,150,0.5), 0 0 18px rgba(100,255,150,0.25); }
+    50%  { box-shadow: 0 0 0 3px rgba(100,255,150,0.95), 0 0 36px rgba(100,255,150,0.55); }
+    100% { box-shadow: 0 0 0 2px rgba(100,255,150,0.5), 0 0 18px rgba(100,255,150,0.25); }
+  }
+  @keyframes name-flash {
+    0%,100% { color: #7fffaa; text-shadow: 0 0 8px rgba(100,255,150,0.6); }
+    50%     { color: #fff;    text-shadow: 0 0 20px rgba(100,255,150,1), 0 0 6px #fff; }
+  }
+  @keyframes card-glow {
+    0%,100% { border-color: rgba(100,255,150,0.5) !important; box-shadow: 0 0 10px rgba(100,255,150,0.35), 2px 2px 8px rgba(0,0,0,0.5) !important; }
+    50%     { border-color: rgba(100,255,150,1)   !important; box-shadow: 0 0 30px rgba(100,255,150,0.85), 0 0 10px rgba(100,255,150,0.6), 2px 2px 8px rgba(0,0,0,0.5) !important; }
   }
 
-  /* Player turn – glowing name badge + subtle area glow */
+  /* Active NPC zone: glowing pill background + flashing name + glowing card */
+  .npc-zone.active {
+    background: rgba(100,255,150,0.07);
+    border-radius: 14px;
+    padding: 6px 10px;
+    animation: zone-pulse 1.1s ease-in-out infinite;
+  }
+  .npc-zone.active .npc-name {
+    color: #7fffaa;
+    font-weight: 700;
+    animation: name-flash 1.1s ease-in-out infinite;
+  }
+  .npc-zone.active .npc-card-single {
+    animation: card-glow 1.1s ease-in-out infinite;
+  }
+
+  /* Player turn – same pulse strength on player name badge */
   #player-area.your-turn {
-    box-shadow: 0 -4px 32px rgba(100,255,150,0.15);
     border-radius: 12px 12px 0 0;
   }
   #player-name-label.active {
     color: #0d2010;
     background: linear-gradient(135deg, #7fffaa, #50c878);
-    box-shadow: 0 0 14px rgba(100,255,150,0.55);
     font-weight: 700;
     padding: 2px 12px;
     border-radius: 10px;
+    animation: zone-pulse 1.1s ease-in-out infinite;
+  }
+
+  /* MP human player zones — blue version of same pulse */
+  @keyframes zone-pulse-blue {
+    0%,100% { box-shadow: 0 0 0 2px rgba(100,160,255,0.5), 0 0 18px rgba(100,160,255,0.25); }
+    50%     { box-shadow: 0 0 0 3px rgba(100,160,255,0.95), 0 0 36px rgba(100,160,255,0.55); }
+  }
+  @keyframes name-flash-blue {
+    0%,100% { color: #a0c4ff; text-shadow: 0 0 8px rgba(100,160,255,0.6); }
+    50%     { color: #fff;    text-shadow: 0 0 20px rgba(100,160,255,1), 0 0 6px #fff; }
+  }
+  .npc-zone.active.mp-human {
+    background: rgba(100,160,255,0.07);
+    animation: zone-pulse-blue 1.1s ease-in-out infinite;
+  }
+  .npc-zone.active.mp-human .npc-name {
+    animation: name-flash-blue 1.1s ease-in-out infinite;
+  }
+  .npc-zone.active.mp-human .npc-card-single {
+    border-color: rgba(100,160,255,0.8) !important;
+    box-shadow: 0 0 20px rgba(100,160,255,0.6), 2px 2px 8px rgba(0,0,0,0.5) !important;
   }
 
   /* Newest discard group — glowing highlight, sized to fit in pile */
@@ -784,7 +828,7 @@
       width: 44px !important; height: 62px !important;
       border-radius: 6px; padding: 3px;
     }
-    .hand-card .rank { font-size: 0.85rem !important; }
+    .hand-card .rank { font-size: 0.94rem !important; }
     .hand-card .center-suit { font-size: 1.2rem !important; }
 
     /* ── RANK BADGE (inline next to player name) ── */
@@ -1509,13 +1553,47 @@
       <h3>Quick Tips</h3>
       <div class="legend-scoring">
         <p>• <strong>First play</strong> each game must include the <em>3♦</em> (3 of Diamonds).</p>
-        <p>• Play <strong>singles, pairs, triples, quads,</strong> or any <strong>5-card hand</strong> (straight, flush, full house, four-of-a-kind, straight flush, royal flush).</p>
+        <p>• Play <strong>singles, pairs, triples, quads,</strong> or any <strong>5-card hand</strong>.</p>
         <p>• You must <strong>beat the previous play</strong> with the same number of cards and a higher combination.</p>
         <p>• If everyone else <strong>passes</strong>, you control the next play — throw anything.</p>
         <p>• Card values low→high: <em>3 4 5 6 7 8 9 10 J Q K A 2</em></p>
         <p>• Suit values low→high: <em>♦ ♣ ♥ ♠</em></p>
         <p>• <strong>2♠</strong> is the highest single card in the game.</p>
-        <p>• <strong>Straights:</strong> must be 5 consecutive ranks with <em>no 2</em>, except the special wrap <em>A-2-3-4-5</em> (highest straight). Low→high: <em>3-4-5-6-7 … 10-J-Q-K-A … A-2-3-4-5</em>. <strong>J-Q-K-A-2 is not valid.</strong></p>
+        <p>• <strong>Straights:</strong> 5 consecutive ranks, no 2 allowed except in special wraps. <strong>J-Q-K-A-2 is invalid.</strong></p>
+      </div>
+    </div>
+
+    <!-- FIVE-CARD HAND HIERARCHY -->
+    <div class="legend-section">
+      <h3>5-Card Hand Rankings (low → high)</h3>
+      <div class="legend-scoring" style="font-size:0.85rem">
+        <p style="margin-bottom:6px;color:var(--text-dim);font-style:italic">Within each type, higher cards / suits win. Same type beats same type.</p>
+        <table style="width:100%;border-collapse:collapse;">
+          <tr style="border-bottom:1px solid rgba(201,168,76,0.15)">
+            <td style="padding:5px 4px;font-weight:700;color:var(--gold)">1. Straight</td>
+            <td style="padding:5px 4px;color:var(--text-dim)">5 consecutive ranks, same or mixed suits. Low→high: <em>3-4-5-6-7 … 10-J-Q-K-A … 2-3-4-5-6 … A-2-3-4-5</em></td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(201,168,76,0.15)">
+            <td style="padding:5px 4px;font-weight:700;color:var(--gold)">2. Flush</td>
+            <td style="padding:5px 4px;color:var(--text-dim)">5 cards same suit. Compare highest card, then suit.</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(201,168,76,0.15)">
+            <td style="padding:5px 4px;font-weight:700;color:var(--gold)">3. Full House</td>
+            <td style="padding:5px 4px;color:var(--text-dim)">3-of-a-kind + a pair. Rank of the triple decides winner.</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(201,168,76,0.15)">
+            <td style="padding:5px 4px;font-weight:700;color:var(--gold)">4. Four of a Kind</td>
+            <td style="padding:5px 4px;color:var(--text-dim)">4 cards same rank + any 1 card.</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(201,168,76,0.15)">
+            <td style="padding:5px 4px;font-weight:700;color:var(--gold)">5. Straight Flush</td>
+            <td style="padding:5px 4px;color:var(--text-dim)">5 consecutive ranks, all same suit. Low→high: <em>3-4-5-6-7 … 9-10-J-Q-K … 2-3-4-5-6 … A-2-3-4-5</em></td>
+          </tr>
+          <tr>
+            <td style="padding:5px 4px;font-weight:700;color:#ffd700">6. Royal Flush ♛</td>
+            <td style="padding:5px 4px;color:var(--text-dim)"><strong style="color:var(--gold-light)">10-J-Q-K-A all same suit.</strong> Highest possible 5-card hand.</td>
+          </tr>
+        </table>
       </div>
     </div>
 
@@ -1644,9 +1722,9 @@
   <div id="scoreboard">
     <h3>🏆 Standings</h3>
     <div class="score-row"><span style="display:flex;align-items:center;gap:4px;"><span id="sc-p1-name">You</span><div class="rank-badge-sm beginner" id="sc-p1-badge"></div></span><span id="sc-p1">0</span></div>
-    <div class="score-row"><span>Ace</span><span id="sc-p2">0</span></div>
-    <div class="score-row"><span>Rex</span><span id="sc-p3">0</span></div>
-    <div class="score-row"><span>Ivy</span><span id="sc-p4">0</span></div>
+    <div class="score-row"><span id="sc-p2-name">Ace</span><span id="sc-p2">0</span></div>
+    <div class="score-row"><span id="sc-p3-name">Rex</span><span id="sc-p3">0</span></div>
+    <div class="score-row"><span id="sc-p4-name">Ivy</span><span id="sc-p4">0</span></div>
     <div id="games-played">Games played: 0</div>
   </div>
 
@@ -1760,6 +1838,18 @@ let selectedCards = [];
 let handZoomed = false;    // double-click zoom on player hand
 let discardZoomed = false; // double-click zoom on discard pile
 let scores = [0,0,0,0];
+
+// ── Multiplayer state (declared early so all functions can reference them) ──
+let mpPeer        = null;
+let mpIsHost      = false;
+let mpRoomCode    = null;
+let mpConnections = [];
+let mpHostConn    = null;
+let mpSeats       = [];
+let mpMySeat      = -1;
+let mpGameMode    = 'single';
+let mpNpcSlots    = [false,false,false,false];
+let mpTurnToken   = 0;
 let gamesPlayed = 0;
 let firstTurn = true; // first play of the game
 let openingPlayer = 0; // who has diamond 3
@@ -2082,12 +2172,18 @@ function classifyFive(sorted) {
   // ── Five-card hand hierarchy (subtype rank 0-5) ──
   // straight=0, flush=1, full_house=2, four_of_kind=3, straight_flush=4, royal_flush=5(wrap sf)
   if (isStraight && isFlush) {
-    // Royal flush = A-2-3-4-5 suited (wrapType ace_low) — highest SF
-    // 2-3-4-5-6 suited (wrapType two_low) — second highest SF
+    // Royal Flush = 10-J-Q-K-A suited (normal straight, top card A, no wrap)
+    // All others are Straight Flush, ranked by sfKey:
+    //   A-2-3-4-5 suited (ace_low wrap) → virtual rank 16 (highest SF)
+    //   2-3-4-5-6 suited (two_low wrap) → virtual rank 14
+    //   9-10-J-Q-K suited → top K = rank 10
+    //   3-4-5-6-7 suited → top 7 = rank 4  (lowest SF)
     const sfKey = straightKey(sorted, wrapType);
-    const subtype = (wrapType === 'ace_low') ? 'royal_flush' : 'straight_flush';
-    const subtypeRank = (wrapType === 'ace_low') ? 5 : 4;
-    return { type:'five', subtype, key: sfKey + subtypeRank * 1000, cards: sorted };
+    const isRoyal = !wrapType && sorted[4] && sorted[4].rank === 'A';
+    if (isRoyal) {
+      return { type:'five', subtype:'royal_flush', key: sfKey + 5*1000, cards: sorted };
+    }
+    return { type:'five', subtype:'straight_flush', key: sfKey + 4*1000, cards: sorted };
   }
   if (isFourOfKind) {
     const qrank = Object.keys(rankCounts).find(r => rankCounts[r]===4);
@@ -2204,9 +2300,26 @@ function renderNpc(idx, zoneId, cardsId, countId, nameId) {
 
   // active highlight
   const zone = document.getElementById(zoneId);
-  zone.classList.toggle('active', currentPlayer === idx);
+  const isActive = currentPlayer === idx;
+  zone.classList.toggle('active', isActive);
   // Last card glow
   zone.classList.toggle('last-card-alert', count === 1);
+
+  // Show/hide "thinking…" label under the name
+  const thinkId = zoneId + '-thinking';
+  let thinkEl = document.getElementById(thinkId);
+  if (isActive) {
+    if (!thinkEl) {
+      thinkEl = document.createElement('div');
+      thinkEl.id = thinkId;
+      thinkEl.style.cssText = 'font-size:0.65rem;color:#7fffaa;font-style:italic;font-family:"Crimson Pro",serif;letter-spacing:0.08em;margin-top:-4px;animation:name-flash 1.1s ease-in-out infinite;';
+      thinkEl.textContent = 'thinking…';
+      const nameEl = document.getElementById(nameId);
+      if (nameEl && nameEl.parentNode) nameEl.parentNode.insertBefore(thinkEl, nameEl.nextSibling);
+    }
+  } else {
+    if (thinkEl) thinkEl.remove();
+  }
 }
 
 
@@ -2345,7 +2458,7 @@ function renderHand() {
     el.dataset.idx = i;
 
     // Larger font when zoomed
-    const rankSize = (isMobile ? 0.85 : 1.21) * zoom;
+    const rankSize = (isMobile ? 0.94 : 1.21) * zoom;
     const suitSize = (isMobile ? 1.2 : 1.98) * zoom;
     el.innerHTML = `
       <div class="rank" style="font-size:${rankSize}rem">${card.rank}</div>
@@ -2484,6 +2597,27 @@ function updateScoreboard() {
     document.getElementById('sc-'+id).textContent = scores[i];
   });
   document.getElementById('games-played').textContent = 'Games played: ' + gamesPlayed;
+  // Update names: in MP use actual seat names, otherwise use defaults
+  const scNames = mpScoreboardNames();
+  const n1 = document.getElementById('sc-p1-name');
+  const n2 = document.getElementById('sc-p2-name');
+  const n3 = document.getElementById('sc-p3-name');
+  const n4 = document.getElementById('sc-p4-name');
+  if (n1) n1.textContent = scNames[0];
+  if (n2) n2.textContent = scNames[1];
+  if (n3) n3.textContent = scNames[2];
+  if (n4) n4.textContent = scNames[3];
+}
+
+// Returns display names for scoreboard in local index order [0..3]
+function mpScoreboardNames() {
+  if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
+    return [0,1,2,3].map(li => {
+      const globalSeat = (mpMySeat + li) % 4;
+      return mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('Player '+(globalSeat+1));
+    });
+  }
+  return [playerCustomName, 'Ace', 'Rex', 'Ivy'];
 }
 
 // ════════════════════════════════════════
@@ -2727,6 +2861,17 @@ function playerPass() {
 // ════════════════════════════════════════
 //  GAME LOGIC
 // ════════════════════════════════════════
+function subtypeLabel(subtype) {
+  return {
+    flush:         'Flush',
+    straight:      'Straight',
+    full_house:    'Full House',
+    four_of_kind:  'Four of a Kind',
+    straight_flush:'Straight Flush',
+    royal_flush:   'Royal Flush'
+  }[subtype] || (subtype ? subtype.replace(/_/g,' ') : '');
+}
+
 function executePlay(playerIdx, cards, play) {
   // Remove cards from hand
   hands[playerIdx] = hands[playerIdx].filter(c=>!cards.some(s=>cardKey(s)===cardKey(c)));
@@ -2741,7 +2886,7 @@ function executePlay(playerIdx, cards, play) {
 
   const typeLabel = {
     single:'Single', pair:'Pair', triple:'Three of a Kind',
-    quad:'Four of a Kind', five: play.subtype?.replace(/_/g,' ')
+    quad:'Four of a Kind', five: subtypeLabel(play.subtype)
   }[play.type] || play.type;
   document.getElementById('last-play-info').textContent =
     `${playerName(playerIdx)} played: ${typeLabel}`;
@@ -3978,7 +4123,7 @@ function resumeGame() {
     const typeLabel = {
       single:'Single', pair:'Pair', triple:'Three of a Kind',
       quad:'Four of a Kind'
-    }[lp.type] || (lp.subtype?.replace(/_/g,' ') ?? lp.type);
+    }[lp.type] || subtypeLabel(lp.subtype) || lp.type;
     document.getElementById('last-play-info').textContent =
       playerName(lp.playerIdx) + ' played: ' + typeLabel;
   } else if (!lastPlay) {
@@ -4001,16 +4146,6 @@ function resumeGame() {
 //  Guests only render from sync snapshots + enable/disable their own controls.
 //  Guests send only {type:'play'/'pass'} to host; host validates and executes.
 // ════════════════════════════════════════════════════════════
-let mpPeer        = null;
-let mpIsHost      = false;
-let mpRoomCode    = null;
-let mpConnections = [];   // host only: DataConnection[] to guests
-let mpHostConn    = null; // guest only: DataConnection to host
-let mpSeats       = [];   // [{name}] global seat order
-let mpMySeat      = -1;   // my global seat index
-let mpGameMode    = 'single';
-let mpNpcSlots    = [false,false,false,false]; // global seat → is NPC?
-let mpTurnToken   = 0;
 
 const MP_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 function mpGenCode(){let c='';for(let i=0;i<4;i++)c+=MP_CHARS[Math.floor(Math.random()*MP_CHARS.length)];return c;}
@@ -4310,6 +4445,8 @@ function mpSetupGameScreen(seats){
     const ne=document.getElementById(nameId);if(ne)ne.textContent=(isNpc?'🤖 ':'👤 ')+name;
     const ze=document.getElementById(zoneId);if(ze)ze.classList.toggle('mp-human',!isNpc);
   });
+  // Update scoreboard to show actual MP player names
+  updateScoreboard();
 }
 
 // Guest applies a sync snapshot from host
@@ -4330,7 +4467,7 @@ function mpGuestApplySync(snap){
   // Update last-play-info text
   if(lastPlay){
     const typeLabel={single:'Single',pair:'Pair',triple:'Three of a Kind',quad:'Four of a Kind',
-      five:lastPlay.subtype?.replace(/_/g,' ')}[lastPlay.type]||lastPlay.type;
+      five:subtypeLabel(lastPlay.subtype)}[lastPlay.type]||lastPlay.type;
     document.getElementById('last-play-info').textContent=
       playerName(lastPlay.playerIdx)+' played: '+typeLabel;
   }
