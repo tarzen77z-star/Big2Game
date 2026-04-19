@@ -4572,6 +4572,50 @@ function mpSaveResumeState(){
   localStorage.setItem('mp_resume_host',JSON.stringify(state));
 }
 
+
+function mpSendRejoinSync(conn, guestSeat) {
+  // guestSeat = global seat index of the rejoining guest
+  const guestLocalFromHost = (guestSeat - mpMySeat + 4) % 4;
+  // Rotate hands to guest perspective
+  const guestHands = [];
+  for(let i=0;i<4;i++) guestHands.push(hands[(guestLocalFromHost+i)%4]);
+  const guestCurrentPlayer = (currentPlayer - guestLocalFromHost + 4) % 4;
+  const guestOpeningPlayer = (openingPlayer - guestLocalFromHost + 4) % 4;
+  const guestRoundPlays = currentRoundPlays.map(p=>({
+    ...p, playerIdx:(p.playerIdx-guestLocalFromHost+4)%4
+  }));
+  const guestLastPlay = lastPlay ? {
+    ...lastPlay, playerIdx:(lastPlay.playerIdx-guestLocalFromHost+4)%4
+  } : null;
+  const guestSessionScores = [0,1,2,3].map(li=>(mpSessionScores[(guestLocalFromHost+li)%4]||0));
+  const guestSeatNames = [0,1,2,3].map(li=>mpSeats[(guestLocalFromHost+li)%4]?.name||('Player '+(li+1)));
+  const guestSeatRankScores = [0,1,2,3].map(li=>{
+    const gi=(guestLocalFromHost+li)%4;
+    return gi===0?rankScore:(mpSeatRankScores[gi]||0);
+  });
+  const npcSeatsArr = Array.from({length:4},(_,i)=>i>=mpSeats.length);
+  const snap = {
+    type:'sync',
+    hands:guestHands,
+    hostRankScore:rankScore,
+    seatRankScores:guestSeatRankScores,
+    currentPlayer:guestCurrentPlayer,
+    openingPlayer:guestOpeningPlayer,
+    lastPlay:guestLastPlay,
+    passCount, firstTurn, gameActive,
+    currentRoundPlays:guestRoundPlays,
+    globalDiscardedCards:[...globalDiscardedCards],
+    mpSessionScores:guestSessionScores,
+    mpSeatNames:guestSeatNames,
+    // Extra rejoin info
+    isRejoinSync:true,
+    mySeat:guestSeat,
+    npcSeats:npcSeatsArr,
+    seats:mpSeats.map(s=>({name:s.name}))
+  };
+  try{conn.send(snap);}catch(e){}
+}
+
 function mpBroadcastLobby(){
   const msg={type:'lobby',seats:mpSeats.map(s=>({name:s.name}))};
   mpConnections.forEach(c=>{try{c.send(msg);}catch(e){}});
@@ -4690,18 +4734,13 @@ function mpGuestOnData(data){
     return;
   }
   if(data.type==='sync'){
-    // If game screen not visible yet (rejoin scenario), set it up first
-    const gameEl=document.getElementById('game');
-    if(gameEl&&gameEl.style.display!=='block'&&mpMySeat>=0&&data.hands){
+    if(data.isRejoinSync){
+      // Full rejoin setup
+      if(data.mySeat !== undefined) mpMySeat = data.mySeat;
       mpGameMode='vs_human';
-      // Reconstruct mpSeats from seat count in sync
-      if(!mpSeats.length){
-        const n=data.hands.length||4;
-        mpSeats=Array.from({length:n},(_,i)=>({name:'Player '+(i+1),conn:null}));
-      }
-      // Reconstruct mpNpcSlots: any seat without a human name is NPC
-      mpNpcSlots=[false,false,false,false];
-      // Set up game screen
+      if(data.seats) mpSeats=data.seats.map(s=>({name:s.name,conn:null}));
+      if(data.npcSeats) mpNpcSlots=data.npcSeats.slice();
+      mpNpcSlots[0]=false; // local 0 is always us
       document.getElementById('mp-lobby').classList.remove('open');
       document.getElementById('splash').style.display='none';
       document.getElementById('game').style.display='block';
@@ -4709,7 +4748,24 @@ function mpGuestOnData(data){
       const zb=document.getElementById('btn-hand-zoom');if(zb)zb.style.top='12px';
       const lbl=document.getElementById('player-name-label');
       if(lbl)lbl.textContent=playerCustomName;
+      // Set up zone labels
+      const zoneMap=[
+        {zoneId:'npc-right',nameId:'name-p2',localIdx:1},
+        {zoneId:'npc-top',  nameId:'name-p3',localIdx:2},
+        {zoneId:'npc-left', nameId:'name-p4',localIdx:3},
+      ];
+      if(data.mpSeatNames) zoneMap.forEach(({zoneId,nameId,localIdx})=>{
+        const ne=document.getElementById(nameId);
+        const globalSeat=(mpMySeat+localIdx)%4;
+        const isNpc=mpNpcSlots[globalSeat]!==false;
+        if(ne) ne.textContent=(isNpc?'🤖 ':'👤 ')+(data.mpSeatNames[localIdx]||'Player '+(globalSeat+1));
+        const ze=document.getElementById(zoneId);
+        if(ze) ze.classList.toggle('mp-human',!isNpc);
+        const scoreEl=document.getElementById('score-p'+nameId.replace('name-p',''));
+        if(scoreEl) scoreEl.style.display=isNpc?'none':'block';
+      });
       toast('↩ Rejoined!');
+      mpSetStatus('Rejoined successfully!','mp-status-rejoin');
     }
     mpGuestApplySync(data);
     return;
