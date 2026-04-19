@@ -1792,7 +1792,7 @@
   <!-- Scoreboard -->
   <div id="scoreboard">
     <h3>Standings</h3>
-    <div class="score-row"><span style="display:flex;align-items:center;gap:4px;"><span id="sc-p1-name">You</span><div class="rank-badge-sm beginner" id="sc-p1-badge"></div></span><span id="sc-p1">0</span></div>
+    <div class="score-row"><span id="sc-p1-name">You</span><span id="sc-p1">0</span></div>
     <div class="score-row"><span id="sc-p2-name">Ace</span><span id="sc-p2">0</span></div>
     <div class="score-row"><span id="sc-p3-name">Rex</span><span id="sc-p3">0</span></div>
     <div class="score-row"><span id="sc-p4-name">Ivy</span><span id="sc-p4">0</span></div>
@@ -2068,8 +2068,6 @@ function updateRankUI() {
   if (gl) gl.textContent = '✦ ' + rankScore;
 
   // In-game scoreboard row badge
-  const sc1 = document.getElementById('sc-p1-badge');
-  if (sc1) { sc1.innerHTML = trophySVG(rank.cls); sc1.className = 'rank-badge-sm ' + rank.cls; }
 }
 
 function selectMode(mode) {
@@ -4459,8 +4457,6 @@ function mpHostOnConnect(conn){
   // Always accept connection — rejoin handling decides if there's room
   conn.on('open',()=>{
     if(!gameActive && mpSeats.length>=4){conn.send({type:'full'});return;}
-    // During game: we'll accept and let the rejoin message sort it out
-    // In lobby: add normally
     if(!gameActive){
       const seat=mpSeats.length;
       mpSeats.push({name:'…',conn});
@@ -4470,7 +4466,7 @@ function mpHostOnConnect(conn){
       mpBroadcastLobby();
       document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
     }
-    // During game: just set up data/close handlers, wait for rejoin message
+    // During game: wait for rejoin message
   });
   conn.on('data',data=>mpHostOnData(conn,data));
   conn.on('close',()=>mpHostOnDisconnect(conn));
@@ -4479,7 +4475,26 @@ function mpHostOnConnect(conn){
 function mpHostOnData(conn,data){
   if(data.type==='name'){
     const s=mpSeats.findIndex(x=>x.conn===conn);
-    if(s>=0){mpSeats[s].name=data.name;mpBroadcastLobby();}
+    if(s>=0){
+      // Check for duplicate name in lobby — if same name already exists at another seat, reject this one
+      if(!gameActive){
+        const dupIdx=mpSeats.findIndex((x,i)=>i!==s && x.name===data.name);
+        if(dupIdx>=0){
+          // Remove the duplicate (keep the earlier connection)
+          conn.send({type:'rejoin_fail',reason:'Name already in room. Please use a different name.'});
+          // Close and remove this duplicate connection
+          mpSeats.splice(s,1);
+          mpConnections=mpConnections.filter(c=>c!==conn);
+          try{conn.close();}catch(e){}
+          mpBroadcastLobby();
+          mpRenderSeats();
+          document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
+          return;
+        }
+      }
+      mpSeats[s].name=data.name;
+      mpBroadcastLobby();
+    }
     return;
   }
   if(data.type==='rankScore'){
@@ -4708,6 +4723,10 @@ function mpCopyCode(){
 function mpJoinRoom(){
   const code=document.getElementById('mp-join-code').value.trim().toUpperCase();
   if(code.length!==4){mpSetStatus('Enter a 4-letter code','mp-status-join');return;}
+  // Prevent double-join: disable button while connecting
+  const joinBtn=document.querySelector('#mp-sec-join .btn-mp');
+  if(joinBtn) joinBtn.disabled=true;
+  const enableJoinBtn=()=>{if(joinBtn) joinBtn.disabled=false;};
   mpSetStatus('Connecting…','mp-status-join'); mpDestroy(); mpIsHost=false; mpRoomCode=code;
   try{
     mpPeer=new Peer();
@@ -4715,18 +4734,22 @@ function mpJoinRoom(){
       mpHostConn=mpPeer.connect('big2-'+code+'-host',{reliable:true});
       mpHostConn.on('open',()=>{
         mpHostConn.send({type:'name',name:playerCustomName});
-        mpHostConn.send({type:'rankScore',score:rankScore}); // share own rank score
+        mpHostConn.send({type:'rankScore',score:rankScore});
         mpSetStatus('Connected! Waiting for host…','mp-status-join');
         localStorage.setItem('mp_last_room', code);
         localStorage.setItem('mp_last_name', playerCustomName);
         mpSessionHistory=[]; mpSessionNames=[]; mpSessionScores=[0,0,0,0]; mpSeatRankScores=[0,0,0,0];
       });
       mpHostConn.on('data',data=>mpGuestOnData(data));
-      mpHostConn.on('close',()=>{mpSetStatus('Disconnected.','mp-status-join');localStorage.setItem('mp_last_room',code);});
-      mpHostConn.on('error',e=>mpSetStatus('Error: '+e.message,'mp-status-join'));
+      mpHostConn.on('close',()=>{
+        mpSetStatus('Disconnected.','mp-status-join');
+        localStorage.setItem('mp_last_room',code);
+        enableJoinBtn();
+      });
+      mpHostConn.on('error',e=>{mpSetStatus('Error: '+e.message,'mp-status-join');enableJoinBtn();});
     });
-    mpPeer.on('error',err=>mpSetStatus('⚠ '+err.message,'mp-status-join'));
-  }catch(e){mpSetStatus('PeerJS unavailable.','mp-status-join');}
+    mpPeer.on('error',err=>{mpSetStatus('⚠ '+err.message,'mp-status-join');enableJoinBtn();});
+  }catch(e){mpSetStatus('PeerJS unavailable.','mp-status-join');enableJoinBtn();}
 }
 
 function mpGuestOnData(data){
@@ -4787,7 +4810,11 @@ function mpGuestOnData(data){
     return;
   }
   if(data.type==='rejoin_fail'){
-    mpSetStatus('Rejoin failed: '+(data.reason||'unknown'),'mp-status-rejoin');
+    mpSetStatus((data.reason||'Failed to join'),'mp-status-rejoin');
+    mpSetStatus((data.reason||'Failed to join'),'mp-status-join');
+    // Re-enable join button
+    const joinBtn=document.querySelector('#mp-sec-join .btn-mp');
+    if(joinBtn) joinBtn.disabled=false;
     return;
   }
   if(data.type==='gameover'){
