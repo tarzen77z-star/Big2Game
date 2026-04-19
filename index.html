@@ -153,23 +153,8 @@
   .score-row span:last-child { color: var(--text-light); font-weight: 600; }
   #games-played { color: var(--gold-light); font-size: 0.78rem; margin-top: 6px; }
 
-  /* ── TURN INDICATOR — sits just below play-by-play message ── */
-  #turn-indicator {
-    position: absolute;
-    top: calc(18vh + 46px);   /* last-play-info top (18vh) + its height (~40px) + gap */
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--panel-bg);
-    border: 1px solid rgba(201,168,76,0.2);
-    border-radius: 16px;
-    padding: 4px 14px;
-    font-size: 0.8rem;
-    color: var(--text-dim);
-    z-index: 10;
-    backdrop-filter: blur(4px);
-    font-style: italic;
-    white-space: nowrap;
-  }
+  /* ── TURN INDICATOR — hidden; turn shown via green glow only ── */
+  #turn-indicator { display: none; }
 
   /* ── LAST CARD GLOW ── */
   .last-card-alert .npc-name {
@@ -598,10 +583,10 @@
   #modal-box p { color: var(--text-dim); margin-bottom: 1.5rem; font-size: 1rem; }
   .modal-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
-  /* ── TOAST – moved to bottom so it doesn't cover NPC 3 ── */
+  /* ── TOAST – just below last-play-info ── */
   #toast {
-    position: fixed; bottom: 250px; left: 50%;
-    transform: translateX(-50%) translateY(10px);
+    position: fixed; top: calc(18vh + 52px); left: 50%;
+    transform: translateX(-50%) translateY(-8px);
     background: rgba(0,0,0,0.88);
     border: 1px solid var(--gold);
     color: var(--gold-light);
@@ -619,6 +604,10 @@
 
   /* ── ACTIVE PLAYER HIGHLIGHT ── */
   .npc-zone.active .npc-name { color: #7fffaa; text-shadow: 0 0 10px rgba(100,255,150,0.6); }
+  .npc-zone.active .npc-card-single {
+    border-color: rgba(100,255,150,0.5) !important;
+    box-shadow: 0 0 12px rgba(100,255,150,0.4), 2px 2px 8px rgba(0,0,0,0.5) !important;
+  }
 
   /* Player turn – glowing name badge + subtle area glow */
   #player-area.your-turn {
@@ -708,17 +697,7 @@
     .rank-badge-sm svg { width: 9px; height: 9px; }
 
     /* ── TURN INDICATOR (mobile) ── */
-    #turn-indicator {
-      top: calc(14vh + 38px);
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 0.68rem;
-      padding: 3px 10px;
-      max-width: 80vw;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+    #turn-indicator { display: none; }
 
     /* ── NPC TOP ── */
     #npc-top { top: 6px; }
@@ -816,7 +795,7 @@
     .btn-forfeit { left: 4px; top: 4px; padding: 3px 8px; font-size: 0.68rem; }
 
     /* ── TOAST ── */
-    #toast { bottom: 150px; font-size: 0.76rem; padding: 5px 12px; }
+    #toast { top: calc(14vh + 44px); bottom: auto; font-size: 0.76rem; padding: 5px 12px; }
 
     /* ── MODAL ── */
     #modal-box { padding: 1.2rem 0.9rem; }
@@ -1680,6 +1659,7 @@
     <div class="npc-cards" id="cards-p3"></div>
   </div>
 
+
   <!-- Play-by-play message below NPC 3 -->
   <div id="last-play-info"></div>
 
@@ -1708,7 +1688,7 @@
   <div id="player-area">
     <div id="player-name-row">
       <div class="rank-badge-sm beginner" id="game-rank-badge" style="width:28px;height:28px;margin-right:6px;flex-shrink:0;"></div>
-      <div id="player-name-label">You (Player 1)</div>
+      <div id="player-name-label">You</div>
       <div id="game-rank-label" style="font-size:0.62rem;color:var(--text-dim);margin-left:6px;font-family:'Crimson Pro',serif;">Beginner</div>
     </div>
     <div id="player-controls">
@@ -2182,7 +2162,7 @@ function startGame() {
 
   // Update in-game player label with custom name
   const lbl = document.getElementById('player-name-label');
-  if (lbl && lbl.textContent !== playerCustomName + ' (You)') lbl.textContent = playerCustomName + ' (You)';
+  if (lbl && lbl.textContent !== playerCustomName) lbl.textContent = playerCustomName;
   renderAll();
   setPlayerControls(currentPlayer === 0);
   updateTurnIndicator();
@@ -3688,7 +3668,7 @@ function endGame(winnerIdx) {
   const mpNames = mpGameMode === 'vs_human' && mpSeats.length > 0
     ? [0,1,2,3].map(li => {
         const n = mpSeats[li] ? mpSeats[li].name : ('Player '+(li+1));
-        return li === 0 ? n + ' (You)' : n;
+        return n;
       })
     : null;
   mpShowEndBanner(winnerIdx, raw, mults, gameDeltas, mpNames);
@@ -3706,10 +3686,10 @@ function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas, namesOverride) 
     names = [0,1,2,3].map(li => {
       const globalSeat = (mpMySeat + li) % 4;
       const n = mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('Player '+(globalSeat+1));
-      return li === 0 ? n + ' (You)' : n;
+      return n;
     });
   } else {
-    names = [playerCustomName + ' (You)', 'Ace', 'Rex', 'Ivy'];
+    names = [playerCustomName, 'Ace', 'Rex', 'Ivy'];
   }
 
   const banner = document.getElementById('winner-banner');
@@ -3902,7 +3882,7 @@ function updatePlayerName(val) {
   saveScores();
   // Update in-game label
   const lbl = document.getElementById('player-name-label');
-  if (lbl) lbl.textContent = playerCustomName + ' (You)';
+  if (lbl) lbl.textContent = playerCustomName;
   // Update scoreboard
   const sc1n = document.getElementById('sc-p1-name');
   if (sc1n) sc1n.textContent = playerCustomName;
@@ -3985,7 +3965,7 @@ function resumeGame() {
   document.getElementById('game').style.display = 'block';
 
   const lbl = document.getElementById('player-name-label');
-  if (lbl) lbl.textContent = playerCustomName + ' (You)';
+  if (lbl) lbl.textContent = playerCustomName;
 
   updateRankUI();
   renderAll();
@@ -4315,7 +4295,7 @@ function mpSetupGameScreen(seats){
   document.getElementById('splash').style.display='none';
   document.getElementById('game').style.display='block';
   const lbl=document.getElementById('player-name-label');
-  if(lbl)lbl.textContent=mpSeats[mpMySeat].name+' (You)';
+  if(lbl)lbl.textContent=mpSeats[mpMySeat].name;
 
   // Label the 3 opponent zones: right=local1, top=local2, left=local3
   const zoneMap=[
@@ -4417,7 +4397,7 @@ function mpGuestShowGameover(data) {
   const names = [0,1,2,3].map(li => {
     const globalSeat = (mpMySeat + li) % 4;
     const n = seatNames[globalSeat] || ('Player '+(globalSeat+1));
-    return li === 0 ? n + ' (You)' : n;
+    return n;
   });
 
   mpShowEndBanner(guestWinnerLocal, raw, mults, deltas, names);
