@@ -828,8 +828,8 @@
       width: 44px !important; height: 62px !important;
       border-radius: 6px; padding: 3px;
     }
-    .hand-card .rank { font-size: 1.08rem !important; }
-    .hand-card .center-suit { font-size: 1.38rem !important; }
+    .hand-card .rank { font-size: 1.08rem; }
+    .hand-card .center-suit { font-size: 1.38rem; }
 
     /* ── RANK BADGE (inline next to player name) ── */
     #player-name-row .rank-badge-sm { width: 22px !important; height: 22px !important; }
@@ -1379,7 +1379,7 @@
   </div>
   <div id="splash-rank">
     <div class="rank-badge beginner" id="splash-badge"></div>
-    <div id="splash-rank-text">Rank: <strong id="splash-rank-name">Normal</strong> &nbsp;|&nbsp; Points: <strong id="splash-pts">0</strong></div>
+    <div id="splash-rank-text">Rank: <strong id="splash-rank-name">Normal</strong> &nbsp;|&nbsp; Score: <strong id="splash-pts">0</strong></div>
   </div>
   <div class="mode-grid" id="mode-grid">
     <button class="mode-btn active-mode" id="mode-beginner" onclick="selectMode('beginner')">
@@ -1495,6 +1495,15 @@
         <p>After each game, <strong>every player</strong> settles with every other player based on remaining card counts.</p>
         <p style="margin-top:4px;"><em>For each pair of players:</em> the player with <strong>more</strong> weighted cards pays the <strong>difference</strong> to the player with fewer. This means everyone gains from players who did worse and loses to players who did better.</p>
         <p style="margin-top:6px;"><em>Example — P1 finishes (0 cards), P2 has 2, P3 has 5, P4 has 7:</em></p>
+      <div style="margin-top:10px;padding:8px 10px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:8px;">
+        <strong style="color:var(--gold-light)">✦ Rank Score</strong>
+        <p style="margin-top:4px;">Your Rank Score tracks how much you've earned within your current rank tier. It caps at:</p>
+        <p>• <strong>Normal</strong> rank: max <em>150</em></p>
+        <p>• <strong>Bronze</strong> rank: max <em>1200</em></p>
+        <p>• <strong>Silver</strong> rank: max <em>1200</em></p>
+        <p>• <strong>Gold</strong> rank: <em>unlimited</em></p>
+        <p style="margin-top:4px;color:var(--text-dim);font-style:italic;">Rank Score is shown next to your name during the game and on the main screen.</p>
+      </div>
         <p>• P1: +2+5+7 = <em>+14 pts</em></p>
         <p>• P2: gains (5−2)+(7−2) from P3/P4, loses 2 to P1 = <em>+6 pts</em></p>
         <p>• P3: gains (7−5) from P4, loses (5−2) to P2 and 5 to P1 = <em>−6 pts</em></p>
@@ -1735,6 +1744,7 @@
   <!-- Top NPC (Player 3) -->
   <div id="npc-top" class="npc-zone">
     <div class="npc-name" id="name-p3">Rex</div>
+    <div class="npc-score-label" id="score-p3" style="display:none;font-size:0.65rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600;margin-top:-4px;text-align:center;">✦ 0</div>
     <div class="npc-cards" id="cards-p3"></div>
   </div>
 
@@ -1745,6 +1755,7 @@
   <!-- Right NPC (Player 2) -->
   <div id="npc-right" class="npc-zone">
     <div class="npc-name" id="name-p2">Ace</div>
+    <div class="npc-score-label" id="score-p2" style="display:none;font-size:0.65rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600;margin-top:-4px;text-align:center;">✦ 0</div>
     <div class="npc-cards" id="cards-p2"></div>
     <span id="count-p2" style="display:none">13</span>
   </div>
@@ -1752,6 +1763,7 @@
   <!-- Left NPC (Player 4) -->
   <div id="npc-left" class="npc-zone">
     <div class="npc-name" id="name-p4">Ivy</div>
+    <div class="npc-score-label" id="score-p4" style="display:none;font-size:0.65rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600;margin-top:-4px;text-align:center;">✦ 0</div>
     <div class="npc-cards" id="cards-p4"></div>
     <span id="count-p4" style="display:none">13</span>
   </div>
@@ -1768,7 +1780,7 @@
     <div id="player-name-row">
       <div class="rank-badge-sm beginner" id="game-rank-badge" style="width:28px;height:28px;margin-right:6px;flex-shrink:0;"></div>
       <div id="player-name-label">You</div>
-      <div id="game-rank-label" style="font-size:0.62rem;color:var(--text-dim);margin-left:6px;font-family:'Crimson Pro',serif;">Normal</div>
+      <div id="game-rank-label" style="font-size:0.75rem;color:var(--gold-light);margin-left:6px;font-family:'Crimson Pro',serif;font-weight:600;letter-spacing:0.02em;"></div>
     </div>
     <div id="player-controls">
       <button class="btn-sm btn-sort" onclick="sortByRank()">Sort by Rank</button>
@@ -1888,11 +1900,26 @@ function trophySVG(rankCls) {
 }
 
 const RANKS_DEF = [
-  { name:'Normal',       cls:'beginner',    minPts:    0, mode:'beginner'     },
-  { name:'Bronze',       cls:'bronze',      minPts:  100, mode:'intermediate' },
-  { name:'Silver',       cls:'silver',      minPts: 1000, mode:'hard'         },
-  { name:'Gold',         cls:'gold',        minPts: 5000, mode:'pro'          },
+  { name:'Normal',       cls:'beginner',    minPts:    0, mode:'beginner',     rankScoreCap:  150 },
+  { name:'Bronze',       cls:'bronze',      minPts:  100, mode:'intermediate', rankScoreCap: 1200 },
+  { name:'Silver',       cls:'silver',      minPts: 1000, mode:'hard',         rankScoreCap: 1200 },
+  { name:'Gold',         cls:'gold',        minPts: 5000, mode:'pro',          rankScoreCap: Infinity },
 ];
+
+// Rank Score: points accumulated, capped per rank tier
+let rankScore = 0;
+
+function getRankScoreCap() {
+  // Cap depends on current mode being played
+  const modeDef = RANKS_DEF.find(r => r.mode === selectedMode) || RANKS_DEF[0];
+  return modeDef.rankScoreCap;
+}
+
+function updateRankScore(delta) {
+  // Add delta to rankScore, capped by current mode's cap (floor at 0)
+  const cap = getRankScoreCap();
+  rankScore = Math.max(0, Math.min(cap, rankScore + delta));
+}
 
 function getPlayerRank(pts) {
   // Use the highest ever points to determine retained rank
@@ -1917,7 +1944,7 @@ function updateRankUI() {
   const sp = document.getElementById('splash-pts');
   if (sb) { sb.innerHTML = trophySVG(rank.cls); sb.className = 'rank-badge ' + rank.cls; }
   if (sn) sn.textContent = rank.name;
-  if (sp) sp.textContent = pts;
+  if (sp) sp.textContent = rankScore;
 
   // Unlock mode buttons
   const modes = ['beginner','intermediate','hard','pro'];
@@ -1934,7 +1961,7 @@ function updateRankUI() {
   const gb = document.getElementById('game-rank-badge');
   const gl = document.getElementById('game-rank-label');
   if (gb) { gb.innerHTML = trophySVG(rank.cls); gb.className = 'rank-badge-sm ' + rank.cls; gb.style.cssText = 'width:28px;height:28px;margin-right:6px;flex-shrink:0;'; }
-  if (gl) gl.textContent = rank.name;
+  if (gl) gl.textContent = '✦ ' + rankScore;
 
   // In-game scoreboard row badge
   const sc1 = document.getElementById('sc-p1-badge');
@@ -1948,6 +1975,7 @@ function selectMode(mode) {
 
 // Storage
 function saveScores() {
+  localStorage.setItem('big2_rankscore', rankScore);
   // Track all-time high for rank retention
   if (scores[0] > highestPts) highestPts = scores[0];
   localStorage.setItem('big2_scores', JSON.stringify(scores));
@@ -1957,6 +1985,8 @@ function saveScores() {
   localStorage.setItem('big2_history', JSON.stringify(gameHistory));
 }
 function loadScores() {
+  const rs = localStorage.getItem('big2_rankscore');
+  if (rs !== null) rankScore = parseInt(rs) || 0;
   const s  = localStorage.getItem('big2_scores');
   const g  = localStorage.getItem('big2_games');
   const n  = localStorage.getItem('big2_pname');
@@ -2801,6 +2831,8 @@ function confirmForfeit() {
     runningScores: scores.slice(),
     forfeit: true
   });
+  // Update rank score (player's delta = gameDeltas[0])
+  updateRankScore(gameDeltas[0]);
   saveScores();
   clearGameState();
   updateScoreboard();
@@ -3786,6 +3818,8 @@ function endGame(winnerIdx) {
     forfeit: false
   });
 
+  // Update rank score (player's delta = gameDeltas[0])
+  updateRankScore(gameDeltas[0]);
   saveScores();
   clearGameState();
   updateScoreboard();
@@ -4240,7 +4274,8 @@ function mpBroadcastSync(){
   if(!mpIsHost||!mpConnections.length)return;
   const snapshot={
     type:'sync',
-    hands:hands,                    // all 4 hands in HOST-local index order
+    hands:hands,
+    hostRankScore: rankScore,                    // all 4 hands in HOST-local index order
     currentPlayer,
     lastPlay,
     passCount,
@@ -4352,6 +4387,7 @@ function mpStartGame(){
   const startData={
     type:'start',
     seats:seatNames.map(n=>({name:n})),
+    hostRankScore: rankScore,
     hands:dealtHands,        // global order; guest receives rotated hands in sync
     openingPlayer:openingP,  // global seat index
     npcSeats:npcSeatsArr
@@ -4439,6 +4475,18 @@ function mpSetupGameScreen(seats){
     const name=mpSeats[globalSeat]?mpSeats[globalSeat].name:'Player '+(globalSeat+1);
     const ne=document.getElementById(nameId);if(ne)ne.textContent=(isNpc?'🤖 ':'👤 ')+name;
     const ze=document.getElementById(zoneId);if(ze)ze.classList.toggle('mp-human',!isNpc);
+    // Show rank score for human players in MP
+    const scoreElId='score-p'+nameId.replace('name-p','');
+    const scoreEl=document.getElementById(scoreElId);
+    if(scoreEl){
+      if(!isNpc){
+        scoreEl.style.display='block';
+        // Host shows own rankScore for seat 0; guests' scores arrive via sync
+        scoreEl.textContent='✦ ' + (globalSeat===mpMySeat ? rankScore : '?');
+      } else {
+        scoreEl.style.display='none';
+      }
+    }
   });
   // Update scoreboard to show actual MP player names
   updateScoreboard();
@@ -4468,6 +4516,17 @@ function mpGuestApplySync(snap){
   }
 
   renderAll();
+  // Update host's score label (host is always the 'far' player from guest's perspective)
+  if(snap.hostRankScore !== undefined){
+    // host is global seat 0; host's local index from guest = (0 - mpMySeat + 4) % 4 => e.g. for guest seat 1, host is local 3
+    const hostLocalFromGuest=(0-mpMySeat+4)%4;
+    const zoneMap2=[{localIdx:1,scoreId:'score-p2'},{localIdx:2,scoreId:'score-p3'},{localIdx:3,scoreId:'score-p4'}];
+    const hostZone=zoneMap2.find(z=>z.localIdx===hostLocalFromGuest);
+    if(hostZone){
+      const el=document.getElementById(hostZone.scoreId);
+      if(el&&el.style.display!=='none') el.textContent='✦ '+snap.hostRankScore;
+    }
+  }
   // Enable controls only if it's THIS guest's turn (local index 0)
   setPlayerControls(currentPlayer===0&&gameActive);
   updateTurnIndicator();
