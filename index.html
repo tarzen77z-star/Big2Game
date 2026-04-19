@@ -1933,6 +1933,8 @@ let mpNpcSlots    = [false,false,false,false];
 let mpTurnToken   = 0;
 let mpSessionHistory = []; // tracks all games in current MP room
 let mpSessionNames   = []; // player names for the session
+let mpSessionScores  = [0,0,0,0]; // cumulative session deltas (host-local order)
+let mpSeatRankScores = [0,0,0,0]; // rank scores for each seat (host-local order)
 let gamesPlayed = 0;
 let firstTurn = true; // first play of the game
 let openingPlayer = 0; // who has diamond 3
@@ -2763,10 +2765,20 @@ function updateTurnIndicator() {
 }
 
 function updateScoreboard() {
+  // In MP mode show session scores; in single-player show normal scores
+  const displayScores = (mpGameMode === 'vs_human') ? mpSessionScores : scores;
   ['p1','p2','p3','p4'].forEach((id,i)=>{
-    document.getElementById('sc-'+id).textContent = scores[i];
+    const el = document.getElementById('sc-'+id);
+    if(el){
+      const v = displayScores[i] || 0;
+      el.textContent = (v > 0 ? '+' : '') + v;
+      el.style.color = v > 0 ? '#7fffaa' : v < 0 ? '#ff9999' : '';
+    }
   });
-  document.getElementById('games-played').textContent = 'Games played: ' + gamesPlayed;
+  const gp = document.getElementById('games-played');
+  if(gp) gp.textContent = mpGameMode === 'vs_human'
+    ? 'Games this session: ' + mpSessionHistory.length
+    : 'Games played: ' + gamesPlayed;
   // Update names: in MP use actual seat names, otherwise use defaults
   const scNames = mpScoreboardNames();
   const n1 = document.getElementById('sc-p1-name');
@@ -3997,6 +4009,8 @@ function endGame(winnerIdx) {
       raw: raw.slice()
     });
     if (!mpSessionNames.length && mpNames) mpSessionNames = mpNames.slice();
+    // Accumulate session scores (host-local order)
+    gameDeltas.forEach((d,i) => { mpSessionScores[i] = (mpSessionScores[i]||0) + d; });
   }
   mpShowEndBanner(winnerIdx, raw, mults, gameDeltas, mpNames);
 }
@@ -4428,7 +4442,7 @@ function mpSetStatus(msg,el){const e=document.getElementById(el||'mp-status');if
 // ── Host setup ────────────────────────────────────────────
 function mpInitHost(){
   mpDestroy(); mpIsHost=true; mpRoomCode=mpGenCode();
-  mpSessionHistory=[]; mpSessionNames=[];
+  mpSessionHistory=[]; mpSessionNames=[]; mpSessionScores=[0,0,0,0]; mpSeatRankScores=[0,0,0,0];
   document.getElementById('mp-room-code').textContent=mpRoomCode;
   mpSetStatus('Waiting for players…');
   mpSeats=[{name:playerCustomName,conn:null}]; mpMySeat=0;
@@ -4462,18 +4476,41 @@ function mpHostOnData(conn,data){
     if(s>=0){mpSeats[s].name=data.name;mpBroadcastLobby();}
     return;
   }
+  if(data.type==='rankScore'){
+    const s=mpSeats.findIndex(x=>x.conn===conn);
+    if(s>=0){
+      mpSeatRankScores[s]=data.score||0;
+      mpSeats[s].rankScore=data.score||0;
+    }
+    return;
+  }
   if(data.type==='rejoin'){
-    // Find the disconnected seat by name
-    const s=mpSeats.findIndex(x=>x.disconnected&&x.name===data.name);
-    if(s<0){conn.send({type:'rejoin_fail',reason:'Seat not found or not disconnected'});return;}
-    // Restore the connection
-    mpSeats[s].conn=conn;
-    mpSeats[s].disconnected=false;
+    const guestName = data.name || 'Player';
+    // During game: try to find their seat by name (disconnected or not)
+    if(gameActive){
+      let s = mpSeats.findIndex(x=>x.disconnected && x.name===guestName);
+      if(s<0) s = mpSeats.findIndex(x=>x.conn===null && x.name===guestName);
+      if(s<0){conn.send({type:'rejoin_fail',reason:'No matching seat found in active game'});return;}
+      // Restore connection
+      if(s>0 && mpConnections.indexOf(mpSeats[s].conn)<0) mpConnections.push(conn);
+      else if(s>0) mpConnections.push(conn);
+      mpSeats[s].conn=conn;
+      mpSeats[s].disconnected=false;
+      conn.send({type:'seat',seat:s});
+      toast(guestName+' rejoined!');
+      // Send full game state sync
+      setTimeout(()=>mpBroadcastSync(),200);
+      return;
+    }
+    // In lobby: treat as a normal join
+    if(mpSeats.length>=4){conn.send({type:'full'});return;}
+    const seat=mpSeats.length;
+    mpSeats.push({name:guestName,conn});
     mpConnections.push(conn);
-    conn.send({type:'seat',seat:s});
-    toast(data.name+' rejoined!');
-    // Send full sync to the rejoining player
-    mpBroadcastSync();
+    conn.send({type:'seat',seat});
+    mpSetStatus(mpSeats.length+'/4 players');
+    mpBroadcastLobby();
+    document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
     return;
   }
   // Guest played a card — validate it's their turn then execute on host
@@ -4547,7 +4584,8 @@ function mpBroadcastSync(){
   const snapshot={
     type:'sync',
     hands:hands,
-    hostRankScore: rankScore,                    // all 4 hands in HOST-local index order
+    hostRankScore: rankScore,
+    seatRankScores: [0,1,2,3].map(i=>i===0?rankScore:(mpSeatRankScores[i]||0)),
     currentPlayer,
     lastPlay,
     passCount,
@@ -4555,7 +4593,9 @@ function mpBroadcastSync(){
     openingPlayer,
     currentRoundPlays,
     globalDiscardedCards:[...globalDiscardedCards],
-    gameActive
+    gameActive,
+    mpSessionScores: mpSessionScores.slice(),  // cumulative session scores (host-local)
+    mpSeatNames: mpSeats.map(s=>s.name)        // seat names (host-local)
   };
   mpConnections.forEach((conn,ci)=>{
     // Rotate snapshot so that guest's own hand is at index 0
@@ -4575,6 +4615,13 @@ function mpBroadcastSync(){
       ...lastPlay,
       playerIdx:(lastPlay.playerIdx-guestLocalFromHost+4)%4
     }:null;
+    // Rotate session scores and rank scores to guest perspective
+    const guestSessionScores = [0,1,2,3].map(li => (mpSessionScores[(guestLocalFromHost+li)%4]||0));
+    const guestSeatNames = [0,1,2,3].map(li => mpSeats[(guestLocalFromHost+li)%4]?.name || ('Player '+(li+1)));
+    const guestSeatRankScores = [0,1,2,3].map(li => {
+      const gi=(guestLocalFromHost+li)%4;
+      return gi===0 ? rankScore : (mpSeatRankScores[gi]||0);
+    });
     const guestSnapshot={
       ...snapshot,
       hands:guestHands,
@@ -4582,7 +4629,10 @@ function mpBroadcastSync(){
       openingPlayer:guestOpeningPlayer,
       currentRoundPlays:guestRoundPlays,
       lastPlay:guestLastPlay,
-      mySeatOnHost:guestLocalFromHost  // guest's position from host's perspective
+      mySeatOnHost:guestLocalFromHost,
+      mpSessionScores: guestSessionScores,
+      mpSeatNames: guestSeatNames,
+      seatRankScores: guestSeatRankScores
     };
     try{conn.send(guestSnapshot);}catch(e){}
   });
@@ -4606,10 +4656,11 @@ function mpJoinRoom(){
       mpHostConn=mpPeer.connect('big2-'+code+'-host',{reliable:true});
       mpHostConn.on('open',()=>{
         mpHostConn.send({type:'name',name:playerCustomName});
+        mpHostConn.send({type:'rankScore',score:rankScore}); // share own rank score
         mpSetStatus('Connected! Waiting for host…','mp-status-join');
         localStorage.setItem('mp_last_room', code);
         localStorage.setItem('mp_last_name', playerCustomName);
-        mpSessionHistory=[]; mpSessionNames=[];
+        mpSessionHistory=[]; mpSessionNames=[]; mpSessionScores=[0,0,0,0]; mpSeatRankScores=[0,0,0,0];
       });
       mpHostConn.on('data',data=>mpGuestOnData(data));
       mpHostConn.on('close',()=>{mpSetStatus('Disconnected.','mp-status-join');localStorage.setItem('mp_last_room',code);});
@@ -4623,6 +4674,7 @@ function mpGuestOnData(data){
   if(data.type==='full'){mpSetStatus('Room full.','mp-status-join');return;}
   if(data.type==='seat'){
     mpMySeat=data.seat;
+    mpSetStatus('Reconnected as Player '+(mpMySeat+1)+'. Waiting for game state…','mp-status-rejoin');
     mpSetStatus('Joined as Player '+(mpMySeat+1)+'. Waiting for start…','mp-status-join');
     return;
   }
@@ -4638,6 +4690,27 @@ function mpGuestOnData(data){
     return;
   }
   if(data.type==='sync'){
+    // If game screen not visible yet (rejoin scenario), set it up first
+    const gameEl=document.getElementById('game');
+    if(gameEl&&gameEl.style.display!=='block'&&mpMySeat>=0&&data.hands){
+      mpGameMode='vs_human';
+      // Reconstruct mpSeats from seat count in sync
+      if(!mpSeats.length){
+        const n=data.hands.length||4;
+        mpSeats=Array.from({length:n},(_,i)=>({name:'Player '+(i+1),conn:null}));
+      }
+      // Reconstruct mpNpcSlots: any seat without a human name is NPC
+      mpNpcSlots=[false,false,false,false];
+      // Set up game screen
+      document.getElementById('mp-lobby').classList.remove('open');
+      document.getElementById('splash').style.display='none';
+      document.getElementById('game').style.display='block';
+      const ff=document.getElementById('btn-forfeit');if(ff)ff.style.display='none';
+      const zb=document.getElementById('btn-hand-zoom');if(zb)zb.style.top='12px';
+      const lbl=document.getElementById('player-name-label');
+      if(lbl)lbl.textContent=playerCustomName;
+      toast('↩ Rejoined!');
+    }
     mpGuestApplySync(data);
     return;
   }
@@ -4689,6 +4762,7 @@ function mpHostStartGame(data){
   mpMySeat=0;
   mpNpcSlots=data.npcSeats.slice(); // global index → is NPC
   mpTurnToken=0;
+  mpSeatRankScores[0]=rankScore; // host's own rank score
 
   // Host uses global seat order directly (no remap needed since host is seat 0)
   hands=data.hands;
@@ -4767,7 +4841,7 @@ function mpSetupGameScreen(seats){
       if(!isNpc){
         scoreEl.style.display='block';
         // Host shows own rankScore for seat 0; guests' scores arrive via sync
-        scoreEl.textContent='✦ ' + (globalSeat===mpMySeat ? rankScore : '?');
+        scoreEl.textContent='✦ ' + (globalSeat===mpMySeat ? rankScore : (mpSeatRankScores[globalSeat]||0));
       } else {
         scoreEl.style.display='none';
       }
@@ -4780,6 +4854,18 @@ function mpSetupGameScreen(seats){
 // Guest applies a sync snapshot from host
 function mpGuestApplySync(snap){
   selectedCards=[]; // always clear selection on sync
+  // Apply MP session scores if provided
+  if(snap.mpSessionScores){
+    mpSessionScores=[...snap.mpSessionScores];
+  }
+  if(snap.mpSeatNames){
+    mpSessionNames=[...snap.mpSeatNames];
+    // Update mpSeats names
+    snap.mpSeatNames.forEach((name,li)=>{
+      const globalSeat=(mpMySeat+li)%4;
+      if(mpSeats[globalSeat]) mpSeats[globalSeat].name=name;
+    });
+  }
   // snap.hands[0] is already the guest's own hand (rotated by host)
   hands=snap.hands.map(h=>h.map(c=>({rank:String(c.rank),suit:String(c.suit)})));
   currentPlayer=snap.currentPlayer;      // already in guest-local space
@@ -4801,17 +4887,22 @@ function mpGuestApplySync(snap){
   }
 
   renderAll();
+  updateScoreboard(); // refresh session scores on scoreboard
   // Update host's score label (host is always the 'far' player from guest's perspective)
-  if(snap.hostRankScore !== undefined){
-    // host is global seat 0; host's local index from guest = (0 - mpMySeat + 4) % 4 => e.g. for guest seat 1, host is local 3
-    const hostLocalFromGuest=(0-mpMySeat+4)%4;
-    const zoneMap2=[{localIdx:1,scoreId:'score-p2'},{localIdx:2,scoreId:'score-p3'},{localIdx:3,scoreId:'score-p4'}];
-    const hostZone=zoneMap2.find(z=>z.localIdx===hostLocalFromGuest);
-    if(hostZone){
-      const el=document.getElementById(hostZone.scoreId);
-      if(el&&el.style.display!=='none') el.textContent='✦ '+snap.hostRankScore;
-    }
+  // Update rank score labels for all opponent zones using seatRankScores
+  const snapRankScores = snap.seatRankScores || [snap.hostRankScore||0,0,0,0];
+  // snapRankScores[0] = MY rank score (local idx 0), [1][2][3] = opponents
+  // Update own rank score label
+  if(snapRankScores[0] !== undefined){
+    const gl=document.getElementById('game-rank-label');
+    if(gl) gl.textContent='✦ '+snapRankScores[0];
   }
+  // Update opponent zones (local idx 1→score-p2, 2→score-p3, 3→score-p4)
+  const zoneScoreMap=[{localIdx:1,scoreId:'score-p2'},{localIdx:2,scoreId:'score-p3'},{localIdx:3,scoreId:'score-p4'}];
+  zoneScoreMap.forEach(({localIdx,scoreId})=>{
+    const el=document.getElementById(scoreId);
+    if(el&&el.style.display!=='none') el.textContent='✦ '+(snapRankScores[localIdx]||0);
+  });
   // Enable controls only if it's THIS guest's turn (local index 0)
   setPlayerControls(currentPlayer===0&&gameActive);
   updateTurnIndicator();
@@ -4897,8 +4988,9 @@ function mpRejoinRoom(){
     mpPeer.on('open',()=>{
       mpHostConn=mpPeer.connect('big2-'+code+'-host',{reliable:true});
       mpHostConn.on('open',()=>{
-        // Send rejoin message instead of name
+        // Send rejoin message and rank score
         mpHostConn.send({type:'rejoin',name});
+        mpHostConn.send({type:'rankScore',score:rankScore});
         mpSetStatus('Reconnecting as '+name+'…','mp-status-rejoin');
         localStorage.setItem('mp_last_room',code);
       });
