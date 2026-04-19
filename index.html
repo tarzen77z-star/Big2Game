@@ -2490,7 +2490,7 @@ function renderHand() {
     const rankSize = (isMobile ? 1.08 : 1.39) * fontZoom;
     const suitSize = (isMobile ? 1.38 : 2.28) * fontZoom;
     // When zoomed, push suit down so it doesn't overlap the rank number
-    const suitTopOffset = handZoomed ? '58%' : '50%';
+    const suitTopOffset = handZoomed ? '63%' : '50%';
     el.innerHTML = `
       <div class="rank" style="font-size:${rankSize}rem">${card.rank}</div>
       <div class="center-suit" style="font-size:${suitSize}rem;top:${suitTopOffset}">${card.suit}</div>
