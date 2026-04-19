@@ -4690,6 +4690,7 @@ function mpBroadcastSync(){
       const gi=(guestLocalFromHost+li)%4;
       return gi===0 ? rankScore : (mpSeatRankScores[gi]||0);
     });
+    const guestNpcSeats = [0,1,2,3].map(li => (guestLocalFromHost+li)%4 >= mpSeats.length);
     const guestSnapshot={
       ...snapshot,
       hands:guestHands,
