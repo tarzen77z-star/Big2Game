@@ -2083,8 +2083,17 @@ function updateRankUI() {
 }
 
 function selectMode(mode) {
+  if (mode === selectedMode) return;
+  // Save current mode's scores before switching
+  saveScoresForMode(selectedMode);
+  // Switch
   selectedMode = mode;
+  // Load new mode's scores
+  loadScoresForMode(selectedMode);
+  // Update resume button for the new mode
+  updateResumeButton();
   updateRankUI();
+  updateScoreboard();
 }
 
 // ── Per-mode storage ───────────────────────────────────
@@ -2171,16 +2180,17 @@ function updateResumeButton() {
   const hasSaved = hasSavedGameForMode(selectedMode);
   let rb = document.getElementById('btn-resume-game');
   const sb = document.getElementById('btn-start-game');
+  const modeLabel = {beginner:'Beginner',intermediate:'Intermediate',hard:'Hard',pro:'Pro'}[selectedMode]||selectedMode;
   if (hasSaved) {
     if (!rb) {
       rb = document.createElement('button');
       rb.id = 'btn-resume-game';
       rb.className = 'btn-gold';
       rb.style.cssText = 'margin-bottom:0.5rem;background:linear-gradient(135deg,#1a5c38,#2d8a50,#1a5c38);box-shadow:0 4px 18px rgba(45,138,80,0.45);';
-      rb.innerHTML = '↩ Resume Game';
       rb.onclick = resumeGame;
       if (sb) { sb.parentNode.insertBefore(rb, sb); sb.style.display = 'none'; }
     }
+    rb.innerHTML = '↩ Resume ' + modeLabel;
   } else {
     clearResumeButton();
   }
@@ -3065,6 +3075,27 @@ function subtypeLabel(subtype) {
   }[subtype] || (subtype ? subtype.replace(/_/g,' ') : '');
 }
 
+
+// ── Power Play Rule ──────────────────────────────────────
+// Certain plays force all others to auto-pass, giving the
+// player control of the pile immediately.
+// Triggers: single 2♠, pair with 2♠, triple with 2♠, quad of 2s, Royal Flush
+function isPowerPlay(cards, play) {
+  if (!cards || !play) return false;
+  const has2Spade = cards.some(c => c.rank === '2' && c.suit === '♠');
+  // Single 2♠
+  if (play.type === 'single' && has2Spade) return true;
+  // Pair containing 2♠
+  if (play.type === 'pair' && has2Spade) return true;
+  // Triple of 2s (any suits)
+  if (play.type === 'triple' && cards.every(c => c.rank === '2')) return true;
+  // Quad of 2s (all four 2s)
+  if (play.type === 'quad' && cards.every(c => c.rank === '2')) return true;
+  // Royal Flush
+  if (play.type === 'five' && play.subtype === 'royal_flush') return true;
+  return false;
+}
+
 function executePlay(playerIdx, cards, play) {
   // Remove cards from hand
   hands[playerIdx] = hands[playerIdx].filter(c=>!cards.some(s=>cardKey(s)===cardKey(c)));
@@ -3081,11 +3112,24 @@ function executePlay(playerIdx, cards, play) {
     single:'Single', pair:'Pair', triple:'Three of a Kind',
     quad:'Four of a Kind', five: subtypeLabel(play.subtype)
   }[play.type] || play.type;
-  document.getElementById('last-play-info').textContent =
-    `${playerName(playerIdx)} played: ${typeLabel}`;
+
+  // ── Power Play: auto-pass all others, player regains control ──
+  const powerPlay = isPowerPlay(cards, play);
+  if (powerPlay) {
+    lastPlay = null;
+    passCount = 0;
+    currentRoundPlays = [];
+    currentPlayer = playerIdx; // player keeps control
+    document.getElementById('last-play-info').textContent =
+      `💪 ${playerName(playerIdx)} played: ${typeLabel} — Power Play! Play again!`;
+    toast('💪 Power Play! ' + playerName(playerIdx) + ' plays again!');
+  } else {
+    document.getElementById('last-play-info').textContent =
+      `${playerName(playerIdx)} played: ${typeLabel}`;
+  }
 
   selectedCards = [];
-  advanceTurn(playerIdx);
+  if (!powerPlay) advanceTurn(playerIdx);
 
   // Check win
   if (hands[playerIdx].length === 0) {
