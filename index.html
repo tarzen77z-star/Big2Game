@@ -1675,7 +1675,10 @@
       <span id="account-icon">👤</span>
       <span id="account-name-display">Guest</span>
     </div>
-    <button id="btn-account" onclick="showAuthModal()">Sign In</button>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <button id="btn-account" onclick="showAuthModal()">Sign In</button>
+      <button id="btn-account-signout" onclick="doSignOut()" style="display:none;background:none;border:1px solid rgba(255,100,100,0.35);color:rgba(255,150,150,0.7);font-family:'Crimson Pro',serif;font-size:0.72rem;padding:3px 10px;border-radius:10px;cursor:pointer;" title="Sign out">↩ Out</button>
+    </div>
   </div>
   <div id="splash-rank">
     <div class="rank-badge beginner" id="splash-badge"></div>
@@ -4918,15 +4921,19 @@ function initSupabase() {
 
 // ── Account bar UI ──────────────────────────────────────
 function updateAccountBar(signedIn) {
-  const icon    = document.getElementById('account-icon');
-  const nameEl  = document.getElementById('account-name-display');
-  const btn     = document.getElementById('btn-account');
+  const icon      = document.getElementById('account-icon');
+  const nameEl    = document.getElementById('account-name-display');
+  const btn       = document.getElementById('btn-account');
+  const signoutBtn= document.getElementById('btn-account-signout');
+  const bar       = document.getElementById('account-bar');
   if (signedIn && supaUser) {
     const uname = supaUser.user_metadata?.username || supaUser.email?.split('@')[0] || 'Player';
-    if (icon)   icon.textContent = '✓';
+    if (icon)   { icon.textContent = '☁'; icon.style.color = '#7fffaa'; }
     if (nameEl) { nameEl.textContent = uname; nameEl.style.color = '#7fffaa'; }
-    if (btn)    { btn.textContent = 'Account'; btn.classList.add('signed-in'); }
-    // Also update in-game name if not customised
+    if (btn)    { btn.textContent = '⚙ Account'; btn.classList.add('signed-in'); }
+    if (signoutBtn) signoutBtn.style.display = 'block';
+    if (bar) bar.style.borderColor = 'rgba(127,255,170,0.2)';
+    // Update in-game name if not customised
     if (playerCustomName === 'You' || playerCustomName === 'Player') {
       playerCustomName = uname;
       const inp = document.getElementById('player-name-input');
@@ -4935,9 +4942,11 @@ function updateAccountBar(signedIn) {
       if (lbl) lbl.textContent = uname;
     }
   } else {
-    if (icon)   icon.textContent = '👤';
+    if (icon)   { icon.textContent = '👤'; icon.style.color = ''; }
     if (nameEl) { nameEl.textContent = 'Guest'; nameEl.style.color = ''; }
     if (btn)    { btn.textContent = 'Sign In'; btn.classList.remove('signed-in'); }
+    if (signoutBtn) signoutBtn.style.display = 'none';
+    if (bar) bar.style.borderColor = '';
   }
 }
 
