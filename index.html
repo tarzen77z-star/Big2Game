@@ -3178,6 +3178,11 @@ function npcTurn() {
 }
 
 // ── NPC hand analysis helpers ──────────────────────────
+// In MP, NPCs always play at Hard difficulty regardless of selectedMode
+function npcEffectiveMode() {
+  return mpGameMode === 'vs_human' ? 'hard' : selectedMode;
+}
+
 function npcGroupHand(hand) {
   // Returns sets: quads, triples, pairs, singles, fiveCardCombos
   const byRank = {};
@@ -3361,7 +3366,8 @@ function bestSetPlay(hand) {
 function npcPickFreePlay(hand) {
   // When NPC controls the pile, pick the smartest play:
   const g = npcGroupHand(hand);
-  const isIntermediate = selectedMode === 'intermediate' || selectedMode === 'hard' || selectedMode === 'pro';
+  const _npcMode = npcEffectiveMode();
+  const isIntermediate = _npcMode === 'intermediate' || _npcMode === 'hard' || _npcMode === 'pro';
 
   // If only 1-2 cards, just play them all
   if (hand.length <= 2) {
@@ -3380,7 +3386,7 @@ function npcPickFreePlay(hand) {
   // Play singles only. Lead a small bait card → opponent beats it →
   // we recapture with a big card. Hold all sets until big cards run out,
   // then flush sets to finish.
-  const isHard = selectedMode === 'hard' || selectedMode === 'pro';
+  const isHard = _npcMode === 'hard' || _npcMode === 'pro';
   if (isHard && startingHandProfile[currentPlayer] === 'big_heavy') {
     const bigRemaining = hand.filter(c => c.rank === 'A' || c.rank === '2').length;
 
@@ -3531,7 +3537,8 @@ function findBestNpcPlay(hand, reference, mustIncludeDiamond3) {
   if (hand.length <= 2) return valid.sort((a,b)=>a.key-b.key)[0];
 
   // ── HARD MODE: big-heavy hand — when responding, prefer to pass and wait for control ──
-  const isHardMode = selectedMode === 'hard' || selectedMode === 'pro';
+  const _npcMode2 = npcEffectiveMode();
+  const isHardMode = _npcMode2 === 'hard' || _npcMode2 === 'pro';
   if (isHardMode && startingHandProfile[currentPlayer] === 'big_heavy') {
     const bigRemaining = hand.filter(c => c.rank === 'A' || c.rank === '2').length;
 
