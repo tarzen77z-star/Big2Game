@@ -1977,7 +1977,7 @@
           </tr>
           <tr style="border-bottom:1px solid rgba(201,168,76,0.15)">
             <td style="padding:5px 4px;font-weight:700;color:var(--gold)">2. Flush</td>
-            <td style="padding:5px 4px;color:var(--text-dim)">5 cards same suit. Compare highest card, then suit.</td>
+            <td style="padding:5px 4px;color:var(--text-dim)">5 cards same suit. Compare all 5 ranks highest-to-lowest first — <em>K,Q,10,8,3 beats K,9,8,4,3</em> because Q &gt; 9. Only when all 5 ranks are equal does suit decide (♠ &gt; ♥ &gt; ♣ &gt; ♦).</td>
           </tr>
           <tr style="border-bottom:1px solid rgba(201,168,76,0.15)">
             <td style="padding:5px 4px;font-weight:700;color:var(--gold)">3. Full House</td>
@@ -2403,13 +2403,10 @@ function updateRankUI() {
 
 function selectMode(mode) {
   if (mode === selectedMode) return;
-  // Save current mode's scores before switching
   saveScoresForMode(selectedMode);
-  // Switch
   selectedMode = mode;
-  // Load new mode's scores
+  localStorage.setItem('big2_selected_mode', mode); // persist selected mode
   loadScoresForMode(selectedMode);
-  // Update resume button for the new mode
   updateResumeButton();
   updateRankUI();
   updateScoreboard();
@@ -2704,7 +2701,13 @@ function classifyFive(sorted) {
     const tcard  = sorted.filter(c => c.rank===trank).sort(compareCards).pop();
     return { type:'five', subtype:'full_house', key: cardVal(tcard) + 2*1000, cards: sorted };
   }
-  if (isFlush) return { type:'five', subtype:'flush', key: topVal + 1*1000, cards: sorted };
+  if (isFlush) {
+    // Key: compare ranks descending (rank only, not suit), then suit of highest card as final tiebreak
+    const desc = sorted.slice().reverse(); // highest rank first
+    const flushKey = desc.reduce((acc, c, i) => acc + RANK_VAL[c.rank] * Math.pow(14, 4 - i), 0)
+                   + SUIT_VAL[desc[0].suit] * 0.001;
+    return { type:'five', subtype:'flush', key: flushKey + 1*1000, cards: sorted };
+  }
   if (isStraight) return { type:'five', subtype:'straight', key: straightKey(sorted, wrapType) + 0*1000, cards: sorted };
   return null;
 }
@@ -5112,6 +5115,11 @@ async function doSyncNow() {
 // ════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════
+// Restore last selected mode
+const _savedMode = localStorage.getItem('big2_selected_mode');
+if (_savedMode && ['beginner','intermediate','hard','pro'].includes(_savedMode)) {
+  selectedMode = _savedMode;
+}
 loadScores();
 loadFeats();
 updateScoreboard();
