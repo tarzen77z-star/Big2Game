@@ -987,6 +987,39 @@
   }
 
   /* ── LEGEND ── */
+  #feats-toggle {
+    margin-top: 0.5rem;
+    background: linear-gradient(135deg, rgba(80,50,10,0.7), rgba(140,90,20,0.5), rgba(80,50,10,0.7));
+    border: 1px solid rgba(201,168,76,0.55);
+    color: var(--gold-light);
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.92rem;
+    padding: 7px 24px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    box-shadow: 0 2px 12px rgba(201,168,76,0.15);
+    position: relative;
+    overflow: hidden;
+  }
+  #feats-toggle::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, transparent 40%, rgba(255,220,100,0.12) 50%, transparent 60%);
+    transform: translateX(-100%);
+    transition: transform 0.5s;
+  }
+  #feats-toggle:hover {
+    border-color: var(--gold);
+    color: #ffe88a;
+    box-shadow: 0 4px 20px rgba(201,168,76,0.35);
+    transform: translateY(-1px);
+  }
+  #feats-toggle:hover::before { transform: translateX(100%); }
+
   #legend-toggle {
     margin-top: 0.6rem;
     background: none;
@@ -1192,6 +1225,7 @@
     .btn-gold { padding: 0.65em 1.8em; font-size: 1rem; }
     .btn-ghost { padding: 0.5em 1.4em; font-size: 0.82rem; }
     #btn-multiplayer { padding: 0.6em 1.6em; font-size: 0.9rem; }
+    #feats-toggle { font-size: 0.8rem; padding: 6px 18px; margin-top: 0.3rem; }
     #legend-toggle { font-size: 0.72rem; padding: 3px 10px; margin-top: 0.3rem; }
   }
 
@@ -1451,6 +1485,7 @@
   </div>
   <button class="btn-gold" id="btn-start-game" onclick="startGame()">▶ Start New Game</button>
   <button class="btn-ghost" onclick="showScoreboard()">📊 View Standings</button>
+  <button id="feats-toggle" onclick="showFeats()">🎖️ Feats</button>
   <button id="btn-multiplayer" onclick="openMpLobby()">👥 Multiplayer</button>
   <button id="legend-toggle" onclick="document.getElementById('legend-panel').classList.add('open')">📖 Rank &amp; Mode Guide</button>
 </div>
@@ -1507,6 +1542,17 @@
         <button class="btn-mp" onclick="closeMpLobby()">Cancel</button>
       </div>
     </div>
+  </div>
+</div>
+
+
+<!-- FEATS MODAL -->
+<div id="feats-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:300;overflow-y:auto;padding:20px;box-sizing:border-box;">
+  <div style="max-width:480px;margin:0 auto;background:linear-gradient(160deg,#1a1a2e,#16213e);border:1px solid rgba(201,168,76,0.3);border-radius:16px;padding:24px;position:relative;">
+    <button onclick="document.getElementById('feats-overlay').style.display='none'" style="position:absolute;top:12px;right:16px;background:none;border:none;color:rgba(160,184,255,0.6);font-size:1.3rem;cursor:pointer">✕</button>
+    <h2 style="font-family:'Playfair Display',serif;color:var(--gold-light);margin-bottom:4px;font-size:1.4rem;">🏅 Feats</h2>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:16px">Exceptional accomplishments tracked across your games.</p>
+    <div id="feats-content"></div>
   </div>
 </div>
 
@@ -3104,6 +3150,8 @@ function executePlay(playerIdx, cards, play) {
   currentRoundPlays.push({ cards:[...cards], playerIdx, type: play.type, subtype: play.subtype });
   // Track all discarded cards for NPC card counting
   cards.forEach(c => globalDiscardedCards.add(cardKey(c)));
+  // Track rounds (each new pile is a round for clean sweep)
+  if (!lastPlay) { _roundsPlayed++; if (playerIdx===0) _roundsWonByHuman++; }
   lastPlay = { ...play, playerIdx };
   passCount = 0;
   firstTurn = false;
@@ -3112,6 +3160,9 @@ function executePlay(playerIdx, cards, play) {
     single:'Single', pair:'Pair', triple:'Three of a Kind',
     quad:'Four of a Kind', five: subtypeLabel(play.subtype)
   }[play.type] || play.type;
+
+  // Track play feats for human player
+  checkPlayFeats(cards, play, playerIdx);
 
   // ── Power Play: auto-pass all others, player regains control ──
   const powerPlay = isPowerPlay(cards, play);
@@ -3987,6 +4038,11 @@ function endGame(winnerIdx) {
   gameActive = false;
   resetHandZoom();
   resetDiscardZoom();
+  // Check win-based feats
+  const rawCardsAtEnd = hands.map(h=>h.length);
+  checkWinFeats(winnerIdx, rawCardsAtEnd);
+  // Reset round counters for next game
+  _roundsPlayed = 0; _roundsWonByHuman = 0;
   gamesPlayed++;
 
   // Step 1: Apply multiplier to each player's raw card count
@@ -4350,10 +4406,211 @@ function playerName(idx) {
   return [playerCustomName,'Ace','Rex','Ivy'][idx];
 }
 
+
+// ════════════════════════════════════════════════════════════
+//  FEATS SYSTEM
+// ════════════════════════════════════════════════════════════
+
+const FEATS_DEF = {
+  // ── Power Plays ──────────────────────────────────────────
+  royal_flush:     { group:'Power Plays', icon:'👑', name:'Royal Flush',     desc:'Play a Royal Flush',                        counter:true },
+  straight_flush:  { group:'Power Plays', icon:'🔥', name:'Straight Flush',  desc:'Play a Straight Flush',                     counter:true },
+  quads:           { group:'Power Plays', icon:'💪', name:'Quads',           desc:'Play four of a kind',                       counter:true },
+
+  // ── Winning ──────────────────────────────────────────────
+  annihilation:    { group:'Winning', icon:'💀', name:'Annihilation',  desc:'Win while all others hold 13 cards'             },
+  demolition:      { group:'Winning', icon:'💥', name:'Demolition',    desc:'Win while all others hold 10–12 cards'          },
+  full_force:      { group:'Winning', icon:'⚡', name:'Full Force',    desc:'Win with one at 8–9 cards and others at 10–12'  },
+  assassinate:     { group:'Winning', icon:'🗡️', name:'Assassinate',   desc:'Win while 1–2 others hold 13 cards'             },
+  clean_sweep:     { group:'Winning', icon:'🧹', name:'Clean Sweep',   desc:'Win a game where you played every single round' },
+  streak_5:        { group:'Winning', icon:'🔥', name:'Straight Shooter', desc:'Win 5 games in a row'                       },
+  streak_10:       { group:'Winning', icon:'🌊', name:'Winning Streak',   desc:'Win 10 games in a row'                      },
+  streak_15:       { group:'Winning', icon:'🌪️', name:'Unstoppable',      desc:'Win 15 games in a row'                      },
+  streak_20:       { group:'Winning', icon:'⭐', name:'Godly',            desc:'Win 20 games in a row'                      },
+
+  // ── Hands ────────────────────────────────────────────────
+  royal_dragon:    { group:'Hands', icon:'🐉', name:'Royal Dragon',   desc:'Dealt 13 cards all of the same suit'            },
+  one_tail_dragon: { group:'Hands', icon:'🐲', name:'One-tail Dragon',desc:'Dealt 13 cards from A to K (all ranks)'         },
+  quad_king:       { group:'Hands', icon:'♛',  name:'Quad King',      desc:'Dealt 3 or more four-of-a-kind groups'          },
+  double_sf:       { group:'Hands', icon:'✨', name:'Twin Flushes',   desc:'Dealt 2 or more straight flushes in one hand'   },
+  the_trips:       { group:'Hands', icon:'🎯', name:'The Trips',      desc:'Dealt 4 or more three-of-a-kind groups'         },
+};
+
+// Milestone gems for counter feats (every 100)
+const MILESTONE_GEMS = ['💎','🔷','💠','🔮','⭐','🌟','✨'];
+function gemForCount(n) {
+  const tier = Math.floor(n / 100);
+  return MILESTONE_GEMS[Math.min(tier, MILESTONE_GEMS.length-1)];
+}
+
+let feats = {}; // { featId: { count, unlocked, milestones[] } }
+
+function loadFeats() {
+  try {
+    const raw = localStorage.getItem('big2_feats');
+    if (raw) feats = JSON.parse(raw);
+  } catch(e) { feats = {}; }
+}
+
+function saveFeats() {
+  localStorage.setItem('big2_feats', JSON.stringify(feats));
+}
+
+function awardFeat(id, silent) {
+  const def = FEATS_DEF[id];
+  if (!def) return;
+  if (!feats[id]) feats[id] = { count:0, unlocked:false, milestones:[] };
+  const f = feats[id];
+  const wasUnlocked = f.unlocked;
+
+  if (def.counter) {
+    f.count++;
+    f.unlocked = true;
+    // Check milestone every 100
+    const tier = Math.floor(f.count / 100);
+    if (tier > 0 && !f.milestones.includes(tier)) {
+      f.milestones.push(tier);
+      if (!silent) {
+        const gem = gemForCount(f.count);
+        toast('🏅 Feat Milestone! ' + def.icon + ' ' + def.name + ' ×' + f.count + ' ' + gem);
+      }
+    } else if (!wasUnlocked && !silent) {
+      toast('🏅 Feat Unlocked: ' + def.icon + ' ' + def.name + ' ×1');
+    } else if (!silent) {
+      toast(def.icon + ' ' + def.name + ' ×' + f.count);
+    }
+  } else {
+    if (f.unlocked) return; // one-time feats
+    f.unlocked = true;
+    f.count = 1;
+    if (!silent) toast('🏅 Feat Unlocked: ' + def.icon + ' ' + def.name + '!');
+  }
+  saveFeats();
+}
+
+function showFeats() {
+  const groups = {};
+  Object.entries(FEATS_DEF).forEach(([id, def]) => {
+    if (!groups[def.group]) groups[def.group] = [];
+    groups[def.group].push({ id, ...def });
+  });
+  const groupOrder = ['Power Plays','Winning','Hands'];
+  let html2 = '';
+  groupOrder.forEach(group => {
+    const items = groups[group] || [];
+    html2 += `<div style="margin-bottom:18px">
+      <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;color:var(--gold);text-transform:uppercase;border-bottom:1px solid rgba(201,168,76,0.2);padding-bottom:4px;margin-bottom:10px">${group}</div>
+      <div style="display:flex;flex-direction:column;gap:8px">`;
+    items.forEach(item => {
+      const f = feats[item.id];
+      const unlocked = f && f.unlocked;
+      const count = (f && f.count) || 0;
+      const gem = item.counter && count > 0 ? ' ' + gemForCount(count) : '';
+      const countLabel = item.counter && count > 0 ? ` <span style="color:var(--gold-light);font-weight:700">×${count}${gem}</span>` : '';
+      const opacity = unlocked ? '1' : '0.35';
+      const filter = unlocked ? '' : 'filter:grayscale(1)';
+      html2 += `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,${unlocked?'0.08':'0.03'});">
+        <span style="font-size:1.5rem;${filter};opacity:${opacity}">${item.icon}</span>
+        <div style="flex:1;opacity:${opacity}">
+          <div style="font-size:0.88rem;color:var(--text-light);font-weight:600">${item.name}${countLabel}</div>
+          <div style="font-size:0.72rem;color:var(--text-dim)">${item.desc}</div>
+        </div>
+        ${unlocked ? '<span style="color:#7fffaa;font-size:0.75rem">✓</span>' : '<span style="color:var(--text-dim);font-size:0.75rem">🔒</span>'}
+      </div>`;
+    });
+    html2 += '</div></div>';
+  });
+  const total = Object.keys(FEATS_DEF).length;
+  const earned = Object.values(feats).filter(f=>f.unlocked).length;
+  html2 = `<div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:12px;text-align:center">
+    <span style="color:var(--gold-light);font-weight:700">${earned}</span> / ${total} feats unlocked
+  </div>` + html2;
+  document.getElementById('feats-content').innerHTML = html2;
+  document.getElementById('feats-overlay').style.display = 'block';
+}
+
+// ── Track feats during gameplay ──────────────────────────
+
+function checkPlayFeats(cards, play, playerIdx) {
+  // Only track for human player (idx 0) in single-player
+  if (playerIdx !== 0 || mpGameMode === 'vs_human') return;
+  if (play.type === 'five') {
+    if (play.subtype === 'royal_flush')    awardFeat('royal_flush');
+    if (play.subtype === 'straight_flush') awardFeat('straight_flush');
+  }
+  if (play.type === 'quad')                awardFeat('quads');
+}
+
+function checkHandFeats(hand) {
+  // Called at deal time for human player in single-player
+  if (mpGameMode === 'vs_human') return;
+  if (hand.length !== 13) return;
+
+  // Royal Dragon: all same suit
+  const suits = new Set(hand.map(c=>c.suit));
+  if (suits.size === 1) awardFeat('royal_dragon');
+
+  // One-tail Dragon: all 13 ranks present (A,2,3,...K)
+  const ranks = new Set(hand.map(c=>c.rank));
+  if (ranks.size === 13) awardFeat('one_tail_dragon');
+
+  // Quad King: 3+ four-of-a-kind groups
+  const byRank = {};
+  hand.forEach(c=>{ if(!byRank[c.rank]) byRank[c.rank]=[]; byRank[c.rank].push(c); });
+  const quads = Object.values(byRank).filter(g=>g.length>=4).length;
+  if (quads >= 3) awardFeat('quad_king');
+
+  // Twin Flushes: 2+ straight flushes in hand
+  const combos5 = combinations(hand,5).map(c=>classifyPlay(c)).filter(p=>p&&p.type==='five'&&p.subtype==='straight_flush');
+  // Check for 2 non-overlapping straight flushes
+  let sfCount = 0;
+  const usedCards = new Set();
+  combos5.forEach(sf => {
+    const keys = sf.cards.map(c=>cardKey(c));
+    if (keys.every(k=>!usedCards.has(k))) { sfCount++; keys.forEach(k=>usedCards.add(k)); }
+  });
+  if (sfCount >= 2) awardFeat('double_sf');
+
+  // The Trips: 4+ three-of-a-kind groups
+  const trips = Object.values(byRank).filter(g=>g.length>=3).length;
+  if (trips >= 4) awardFeat('the_trips');
+}
+
+let _roundsPlayed = 0;
+let _roundsWonByHuman = 0;
+let _winStreak = 0;
+
+function checkWinFeats(winnerIdx, rawCards) {
+  if (mpGameMode === 'vs_human') return;
+  if (winnerIdx !== 0) {
+    _winStreak = 0; // reset streak on loss
+    return;
+  }
+  _winStreak++;
+
+  // Streak feats
+  if (_winStreak >= 5)  awardFeat('streak_5',  _winStreak > 5);
+  if (_winStreak >= 10) awardFeat('streak_10', _winStreak > 10);
+  if (_winStreak >= 15) awardFeat('streak_15', _winStreak > 15);
+  if (_winStreak >= 20) awardFeat('streak_20', _winStreak > 20);
+
+  // Card-count feats (rawCards = cards remaining per player [0..3], winner=0)
+  const others = rawCards.slice(1); // opponents' remaining cards
+  if (others.every(c=>c===13))                                awardFeat('annihilation');
+  if (others.every(c=>c>=10&&c<=12))                          awardFeat('demolition');
+  if (others.some(c=>c>=8&&c<=9) && others.every(c=>c>=8))   awardFeat('full_force');
+  if (others.filter(c=>c===13).length >= 1 &&
+      others.filter(c=>c===13).length <= 2)                    awardFeat('assassinate');
+
+  // Clean Sweep: human played every round
+  if (_roundsWonByHuman === _roundsPlayed && _roundsPlayed > 0) awardFeat('clean_sweep');
+}
+
 // ════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════
 loadScores();
+loadFeats();
 updateScoreboard();
 updateRankUI();
 // Init legend trophy badges
