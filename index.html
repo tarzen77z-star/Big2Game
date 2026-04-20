@@ -1466,18 +1466,30 @@
       <div class="mp-tab" id="mp-tab-rejoin" onclick="mpSwitchTab('rejoin')">↩ Rejoin</div>
     </div>
     <div class="mp-section active" id="mp-sec-host">
-      <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.8rem">Share this code with up to 3 friends. Game starts when you click Start (min 2 players).</p>
-      <div class="room-code-display" id="mp-room-code" onclick="mpCopyCode()">——</div>
-      <div class="room-code-hint" id="mp-copy-hint">Tap code to copy</div>
-      <div id="mp-status">Generating room…</div>
-      <div id="mp-player-list"></div>
-      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:0.8rem">
-        <button class="btn-mp btn-mp-start" id="btn-mp-start" onclick="mpStartGame()" disabled>▶ Start Game</button>
-        <button class="btn-mp" onclick="closeMpLobby()">Cancel</button>
+      <!-- Stage 1: landing — shown before room is created -->
+      <div id="mp-host-landing">
+        <p style="font-size:0.85rem;color:rgba(160,184,255,0.85);margin-bottom:1rem;line-height:1.5">
+          Start a new room and invite up to 3 friends.<br>
+          <span style="font-size:0.78rem;color:rgba(160,184,255,0.55)">You'll get a 4-letter code to share with them.</span>
+        </p>
+        <button class="btn-mp btn-mp-start" onclick="mpCreateRoom()" style="width:100%;margin-bottom:0.5rem">🏠 Create Room</button>
+        <button class="btn-mp" onclick="closeMpLobby()" style="width:100%">Cancel</button>
+      </div>
+      <!-- Stage 2: lobby — shown after room is created -->
+      <div id="mp-host-lobby" style="display:none">
+        <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.5rem">Share this code with your friends:</p>
+        <div class="room-code-display" id="mp-room-code" onclick="mpCopyCode()">——</div>
+        <div class="room-code-hint" id="mp-copy-hint">Tap code to copy</div>
+        <div id="mp-status">Generating room…</div>
+        <div id="mp-player-list"></div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:0.8rem">
+          <button class="btn-mp btn-mp-start" id="btn-mp-start" onclick="mpStartGame()" disabled>▶ Start Game</button>
+          <button class="btn-mp" onclick="mpCancelRoom()">✕ Cancel Room</button>
+        </div>
       </div>
     </div>
     <div class="mp-section" id="mp-sec-join">
-      <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.8rem">Enter the 4-letter room code from the host.</p>
+      <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.8rem">Enter the 4-letter room code from your host.</p>
       <input class="mp-input" id="mp-join-code" maxlength="4" placeholder="XXXX" oninput="this.value=this.value.toUpperCase()"/>
       <div id="mp-status-join" style="font-size:0.82rem;font-style:italic;color:rgba(160,184,255,0.8);min-height:20px;margin:6px 0"></div>
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:0.8rem">
@@ -1486,7 +1498,7 @@
       </div>
     </div>
     <div class="mp-section" id="mp-sec-rejoin">
-      <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.8rem">Reconnect to a game you were disconnected from.</p>
+      <p style="font-size:0.82rem;color:rgba(160,184,255,0.7);margin-bottom:0.8rem">Got disconnected? Reconnect using your last room code.</p>
       <div id="mp-rejoin-info" style="font-size:0.85rem;color:rgba(160,184,255,0.9);margin-bottom:0.5rem;min-height:1.2em;text-align:center;"></div>
       <input class="mp-input" id="mp-rejoin-code" maxlength="4" placeholder="XXXX" oninput="this.value=this.value.toUpperCase()"/>
       <div id="mp-status-rejoin" style="font-size:0.82rem;font-style:italic;color:rgba(160,184,255,0.8);min-height:20px;margin:6px 0"></div>
@@ -4404,21 +4416,51 @@ function mpGenCode(){let c='';for(let i=0;i<4;i++)c+=MP_CHARS[Math.floor(Math.ra
 // ── Lobby ─────────────────────────────────────────────────
 function openMpLobby(){
   document.getElementById('mp-lobby').classList.add('open');
-  // Show rejoin tab with indicator if there's a saved room
   const savedRoom=localStorage.getItem('mp_last_room');
   const rejoinTab=document.getElementById('mp-tab-rejoin');
   if(rejoinTab) rejoinTab.textContent=savedRoom?'↩ Rejoin ('+savedRoom+')':'↩ Rejoin';
-  mpSwitchTab('host');
+  mpSwitchTab('host'); // show landing view, no room created yet
+}
+function closeMpLobby(){document.getElementById('mp-lobby').classList.remove('open');mpDestroy();mpShowHostLanding();}
+function mpShowHostLanding(){
+  const landing=document.getElementById('mp-host-landing');
+  const lobby=document.getElementById('mp-host-lobby');
+  if(landing) landing.style.display='block';
+  if(lobby) lobby.style.display='none';
+}
+
+function mpShowHostLobby(){
+  const landing=document.getElementById('mp-host-landing');
+  const lobby=document.getElementById('mp-host-lobby');
+  if(landing) landing.style.display='none';
+  if(lobby) lobby.style.display='block';
+}
+
+function mpCreateRoom(){
+  mpShowHostLobby();
   mpInitHost();
 }
-function closeMpLobby(){document.getElementById('mp-lobby').classList.remove('open');mpDestroy();}
+
+function mpCancelRoom(){
+  mpDestroy();
+  mpShowHostLanding();
+  mpSetStatus('');
+}
+
 function mpSwitchTab(tab){
+  // If leaving host tab while room is open, cancel it
+  const currentlyOnHost=document.getElementById('mp-tab-host')?.classList.contains('active');
+  if(currentlyOnHost && tab!=='host' && mpIsHost){
+    mpCancelRoom();
+  }
   ['host','join','rejoin'].forEach(t=>{
     const tabEl=document.getElementById('mp-tab-'+t);
     const secEl=document.getElementById('mp-sec-'+t);
     if(tabEl) tabEl.classList.toggle('active',t===tab);
     if(secEl) secEl.classList.toggle('active',t===tab);
   });
+  // Always reset host to landing when switching to it
+  if(tab==='host') mpShowHostLanding();
   // Pre-fill rejoin code if available
   if(tab==='rejoin'){
     const saved=localStorage.getItem('mp_last_room')||'';
