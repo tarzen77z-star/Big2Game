@@ -1544,7 +1544,15 @@
   #btn-account.signed-in:hover { background:rgba(127,255,170,0.08); }
 
   /* ── AUTH MODAL ── */
-  #auth-overlay { display:none; }
+  #auth-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.82);
+    z-index: 400;
+    align-items: center;
+    justify-content: center;
+  }
   #auth-overlay.open { display:flex; }
   #auth-box {
     background: linear-gradient(160deg,#0f1a2e,#1a2640);
@@ -1732,7 +1740,7 @@
 
 
 <!-- AUTH MODAL -->
-<div id="auth-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:400;display:none;align-items:center;justify-content:center;">
+<div id="auth-overlay">
   <div id="auth-box">
     <button onclick="closeAuthModal()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:rgba(160,184,255,0.6);font-size:1.3rem;cursor:pointer">✕</button>
     <div id="auth-tabs" style="display:flex;gap:0;margin-bottom:20px;border-radius:8px;overflow:hidden;border:1px solid rgba(201,168,76,0.25);">
