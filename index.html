@@ -1623,6 +1623,30 @@
   }
   .btn-auth-guest:hover { color:rgba(160,184,255,0.8); }
 
+  /* ── Splash section labels ── */
+  .splash-section-label {
+    font-size: 0.65rem;
+    font-family: 'Crimson Pro', serif;
+    letter-spacing: 0.18em;
+    color: rgba(255,255,255,0.22);
+    text-transform: uppercase;
+    align-self: flex-start;
+    margin-top: 6px;
+    margin-bottom: 0px;
+    padding-left: 2px;
+  }
+  .splash-btn-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    max-width: 320px;
+  }
+  .splash-half-btn {
+    flex: 1;
+    margin-top: 0 !important;
+  }
+
+
 </style>
 </head>
 <body>
@@ -1675,9 +1699,19 @@
       <span class="mode-req">Gold req.</span>
     </button>
   </div>
+  <!-- PLAY section -->
+  <div class="splash-section-label">PLAY</div>
   <button class="btn-gold" id="btn-start-game" onclick="startGame()">▶ Start New Game</button>
-  <button class="btn-ghost" onclick="showScoreboard()">📊 View Standings</button>
-  <button id="feats-toggle" onclick="showFeats()">🎖️ Feats</button>
+
+  <!-- PROGRESS section -->
+  <div class="splash-section-label">PROGRESS</div>
+  <div class="splash-btn-row">
+    <button class="btn-ghost splash-half-btn" onclick="showScoreboard()">📊 Standings</button>
+    <button id="feats-toggle" class="splash-half-btn" onclick="showFeats()">🎖️ Feats</button>
+  </div>
+
+  <!-- CONNECT section -->
+  <div class="splash-section-label">CONNECT</div>
   <button id="btn-multiplayer" onclick="openMpLobby()">👥 Multiplayer</button>
   <button id="legend-toggle" onclick="document.getElementById('legend-panel').classList.add('open')">📖 Rank &amp; Mode Guide</button>
 </div>
@@ -2463,21 +2497,19 @@ function hasSavedGameForMode(mode) {
 
 function updateResumeButton() {
   const hasSaved = hasSavedGameForMode(selectedMode);
-  let rb = document.getElementById('btn-resume-game');
   const sb = document.getElementById('btn-start-game');
   const modeLabel = {beginner:'Beginner',intermediate:'Intermediate',hard:'Hard',pro:'Pro'}[selectedMode]||selectedMode;
+  if (!sb) return;
   if (hasSaved) {
-    if (!rb) {
-      rb = document.createElement('button');
-      rb.id = 'btn-resume-game';
-      rb.className = 'btn-gold';
-      rb.style.cssText = 'margin-bottom:0.5rem;background:linear-gradient(135deg,#1a5c38,#2d8a50,#1a5c38);box-shadow:0 4px 18px rgba(45,138,80,0.45);';
-      rb.onclick = resumeGame;
-      if (sb) { sb.parentNode.insertBefore(rb, sb); sb.style.display = 'none'; }
-    }
-    rb.innerHTML = '↩ Resume ' + modeLabel;
+    sb.textContent = '↩ Resume ' + modeLabel;
+    sb.style.background = 'linear-gradient(135deg,#1a5c38,#2d8a50,#1a5c38)';
+    sb.style.boxShadow  = '0 4px 18px rgba(45,138,80,0.45)';
+    sb.onclick = resumeGame;
   } else {
-    clearResumeButton();
+    sb.innerHTML = '▶ Start New Game';
+    sb.style.background = '';
+    sb.style.boxShadow  = '';
+    sb.onclick = startGame;
   }
 }
 
@@ -4955,7 +4987,10 @@ async function doSignUp() {
   setAuthStatus('Creating account…','','signup');
   const { data, error } = await supaClient.auth.signUp({
     email, password,
-    options: { data: { username } }
+    options: {
+      data: { username },
+      emailRedirectTo: 'https://tarzen77z-star.github.io/Big2Game/'
+    }
   });
   if (error) { setAuthStatus(error.message,'error','signup'); return; }
   setAuthStatus('✓ Account created! Check your email to confirm.','success','signup');
@@ -5117,29 +5152,16 @@ if (sc1n) sc1n.textContent = playerCustomName;
 
 // ── Resume saved game on page load ────────────────────────
 (function checkResume() {
-  // Check per-mode key for current selected mode
-  const hasSaved = hasSavedGameForMode(selectedMode);
-  if (!hasSaved) return;
-
-  // Inject a "Resume Game" button above the Start button on splash
-  const resumeBtn = document.createElement('button');
-  resumeBtn.id = 'btn-resume-game';
-  resumeBtn.className = 'btn-gold';
-  resumeBtn.style.cssText = 'margin-bottom:0.5rem;background:linear-gradient(135deg,#1a5c38,#2d8a50,#1a5c38);box-shadow:0 4px 18px rgba(45,138,80,0.45);';
-  resumeBtn.innerHTML = '↩ Resume Game';
-  resumeBtn.onclick = resumeGame;
-  const startBtn = document.getElementById('btn-start-game');
-  if (startBtn) {
-    startBtn.parentNode.insertBefore(resumeBtn, startBtn);
-    startBtn.style.display = 'none';
-  }
+  updateResumeButton();
 })();
 
 function clearResumeButton() {
-  const rb = document.getElementById('btn-resume-game');
-  if (rb) rb.remove();
   const sb = document.getElementById('btn-start-game');
-  if (sb) sb.style.display = '';
+  if (!sb) return;
+  sb.innerHTML = '▶ Start New Game';
+  sb.style.background = '';
+  sb.style.boxShadow  = '';
+  sb.onclick = startGame;
 }
 
 function resumeGame() {
