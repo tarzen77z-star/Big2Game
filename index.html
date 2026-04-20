@@ -4895,6 +4895,10 @@ let supaUser   = null;  // null = guest
 
 function initSupabase() {
   try {
+    if (typeof supabase === 'undefined') {
+      console.warn('Supabase SDK not loaded — account features disabled.');
+      return;
+    }
     supaClient = supabase.createClient(SUPA_URL, SUPA_KEY);
     // Listen for auth state changes
     supaClient.auth.onAuthStateChange(async (event, session) => {
@@ -4907,13 +4911,18 @@ function initSupabase() {
       }
     });
     // Check existing session
+    // Show "Checking..." while auth resolves
+    const nameEl = document.getElementById('account-name-display');
+    if (nameEl) nameEl.textContent = '…';
     supaClient.auth.getSession().then(({ data }) => {
       supaUser = data?.session?.user || null;
       if (supaUser) {
         loadCloudData();
         updateAccountBar(true);
+      } else {
+        updateAccountBar(false);
       }
-    });
+    }).catch(() => updateAccountBar(false));
   } catch(e) {
     console.warn('Supabase init failed:', e);
   }
@@ -4997,30 +5006,41 @@ async function doSignUp() {
   if (!email)    { setAuthStatus('Enter your email.','error','signup'); return; }
   if (!password || password.length < 6) { setAuthStatus('Password must be 6+ characters.','error','signup'); return; }
   setAuthStatus('Creating account…','','signup');
-  const { data, error } = await supaClient.auth.signUp({
-    email, password,
-    options: {
-      data: { username },
-      emailRedirectTo: 'https://tarzen77z-star.github.io/Big2Game/'
-    }
-  });
-  if (error) { setAuthStatus(error.message,'error','signup'); return; }
-  setAuthStatus('✓ Account created! Check your email to confirm.','success','signup');
-  setTimeout(closeAuthModal, 2000);
+  try {
+    const { data, error } = await supaClient.auth.signUp({
+      email, password,
+      options: {
+        data: { username },
+        emailRedirectTo: 'https://tarzen77z-star.github.io/Big2Game/'
+      }
+    });
+    if (error) { setAuthStatus(error.message,'error','signup'); return; }
+    setAuthStatus('✓ Account created! Check your email to confirm.','success','signup');
+    setTimeout(closeAuthModal, 2000);
+  } catch(e) {
+    setAuthStatus('Network error: ' + (e.message||'check connection'),'error','signup');
+  }
 }
 
 // ── Sign In ──────────────────────────────────────────────
 async function doSignIn() {
-  if (!supaClient) return;
+  if (!supaClient) {
+    setAuthStatus('Connection unavailable. Try refreshing.','error','signin');
+    return;
+  }
   const email    = document.getElementById('signin-email')?.value.trim();
   const password = document.getElementById('signin-password')?.value;
   if (!email)    { setAuthStatus('Enter your email.','error','signin'); return; }
   if (!password) { setAuthStatus('Enter your password.','error','signin'); return; }
   setAuthStatus('Signing in…','','signin');
-  const { data, error } = await supaClient.auth.signInWithPassword({ email, password });
-  if (error) { setAuthStatus(error.message,'error','signin'); return; }
-  setAuthStatus('✓ Signed in!','success','signin');
-  setTimeout(closeAuthModal, 800);
+  try {
+    const { data, error } = await supaClient.auth.signInWithPassword({ email, password });
+    if (error) { setAuthStatus(error.message,'error','signin'); return; }
+    setAuthStatus('✓ Signed in!','success','signin');
+    setTimeout(closeAuthModal, 800);
+  } catch(e) {
+    setAuthStatus('Network error: ' + (e.message||'check connection'),'error','signin');
+  }
 }
 
 // ── Sign Out ─────────────────────────────────────────────
