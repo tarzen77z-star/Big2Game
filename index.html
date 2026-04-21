@@ -556,7 +556,22 @@
     padding: 2rem;
     max-width: 420px; width: 90%;
     text-align: center;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
   }
+  #modal-body {
+    overflow-y: auto;
+    flex: 1;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(201,168,76,0.3) transparent;
+    padding-right: 2px;
+    text-align: left;
+  }
+  #modal-body::-webkit-scrollbar { width: 4px; }
+  #modal-body::-webkit-scrollbar-track { background: transparent; }
+  #modal-body::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius: 2px; }
+  .modal-buttons { flex-shrink: 0; margin-top: 1rem; }
   #modal-box {
     position: relative;
   }
@@ -1815,7 +1830,6 @@
         <div style="font-size:0.72rem;color:#7fffaa;margin-top:4px">✓ Progress syncing to cloud</div>
       </div>
       <div id="auth-status-account" class="auth-status"></div>
-      <button class="btn-auth-primary" onclick="doSyncNow()" style="background:rgba(45,138,80,0.3);border-color:rgba(45,138,80,0.6)">☁ Sync Now</button>
       <button class="btn-auth-primary" onclick="doSignOut()" style="background:rgba(120,30,30,0.3);border-color:rgba(200,60,60,0.5);color:#ffaaaa">Sign Out</button>
       <button class="btn-auth-guest" onclick="closeAuthModal()">Close</button>
     </div>
@@ -2200,7 +2214,7 @@
   <div id="modal-box">
     <button id="modal-close-x" class="hidden" onclick="cancelForfeit()" title="Cancel forfeit">✕</button>
     <h2 id="modal-title">Game Over</h2>
-    <p id="modal-body"></p>
+    <div id="modal-body"></div>
     <div class="modal-buttons" id="modal-buttons"></div>
   </div>
 </div>
@@ -4905,7 +4919,8 @@ function initSupabase() {
       if (supaUser) {
         await loadCloudData();
         updateAccountBar(true);
-      } else {
+      } else if (event !== 'INITIAL_SESSION') {
+        // Only show Guest after a real sign-out, not during initial load
         updateAccountBar(false);
       }
     });
@@ -5132,13 +5147,7 @@ async function saveCloudData() {
   } catch(e) { console.warn('Cloud save error:', e); }
 }
 
-async function doSyncNow() {
-  if (!supaClient || !supaUser) return;
-  setAuthStatus('Syncing…','','account');
-  await saveCloudData();
-  setAuthStatus('✓ Synced!','success','account');
-  setTimeout(()=>setAuthStatus('','','account'), 2000);
-}
+
 
 // ════════════════════════════════════════
 //  INIT
