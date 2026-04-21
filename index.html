@@ -2446,16 +2446,19 @@ function getRankScoreCap() {
 }
 
 function getPlayerRank(pts) {
-  // Use the highest ever points to determine retained rank
-  const effectivePts = Math.max(pts, highestPts);
+  // Rank is determined by cumulative rankScore (never decreases)
+  // rankScore crosses thresholds: 100=Bronze, 1100=Silver, 6100=Gold
   let r = RANKS_DEF[0];
-  for (const rd of RANKS_DEF) if (effectivePts >= rd.minPts) r = rd;
+  if (rankScore >= 6100) r = RANKS_DEF[3];      // Gold
+  else if (rankScore >= 1100) r = RANKS_DEF[2]; // Silver
+  else if (rankScore >= 100)  r = RANKS_DEF[1]; // Bronze
   return r;
 }
 
 function getPlayerRankForUnlock() {
-  // For mode unlocking use the all-time high (retained rank)
-  return Math.max(scores[0], highestPts);
+  // Mode unlock uses rankScore — matches rank thresholds
+  // Normal(0-99)=Beginner only, Bronze(100+)=+Intermediate, Silver(1100+)=+Hard, Gold(6100+)=+Pro
+  return rankScore;
 }
 
 function updateRankUI() {
@@ -2470,13 +2473,14 @@ function updateRankUI() {
   if (sn) sn.textContent = rank.name;
   if (sp) sp.textContent = rankScore;
 
-  // Unlock mode buttons
+  // Unlock mode buttons — use cumulative rankScore thresholds
+  // Beginner: always open, Intermediate: 100+, Hard: 1100+, Pro: 6100+
+  const UNLOCK_THRESHOLDS = { beginner:0, intermediate:100, hard:1100, pro:6100 };
   const modes = ['beginner','intermediate','hard','pro'];
   modes.forEach(m => {
     const btn = document.getElementById('mode-' + m);
     if (!btn) return;
-    const modeRank = RANKS_DEF.find(r => r.mode === m) || RANKS_DEF[0];
-    const unlocked = getPlayerRankForUnlock() >= modeRank.minPts;
+    const unlocked = rankScore >= (UNLOCK_THRESHOLDS[m] || 0);
     btn.disabled = !unlocked;
     btn.classList.toggle('active-mode', m === selectedMode);
   });
