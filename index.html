@@ -4642,10 +4642,9 @@ function resetScores() {
   scores = [0,0,0,0];
   gamesPlayed = 0;
   gameHistory = [];
-  // Reset mode best for current mode only
-  localStorage.removeItem('big2_modebest_' + selectedMode);
+  // Note: mode best (rank score) is intentionally NOT reset — rank score is permanent
   saveScores();
-  rankScore = calcTotalRankScore();
+  // rankScore stays unchanged
   closeModal();
   updateRankUI();
   toast(selectedMode.charAt(0).toUpperCase()+selectedMode.slice(1)+' mode scores reset!');
