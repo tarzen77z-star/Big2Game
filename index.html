@@ -4480,10 +4480,10 @@ function endGame(winnerIdx) {
     // Accumulate session scores (host-local order)
     gameDeltas.forEach((d,i) => { mpSessionScores[i] = (mpSessionScores[i]||0) + d; });
   }
-  mpShowEndBanner(winnerIdx, raw, mults, gameDeltas, mpNames);
+  showWinCelebration(winnerIdx, mpNames, () => {
+    mpShowEndBanner(winnerIdx, raw, mults, gameDeltas, mpNames);
+  });
 }
-
-// Show end-of-game banner — works for both host and guest
 // winnerLocalIdx is local to THIS player's perspective (0 = "you")
 // names[] is in local order (0=you, 1=right, 2=top, 3=left)
 function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas, namesOverride) {
@@ -6113,7 +6113,9 @@ function mpGuestShowGameover(data) {
     raw: raw.slice()
   });
   if (!mpSessionNames.length) mpSessionNames = names.slice();
-  mpShowEndBanner(guestWinnerLocal, raw, mults, deltas, names);
+  showWinCelebration(guestWinnerLocal, names, () => {
+    mpShowEndBanner(guestWinnerLocal, raw, mults, deltas, names);
+  });
 }
 
 function mpRejoinRoom(){
