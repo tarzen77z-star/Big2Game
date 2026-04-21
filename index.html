@@ -3428,6 +3428,7 @@ function confirmForfeit() {
   clearGameState();
   updateScoreboard();
   updateRankUI();
+  if (supaUser && supaClient) saveCloudData();
 
   // Update popup to show result (no X — game is over)
   const xBtn = document.getElementById('modal-close-x');
@@ -3535,10 +3536,7 @@ function executePlay(playerIdx, cards, play) {
   // ── Power Play: auto-pass all others, player regains control ──
   const powerPlay = isPowerPlay(cards, play);
   if (powerPlay) {
-    lastPlay = null;
-    passCount = 0;
-    currentRoundPlays = [];
-    currentPlayer = playerIdx; // player keeps control
+    // Render the card on the pile first, then clear after a visible delay
     document.getElementById('last-play-info').textContent =
       `💪 ${playerName(playerIdx)} played: ${typeLabel} — Power Play! Play again!`;
     toast('💪 Power Play! ' + playerName(playerIdx) + ' plays again!');
@@ -3565,6 +3563,31 @@ function executePlay(playerIdx, cards, play) {
       : null;
     gameActive = true; // re-enable so endGame works correctly
     showWinCelebration(winnerLocalForCel, namesForCel, () => endGame(playerIdx));
+    return;
+  }
+
+  saveGameState();
+  renderAll(); // show the card on the pile first
+  if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+
+  if (powerPlay) {
+    // After a short delay, clear the pile and let player play again
+    setTimeout(() => {
+      lastPlay = null;
+      passCount = 0;
+      currentRoundPlays = [];
+      currentPlayer = playerIdx;
+      renderDiscardPile();
+      document.getElementById('last-play-info').textContent = 'New round – play anything!';
+      if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+      if (playerIdx === 0) {
+        setPlayerControls(true);
+        updateTurnIndicator();
+      } else {
+        const token = ++mpTurnToken;
+        setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 800);
+      }
+    }, 1200);
     return;
   }
 
@@ -4465,6 +4488,8 @@ function endGame(winnerIdx) {
   clearGameState();
   updateScoreboard();
   updateRankUI();
+  // Auto-sync to cloud if signed in
+  if (supaUser && supaClient) saveCloudData();
 
   // In MP mode, broadcast gameover to all guests before showing banner
   if (mpGameMode === 'vs_human' && mpIsHost) {
@@ -5332,7 +5357,7 @@ async function loadCloudData() {
 }
 
 async function saveCloudData() {
-  if (!supaClient || !supaUser) return;
+  if (!supaClient || !supaUser) { console.warn('saveCloudData: no client or user'); return; }
   try {
     const modes = ['beginner','intermediate','hard','pro'];
     for (const mode of modes) {
@@ -5341,7 +5366,7 @@ async function saveCloudData() {
       const hp  = localStorage.getItem(modeKey(mode,'big2_highpts'));
       const hist= localStorage.getItem(modeKey(mode,'big2_history'));
       const mb  = parseInt(localStorage.getItem('big2_modebest_' + mode))||0;
-      await supaClient.from('player_scores').upsert({
+      const { error } = await supaClient.from('player_scores').upsert({
         user_id:      supaUser.id,
         mode,
         scores:       JSON.parse(s||'[0,0,0,0]'),
@@ -5352,14 +5377,17 @@ async function saveCloudData() {
         rank_score:   rankScore,
         updated_at:   new Date().toISOString()
       }, { onConflict: 'user_id,mode' });
+      if (error) console.warn('player_scores upsert error:', error);
     }
     // Save feats
-    await supaClient.from('player_feats').upsert({
+    const { error: fe } = await supaClient.from('player_feats').upsert({
       user_id:    supaUser.id,
       feats:      feats,
       win_streak: _winStreak,
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id' });
+    if (fe) console.warn('player_feats upsert error:', fe);
+    else console.log('☁ Cloud save OK for', supaUser.email);
   } catch(e) { console.warn('Cloud save error:', e); }
 }
 
