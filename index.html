@@ -1896,6 +1896,7 @@
         <div style="font-size:0.72rem;color:#7fffaa;margin-top:4px">✓ Progress syncing to cloud</div>
       </div>
       <div id="auth-status-account" class="auth-status"></div>
+      <button class="btn-auth-primary" onclick="doReloadFromCloud()" style="background:rgba(30,80,160,0.35);border-color:rgba(100,160,255,0.5);color:rgba(180,210,255,0.95)">☁ Reload Progress from Cloud</button>
       <button class="btn-auth-primary" onclick="doSignOut()" style="background:rgba(120,30,30,0.3);border-color:rgba(200,60,60,0.5);color:#ffaaaa">Sign Out</button>
       <button class="btn-auth-guest" onclick="closeAuthModal()">Close</button>
     </div>
@@ -5271,6 +5272,14 @@ async function doSignOut() {
 }
 
 // ── Cloud Sync ───────────────────────────────────────────
+async function doReloadFromCloud() {
+  if (!supaClient || !supaUser) return;
+  setAuthStatus('Loading from cloud…','','account');
+  await loadCloudData();
+  setAuthStatus('✓ Progress restored!','success','account');
+  setTimeout(()=>setAuthStatus('','','account'), 2500);
+}
+
 async function loadCloudData() {
   if (!supaClient || !supaUser) return;
   try {
