@@ -1875,6 +1875,18 @@
       <button class="btn-auth-guest" onclick="closeAuthModal()">Continue as Guest</button>
     </div>
 
+    <!-- Import Guest Progress prompt (shown after signup if guest has data) -->
+    <div id="auth-sec-import" class="auth-section">
+      <div style="text-align:center;margin-bottom:14px">
+        <div style="font-size:2rem;margin-bottom:6px">☁</div>
+        <div style="font-size:1rem;color:var(--gold-light);font-family:'Playfair Display',serif;font-weight:700">Import Your Progress?</div>
+        <p style="font-size:0.8rem;color:rgba(160,184,255,0.75);margin-top:8px;line-height:1.5">You have existing guest progress — scores, rank, history and feats. Would you like to import it into your new account?</p>
+      </div>
+      <div id="auth-status-import" class="auth-status"></div>
+      <button class="btn-auth-primary" onclick="doImportThenClose()" style="background:rgba(45,138,80,0.35);border-color:rgba(45,138,80,0.6);color:#7fffaa">☁ Yes, Import My Progress</button>
+      <button class="btn-auth-primary" onclick="closeAuthModal()" style="background:rgba(60,60,60,0.3);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.6)">No Thanks, Start Fresh</button>
+    </div>
+
     <!-- Signed In State -->
     <div id="auth-sec-account" class="auth-section">
       <div style="text-align:center;margin-bottom:16px">
@@ -4978,6 +4990,66 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 let supaClient = null;
 let supaUser   = null;  // null = guest
 
+
+function guestHasProgress() {
+  // Check if guest has any meaningful data worth importing
+  const modes = ['beginner','intermediate','hard','pro'];
+  const anyScores  = modes.some(m => (parseInt(localStorage.getItem('big2_modebest_'+m))||0) > 0);
+  const anyGames   = modes.some(m => (parseInt(localStorage.getItem(modeKey(m,'big2_games')))||0) > 0);
+  const anyFeats   = Object.values(feats).some(f => f.unlocked);
+  return anyScores || anyGames || anyFeats;
+}
+
+async function doImportThenClose() {
+  const btn = document.querySelector('#auth-sec-import .btn-auth-primary');
+  if (btn) btn.disabled = true;
+  setAuthStatus('Importing…','','import');
+  // Need to sign in to get user — signup may not have confirmed yet
+  // Store guest data snapshot before any potential clear
+  if (supaUser) {
+    await importGuestDataToAccount();
+    setAuthStatus('✓ Imported!','success','import');
+    setTimeout(closeAuthModal, 1000);
+  } else {
+    // User not confirmed yet — save a flag to import after first sign-in
+    localStorage.setItem('big2_pending_import', '1');
+    setAuthStatus('✓ Will import when you confirm & sign in.','success','import');
+    setTimeout(closeAuthModal, 2000);
+  }
+}
+
+async function importGuestDataToAccount() {
+  if (!supaClient || !supaUser) return;
+  try {
+    const modes = ['beginner','intermediate','hard','pro'];
+    for (const mode of modes) {
+      const s   = localStorage.getItem(modeKey(mode,'big2_scores'));
+      const g   = localStorage.getItem(modeKey(mode,'big2_games'));
+      const hp  = localStorage.getItem(modeKey(mode,'big2_highpts'));
+      const hist= localStorage.getItem(modeKey(mode,'big2_history'));
+      const mb  = parseInt(localStorage.getItem('big2_modebest_'+mode))||0;
+      await supaClient.from('player_scores').upsert({
+        user_id:      supaUser.id,
+        mode,
+        scores:       JSON.parse(s||'[0,0,0,0]'),
+        games_played: parseInt(g)||0,
+        highest_pts:  parseInt(hp)||0,
+        history:      JSON.parse(hist||'[]'),
+        mode_best:    mb,
+        rank_score:   rankScore,
+        updated_at:   new Date().toISOString()
+      }, { onConflict: 'user_id,mode' });
+    }
+    await supaClient.from('player_feats').upsert({
+      user_id:    supaUser.id,
+      feats:      feats,
+      win_streak: _winStreak,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' });
+    toast('☁ Guest progress imported to account!');
+  } catch(e) { console.warn('Import error:', e); toast('Import failed — try again later.'); }
+}
+
 function initSupabase() {
   try {
     if (typeof supabase === 'undefined') {
@@ -5079,7 +5151,7 @@ function closeAuthModal() {
 }
 
 function authSwitchTab(tab) {
-  ['signin','signup','account'].forEach(t => {
+  ['signin','signup','account','import'].forEach(t => {
     const tabEl = document.getElementById('auth-tab-' + t);
     const secEl = document.getElementById('auth-sec-' + t);
     if (tabEl) tabEl.classList.toggle('active', t === tab);
@@ -5114,8 +5186,16 @@ async function doSignUp() {
       }
     });
     if (error) { setAuthStatus(error.message,'error','signup'); return; }
-    setAuthStatus('✓ Account created! Check your email to confirm.','success','signup');
-    setTimeout(closeAuthModal, 2000);
+    setAuthStatus('✓ Account created!','success','signup');
+    // Check if guest has progress worth importing
+    setTimeout(() => {
+      if (guestHasProgress()) {
+        authSwitchTab('import');
+      } else {
+        setAuthStatus('Check your email to confirm your account.','success','signup');
+        setTimeout(closeAuthModal, 2500);
+      }
+    }, 800);
   } catch(e) {
     setAuthStatus('Network error: ' + (e.message||'check connection'),'error','signup');
   }
@@ -5142,7 +5222,18 @@ async function doSignIn() {
     supaUser = data.user;
     updateAccountBar(true);
     setAuthStatus('✓ Signed in!','success','signin');
-    setTimeout(() => { closeAuthModal(); loadCloudData(); }, 600);
+    const pendingImport = localStorage.getItem('big2_pending_import');
+    if (pendingImport && guestHasProgress()) {
+      // Has pending import from signup — import then load
+      localStorage.removeItem('big2_pending_import');
+      setTimeout(async () => {
+        closeAuthModal();
+        await importGuestDataToAccount();
+        loadCloudData();
+      }, 600);
+    } else {
+      setTimeout(() => { closeAuthModal(); loadCloudData(); }, 600);
+    }
   } catch(e) {
     if (btn) btn.disabled = false;
     setAuthStatus('Error: ' + (e.message||'check your connection'),'error','signin');
@@ -5151,9 +5242,23 @@ async function doSignIn() {
 
 // ── Sign Out ─────────────────────────────────────────────
 async function doSignOut() {
-  // Force local sign-out immediately regardless of network
+  // Clear local data so account scores don't persist as guest scores
+  const modes = ['beginner','intermediate','hard','pro'];
+  modes.forEach(mode => {
+    localStorage.removeItem('big2_modebest_' + mode);
+    localStorage.removeItem(modeKey(mode,'big2_scores'));
+    localStorage.removeItem(modeKey(mode,'big2_games'));
+    localStorage.removeItem(modeKey(mode,'big2_highpts'));
+    localStorage.removeItem(modeKey(mode,'big2_history'));
+  });
+  localStorage.removeItem('big2_feats');
+  // Reset in-memory state
+  scores = [0,0,0,0]; gamesPlayed = 0; gameHistory = [];
+  feats = {}; rankScore = 0; _winStreak = 0;
   supaUser = null;
   updateAccountBar(false);
+  updateRankUI();
+  updateScoreboard();
   closeAuthModal();
   toast('Signed out.');
   if (supaClient) {
@@ -5174,38 +5279,42 @@ async function loadCloudData() {
         .eq('mode', mode)
         .single();
       if (data) {
-        // Only load if cloud data is newer / higher
-        const localBest = parseInt(localStorage.getItem('big2_modebest_' + mode))||0;
-        if (data.mode_best > localBest) {
-          localStorage.setItem('big2_modebest_' + mode, data.mode_best);
-          localStorage.setItem(modeKey(mode,'big2_scores'), JSON.stringify(data.scores || [0,0,0,0]));
-          localStorage.setItem(modeKey(mode,'big2_games'),  data.games_played || 0);
-          localStorage.setItem(modeKey(mode,'big2_highpts'),data.highest_pts || 0);
-          localStorage.setItem(modeKey(mode,'big2_history'),JSON.stringify(data.history || []));
-        }
+        // Always replace local with account data — account is the source of truth
+        localStorage.setItem('big2_modebest_' + mode, data.mode_best || 0);
+        localStorage.setItem(modeKey(mode,'big2_scores'), JSON.stringify(data.scores || [0,0,0,0]));
+        localStorage.setItem(modeKey(mode,'big2_games'),  data.games_played || 0);
+        localStorage.setItem(modeKey(mode,'big2_highpts'),data.highest_pts || 0);
+        localStorage.setItem(modeKey(mode,'big2_history'),JSON.stringify(data.history || []));
+      } else {
+        // No cloud data for this mode yet — reset to zero (new account)
+        localStorage.setItem('big2_modebest_' + mode, 0);
+        localStorage.setItem(modeKey(mode,'big2_scores'), '[0,0,0,0]');
+        localStorage.setItem(modeKey(mode,'big2_games'),  0);
+        localStorage.setItem(modeKey(mode,'big2_highpts'),0);
+        localStorage.setItem(modeKey(mode,'big2_history'),'[]');
       }
     }
-    // Load feats
+    // Load feats — always replace with account feats
     const { data: fData } = await supaClient
       .from('player_feats')
       .select('feats, win_streak')
       .eq('user_id', supaUser.id)
       .single();
     if (fData && fData.feats) {
-      // Merge: keep highest counts
-      const cloudFeats = fData.feats;
-      Object.entries(cloudFeats).forEach(([id, cf]) => {
-        const lf = feats[id];
-        if (!lf || (cf.count || 0) > (lf.count || 0)) feats[id] = cf;
-      });
+      feats = fData.feats;
       localStorage.setItem('big2_feats', JSON.stringify(feats));
-      if (fData.win_streak > _winStreak) _winStreak = fData.win_streak;
+      _winStreak = fData.win_streak || 0;
+    } else {
+      feats = {};
+      localStorage.setItem('big2_feats', '{}');
+      _winStreak = 0;
     }
-    // Reload UI
+    // Reload UI with account data
+    rankScore = calcTotalRankScore();
     loadScoresForMode(selectedMode);
     updateRankUI();
     updateScoreboard();
-    toast('☁ Progress loaded from cloud!');
+    toast('☁ Account data loaded!');
   } catch(e) { console.warn('Cloud load error:', e); }
 }
 
