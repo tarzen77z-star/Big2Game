@@ -4909,36 +4909,40 @@ let supaUser   = null;  // null = guest
 function initSupabase() {
   try {
     if (typeof supabase === 'undefined') {
-      console.warn('Supabase SDK not loaded — account features disabled.');
+      console.warn('Supabase SDK not loaded.');
+      updateAccountBar(false);
       return;
     }
     supaClient = supabase.createClient(SUPA_URL, SUPA_KEY);
-    // Listen for auth state changes
-    supaClient.auth.onAuthStateChange(async (event, session) => {
-      supaUser = session?.user || null;
-      if (supaUser) {
-        await loadCloudData();
-        updateAccountBar(true);
-      } else if (event !== 'INITIAL_SESSION') {
-        // Only show Guest after a real sign-out, not during initial load
-        updateAccountBar(false);
-      }
-    });
-    // Check existing session
-    // Show "Checking..." while auth resolves
-    const nameEl = document.getElementById('account-name-display');
-    if (nameEl) nameEl.textContent = '…';
-    supaClient.auth.getSession().then(({ data }) => {
+
+    // Check existing session first (one-time on load)
+    supaClient.auth.getSession().then(({ data, error }) => {
+      if (error) { console.warn('Session error:', error); updateAccountBar(false); return; }
       supaUser = data?.session?.user || null;
       if (supaUser) {
-        loadCloudData();
         updateAccountBar(true);
+        loadCloudData();
       } else {
         updateAccountBar(false);
       }
-    }).catch(() => updateAccountBar(false));
+    }).catch(e => { console.warn('getSession failed:', e); updateAccountBar(false); });
+
+    // Listen for future auth changes (sign in / sign out)
+    supaClient.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        supaUser = session?.user || null;
+        if (supaUser) { updateAccountBar(true); loadCloudData(); }
+      } else if (event === 'SIGNED_OUT') {
+        supaUser = null;
+        updateAccountBar(false);
+      } else if (event === 'TOKEN_REFRESHED') {
+        supaUser = session?.user || null;
+        if (supaUser) updateAccountBar(true);
+      }
+    });
   } catch(e) {
     console.warn('Supabase init failed:', e);
+    updateAccountBar(false);
   }
 }
 
@@ -4977,6 +4981,13 @@ function updateAccountBar(signedIn) {
 function showAuthModal() {
   const overlay = document.getElementById('auth-overlay');
   if (!overlay) return;
+  // Re-check session in case bar is stale
+  if (supaClient) {
+    supaClient.auth.getSession().then(({ data }) => {
+      supaUser = data?.session?.user || null;
+      updateAccountBar(!!supaUser);
+    }).catch(()=>{});
+  }
   overlay.classList.add('open');
   if (supaUser) {
     authSwitchTab('account');
@@ -4986,6 +4997,8 @@ function showAuthModal() {
     if (de) de.textContent = supaUser.email || '';
   } else {
     authSwitchTab('signin');
+    // Clear any stale status messages
+    ['signin','signup'].forEach(t => setAuthStatus('','',t));
   }
 }
 
@@ -5039,32 +5052,41 @@ async function doSignUp() {
 // ── Sign In ──────────────────────────────────────────────
 async function doSignIn() {
   if (!supaClient) {
-    setAuthStatus('Connection unavailable. Try refreshing.','error','signin');
+    setAuthStatus('Connection unavailable. Try refreshing the page.','error','signin');
     return;
   }
   const email    = document.getElementById('signin-email')?.value.trim();
   const password = document.getElementById('signin-password')?.value;
   if (!email)    { setAuthStatus('Enter your email.','error','signin'); return; }
   if (!password) { setAuthStatus('Enter your password.','error','signin'); return; }
+  const btn = document.querySelector('#auth-sec-signin .btn-auth-primary');
+  if (btn) btn.disabled = true;
   setAuthStatus('Signing in…','','signin');
   try {
     const { data, error } = await supaClient.auth.signInWithPassword({ email, password });
+    if (btn) btn.disabled = false;
     if (error) { setAuthStatus(error.message,'error','signin'); return; }
+    // Manually update since onAuthStateChange may lag
+    supaUser = data.user;
+    updateAccountBar(true);
     setAuthStatus('✓ Signed in!','success','signin');
-    setTimeout(closeAuthModal, 800);
+    setTimeout(() => { closeAuthModal(); loadCloudData(); }, 600);
   } catch(e) {
-    setAuthStatus('Network error: ' + (e.message||'check connection'),'error','signin');
+    if (btn) btn.disabled = false;
+    setAuthStatus('Error: ' + (e.message||'check your connection'),'error','signin');
   }
 }
 
 // ── Sign Out ─────────────────────────────────────────────
 async function doSignOut() {
-  if (!supaClient) return;
-  await supaClient.auth.signOut();
+  // Force local sign-out immediately regardless of network
   supaUser = null;
   updateAccountBar(false);
-  setAuthStatus('Signed out.','success','account');
-  setTimeout(closeAuthModal, 800);
+  closeAuthModal();
+  toast('Signed out.');
+  if (supaClient) {
+    try { await supaClient.auth.signOut(); } catch(e) {}
+  }
 }
 
 // ── Cloud Sync ───────────────────────────────────────────
