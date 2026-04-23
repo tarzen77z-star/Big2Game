@@ -5716,16 +5716,16 @@ async function loadFriendsList() {
     // Load rank scores (mode bests) from player_scores
     const { data: scores } = await supaClient
       .from('player_scores')
-      .select('user_id, mode_best')
+      .select('user_id, mode, mode_best')
       .in('user_id', friendIds);
 
-    // Build rank score per user
+    // Build rank score with correct per-mode caps
+    const MODE_CAPS = { beginner:100, intermediate:1000, hard:5000, pro:Infinity };
     const rsMap = {};
     (scores||[]).forEach(s => {
-      rsMap[s.user_id] = (rsMap[s.user_id]||0) + Math.min(
-        s.mode_best,
-        s.mode_best >= 0 ? ({beginner:100,intermediate:1000,hard:5000}[s.mode]||Infinity) : 0
-      );
+      const cap = MODE_CAPS[s.mode] ?? 0;
+      const contrib = Math.min(Math.max(s.mode_best||0, 0), isFinite(cap) ? cap : s.mode_best||0);
+      rsMap[s.user_id] = (rsMap[s.user_id]||0) + contrib;
     });
 
     if (!profiles || profiles.length === 0) {
@@ -5807,12 +5807,17 @@ async function loadInvitePlayers(searchTerm) {
       return;
     }
 
-    // Get rank scores
+    // Get rank scores with correct per-mode caps
     const pIds = profiles.map(p=>p.id);
     const { data: scores } = await supaClient
-      .from('player_scores').select('user_id, mode_best').in('user_id', pIds);
+      .from('player_scores').select('user_id, mode, mode_best').in('user_id', pIds);
+    const MODE_CAPS = { beginner:100, intermediate:1000, hard:5000, pro:Infinity };
     const rsMap = {};
-    (scores||[]).forEach(s => { rsMap[s.user_id] = (rsMap[s.user_id]||0) + (s.mode_best||0); });
+    (scores||[]).forEach(s => {
+      const cap = MODE_CAPS[s.mode] ?? 0;
+      const contrib = Math.min(Math.max(s.mode_best||0, 0), isFinite(cap) ? cap : s.mode_best||0);
+      rsMap[s.user_id] = (rsMap[s.user_id]||0) + contrib;
+    });
 
     el.innerHTML = profiles.map(p => {
       const rs = rsMap[p.id] || 0;
@@ -5891,9 +5896,14 @@ async function loadPendingRequests() {
     const { data: profiles } = await supaClient
       .from('profiles').select('id, username').in('id', senderIds);
     const { data: scores } = await supaClient
-      .from('player_scores').select('user_id, mode_best').in('user_id', senderIds);
+      .from('player_scores').select('user_id, mode, mode_best').in('user_id', senderIds);
+    const MODE_CAPS = { beginner:100, intermediate:1000, hard:5000, pro:Infinity };
     const rsMap = {};
-    (scores||[]).forEach(s => { rsMap[s.user_id] = (rsMap[s.user_id]||0) + (s.mode_best||0); });
+    (scores||[]).forEach(s => {
+      const cap = MODE_CAPS[s.mode] ?? 0;
+      const contrib = Math.min(Math.max(s.mode_best||0, 0), isFinite(cap) ? cap : s.mode_best||0);
+      rsMap[s.user_id] = (rsMap[s.user_id]||0) + contrib;
+    });
     const profileMap = {};
     (profiles||[]).forEach(p => { profileMap[p.id] = p; });
 
