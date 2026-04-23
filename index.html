@@ -3202,10 +3202,10 @@ function startGame() {
   const lbl = document.getElementById('player-name-label');
   if (lbl && lbl.textContent !== playerCustomName) lbl.textContent = playerCustomName;
   renderAll();
-  setPlayerControls(currentPlayer === 0);
+  setPlayerControls(isMyTurn());
   updateTurnIndicator();
 
-  if (currentPlayer !== 0) {
+  if (!isMyTurn()) {
     setTimeout(npcTurn, 1200);
   }
 }
@@ -3574,7 +3574,7 @@ function mpScoreboardNames() {
 //  PLAYER INTERACTION
 // ════════════════════════════════════════
 function toggleCard(idx) {
-  if (currentPlayer !== 0 || !gameActive) return;
+  if (!isMyTurn() || !gameActive) return;
   const card = hands[0][idx];
   const key = cardKey(card);
   const found = selectedCards.findIndex(c=>cardKey(c)===key);
@@ -3915,7 +3915,7 @@ function executePlay(playerIdx, cards, play) {
       renderDiscardPile();
       document.getElementById('last-play-info').textContent = 'New round – play anything!';
       if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-      if (playerIdx === 0) {
+      if (isMyTurn()) {
         setPlayerControls(true);
         updateTurnIndicator();
       } else {
@@ -3929,7 +3929,8 @@ function executePlay(playerIdx, cards, play) {
   saveGameState();
   renderAll();
   if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-  if (currentPlayer !== 0) {
+  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFriendTableState(_myTableId);
+  if (!isMyTurn()) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
       if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
@@ -3962,7 +3963,7 @@ function doPass(playerIdx) {
   saveGameState();
   renderAll();
   if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-  if (currentPlayer !== 0) {
+  if (!isMyTurn()) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
       if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
@@ -3991,11 +3992,22 @@ function advanceTurn(fromPlayer) {
 // ════════════════════════════════════════
 //  NPC AI
 // ════════════════════════════════════════
+// Is it the local human player's turn?
+function isMyTurn() {
+  // In friend table: host might not be seat 0
+  if (mpGameMode === 'vs_human') return currentPlayer === mpMySeat;
+  return currentPlayer === 0; // isMyTurn handles MP
+}
+
 function npcTurn() {
-  if (!gameActive || currentPlayer === 0) return;
+  if (!gameActive) return;
   // In MP: guests never run NPC AI — host is authoritative
   if (mpGameMode === 'vs_human' && !mpIsHost) return;
-  // In MP host: skip remote human slots
+  // Determine whose turn it is — in friend table, host may not be seat 0
+  const hostLocalPlayer = mpGameMode === 'vs_human' ? mpMySeat : 0;
+  // Skip if it's the host's own turn (they play manually)
+  if (currentPlayer === hostLocalPlayer) return;
+  // In MP host: skip remote human slots (non-NPC)
   if (mpGameMode === 'vs_human' && mpIsHost && !mpNpcSlots[currentPlayer]) return;
 
   const idx = currentPlayer;
@@ -6507,13 +6519,25 @@ async function launchFriendTableGame(table) {
     // Host deals cards and broadcasts via Supabase realtime
     startGame();
     // Broadcast initial game state to all players via friend_notifications
+    // Broadcast multiple times to ensure non-host gets it
     setTimeout(() => broadcastFriendTableState(table.id), 500);
+    setTimeout(() => broadcastFriendTableState(table.id), 1500);
   } else {
-    // Non-host: subscribe to game state updates from host
-    subscribeFriendTableGame(table.id);
-    setPlayerControls(false);
-    updateTurnIndicator();
-    renderAll();
+    // Non-host: subscribe first, then fetch current state
+    subscribeFriendTableGame(table.id, async () => {
+      // Callback after subscription is ready — fetch current payload
+      const { data: current } = await supaClient
+        .from('friend_tables').select('payload, status').eq('id', table.id).single();
+      if (current?.payload?.gameActive) {
+        applyFriendTableSnapshot(current.payload, table.id);
+      } else {
+        // Game not started yet — show waiting screen
+        setPlayerControls(false);
+        updateTurnIndicator();
+        renderAll();
+        toast('Seated! Waiting for host to start…');
+      }
+    });
   }
 }
 
@@ -6537,7 +6561,7 @@ async function broadcastFriendTableState(tableId) {
 
 // ── Subscribe to game state as non-host ──
 let _friendTableGameSub = null;
-function subscribeFriendTableGame(tableId) {
+function subscribeFriendTableGame(tableId, onReady) {
   if (_friendTableGameSub) supaClient.removeChannel(_friendTableGameSub);
   _friendTableGameSub = supaClient
     .channel('ftable_game_' + tableId)
@@ -6547,31 +6571,43 @@ function subscribeFriendTableGame(tableId) {
     }, (payload) => {
       const snap = payload.new?.payload;
       if (!snap || !snap.gameActive) return;
+      console.log('Friend table snapshot received', snap.currentPlayer);
       applyFriendTableSnapshot(snap, tableId);
     })
-    .subscribe();
+    .subscribe((status) => {
+      console.log('Friend table game sub status:', status);
+      if (status === 'SUBSCRIBED' && onReady) onReady();
+    });
 }
 
 function applyFriendTableSnapshot(snap, tableId) {
-  if (!snap) return;
-  // Rotate from host perspective to my local perspective
-  const rotation = mpMySeat; // my global seat = how much to rotate
+  if (!snap || !snap.hands) return;
+  console.log('Applying friend table snapshot, my seat:', mpMySeat, 'host currentPlayer:', snap.currentPlayer);
+
+  // Rotate from host-global to my local perspective
+  const rotation = mpMySeat;
   const rotated = (idx) => (idx - rotation + 4) % 4;
-  const rotatedHands = [0,1,2,3].map(li => snap.hands[(rotation+li)%4]);
-  hands               = rotatedHands;
+
+  hands               = [0,1,2,3].map(li => snap.hands[(rotation+li)%4] || []);
   currentPlayer       = rotated(snap.currentPlayer);
-  openingPlayer       = rotated(snap.openingPlayer);
-  passCount           = snap.passCount;
-  firstTurn           = snap.firstTurn;
-  lastPlay            = snap.lastPlay ? {...snap.lastPlay, playerIdx: rotated(snap.lastPlay.playerIdx)} : null;
-  currentRoundPlays   = (snap.currentRoundPlays||[]).map(p=>({...p,playerIdx:rotated(p.playerIdx)}));
+  openingPlayer       = rotated(snap.openingPlayer || 0);
+  passCount           = snap.passCount || 0;
+  firstTurn           = snap.firstTurn !== undefined ? snap.firstTurn : true;
+  lastPlay            = snap.lastPlay ? {...snap.lastPlay, playerIdx:rotated(snap.lastPlay.playerIdx)} : null;
+  currentRoundPlays   = (snap.currentRoundPlays||[]).map(p=>({...p, playerIdx:rotated(p.playerIdx)}));
   globalDiscardedCards= new Set(snap.globalDiscardedCards||[]);
   gameActive          = snap.gameActive;
+
+  // Rotate NPC slots to my perspective
+  if (snap.mpNpcSlots) {
+    mpNpcSlots = [0,1,2,3].map(li => snap.mpNpcSlots[(rotation+li)%4]);
+  }
 
   selectedCards = [];
   renderAll();
   updateScoreboard();
-  setPlayerControls(currentPlayer === 0 && gameActive);
+  setPlayerControls(isMyTurn() && gameActive);
+  updateTurnIndicator();
 
   // Check for game end
   if (snap.hands) {
@@ -6790,7 +6826,7 @@ function resumeGame() {
 
   updateRankUI();
   renderAll();
-  setPlayerControls(currentPlayer === 0);
+  setPlayerControls(isMyTurn());
   updateTurnIndicator();
 
   // Restore the last-play-info message
@@ -6808,7 +6844,7 @@ function resumeGame() {
 
   toast('↩ Game resumed!');
 
-  if (currentPlayer !== 0 && gameActive) {
+  if (!isMyTurn() && gameActive) {
     setPlayerControls(false);
     setTimeout(npcTurn, 1400);
   }
