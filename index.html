@@ -5840,6 +5840,7 @@ function openFriendRoom() {
 
 function closeFriendRoom() {
   document.getElementById('friend-room-overlay').classList.remove('open');
+  unsubscribeFromTables();
   if (supaClient && supaUser) {
     supaClient.from('profiles').update({ is_online: false })
       .eq('id', supaUser.id).then(()=>{});
@@ -5847,7 +5848,7 @@ function closeFriendRoom() {
 }
 
 function friendSwitchTab(tab) {
-  ['friends','invite','requests'].forEach(t => {
+  ['friends','invite','requests','tables'].forEach(t => {
     document.getElementById('ftab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('fsec-'+t)?.classList.toggle('active', t===tab);
   });
@@ -5857,6 +5858,11 @@ function friendSwitchTab(tab) {
     loadInvitePlayers('');
   }
   if (tab === 'requests') loadPendingRequests();
+  if (tab === 'tables') {
+    updateTableGroupLocks();
+    loadTables();
+    subscribeToTables();
+  }
 }
 
 // ── Rank helpers ──────────────────────────────────────────
@@ -6119,6 +6125,431 @@ setInterval(() => {
     loadPendingRequests();
   }
 }, 60000);
+
+// ── Poll for friend notifications every 30s when signed in ──
+setInterval(() => { if (supaUser && supaClient) pollFriendNotifications(); }, 30000);
+
+
+// ════════════════════════════════════════════════════════════
+//  FRIEND TABLES — PHASE 2
+// ════════════════════════════════════════════════════════════
+
+let _currentTableGroup  = 'beginner';
+let _myTableId          = null;   // the table ID I'm seated at
+let _myTableSeat        = null;   // seat number 1-4
+let _tableTimerInterval = null;
+let _tableRealtimeSub   = null;
+let _tablesData         = [];     // current fetched tables
+
+const TABLE_UNLOCK = { beginner:0, intermediate:100, hard:1100, pro:6100 };
+
+function selectTableGroup(group) {
+  _currentTableGroup = group;
+  ['beginner','intermediate','hard','pro'].forEach(g => {
+    const btn = document.getElementById('tgrp-' + g);
+    if (btn) btn.classList.toggle('active', g === group);
+  });
+  loadTables();
+}
+
+function updateTableGroupLocks() {
+  ['beginner','intermediate','hard','pro'].forEach(g => {
+    const btn = document.getElementById('tgrp-' + g);
+    if (!btn) return;
+    const unlocked = rankScore >= (TABLE_UNLOCK[g] || 0);
+    btn.disabled = !unlocked;
+    btn.classList.toggle('locked', !unlocked);
+  });
+}
+
+async function loadTables() {
+  if (!supaClient || !supaUser) return;
+  const el = document.getElementById('tables-list-content');
+  if (el) el.innerHTML = '<div class="friend-status-msg">Loading tables…</div>';
+
+  try {
+    const { data: tables, error } = await supaClient
+      .from('friend_tables')
+      .select('*')
+      .eq('table_group', _currentTableGroup)
+      .eq('status', 'waiting')
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    _tablesData = tables || [];
+
+    // Load seat usernames
+    const userIds = new Set();
+    _tablesData.forEach(t => {
+      [t.seat_1, t.seat_2, t.seat_3, t.seat_4].forEach(id => { if (id) userIds.add(id); });
+    });
+
+    let profileMap = {};
+    if (userIds.size > 0) {
+      const { data: profiles } = await supaClient
+        .from('profiles').select('id, username')
+        .in('id', [...userIds]);
+      (profiles||[]).forEach(p => { profileMap[p.id] = p.username; });
+    }
+
+    renderTables(_tablesData, profileMap);
+  } catch(e) {
+    console.warn('loadTables error:', e);
+    if (el) el.innerHTML = '<div class="friend-status-msg">Error loading tables.</div>';
+  }
+}
+
+function renderTables(tables, profileMap) {
+  const el = document.getElementById('tables-list-content');
+  if (!el) return;
+
+  // Determine how many tables to show:
+  // Count occupied tables (at least 1 seated), always show +1 empty
+  const occupiedCount = tables.filter(t => t.seat_1 || t.seat_2 || t.seat_3 || t.seat_4).length;
+  const showCount = occupiedCount + 1;
+  const displayTables = tables.slice(0, showCount);
+
+  // If no tables exist yet, show one empty
+  if (displayTables.length === 0) {
+    displayTables.push(null); // placeholder for empty table
+  }
+
+  // Update my-table banner
+  const myTable = tables.find(t => [t.seat_1,t.seat_2,t.seat_3,t.seat_4].includes(supaUser.id));
+  const banner = document.getElementById('my-table-banner');
+  if (myTable) {
+    _myTableId = myTable.id;
+    const occupants = [myTable.seat_1,myTable.seat_2,myTable.seat_3,myTable.seat_4]
+      .filter(Boolean).length;
+    const txt = document.getElementById('my-table-banner-text');
+    if (txt) txt.textContent = 'You are seated · ' + occupants + '/4 players';
+    if (banner) banner.style.display = 'block';
+    startTableTimer(myTable);
+  } else {
+    _myTableId = null;
+    if (banner) banner.style.display = 'none';
+    stopTableTimer();
+  }
+
+  // Render table cards
+  el.innerHTML = displayTables.map((t, idx) => {
+    const tableNum = idx + 1;
+    if (!t) return renderEmptyTableCard(tableNum, null);
+    const seats = [t.seat_1, t.seat_2, t.seat_3, t.seat_4];
+    const isMyTable = seats.includes(supaUser.id);
+    const occupants = seats.filter(Boolean).length;
+    if (occupants >= 4) return ''; // full tables handled separately
+    return renderTableCard(t, tableNum, seats, profileMap, isMyTable);
+  }).join('');
+}
+
+function renderTableCard(t, tableNum, seats, profileMap, isMyTable) {
+  const seatHtml = seats.map((uid, i) => {
+    const seatNum = i + 1;
+    if (uid) {
+      const name = profileMap[uid] || 'Player';
+      const isMe = uid === supaUser.id;
+      return `<div class="table-seat ${isMe ? 'my-seat' : 'occupied'}">
+        <div class="seat-avatar">${initials(name)}</div>
+        <span>${name}${isMe ? ' (you)' : ''}</span>
+      </div>`;
+    } else {
+      const canSit = !isMyTable && !_myTableId;
+      return canSit
+        ? `<div class="table-seat empty" onclick="joinTable('${t.id}', ${seatNum})">
+            <div class="seat-avatar" style="background:rgba(100,160,255,0.2);color:rgba(100,160,255,0.6)">+</div>
+            <span>Click to sit</span>
+           </div>`
+        : `<div class="table-seat empty" style="cursor:default;opacity:0.5">
+            <div class="seat-avatar" style="background:rgba(60,60,60,0.3)">·</div>
+            <span>Empty</span>
+           </div>`;
+    }
+  }).join('');
+
+  const occupants = seats.filter(Boolean).length;
+  const startBtn = isMyTable && occupants >= 1
+    ? `<button class="btn-table-start" onclick="startTableNow('${t.id}')">▶ Start Now</button>`
+    : '';
+
+  return `<div class="friend-table-card ${isMyTable ? 'my-table' : ''}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <span style="font-size:0.78rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600">Table ${tableNum}</span>
+      <span style="font-size:0.72rem;color:var(--text-dim)">${occupants}/4 seated</span>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-start;">
+      <div class="table-circle">TABLE<br>${tableNum}</div>
+      <div class="table-seats">${seatHtml}</div>
+    </div>
+    ${isMyTable ? '<div class="table-timer" id="table-timer-'+t.id+'">⏱ Starting in 60s</div>' : ''}
+    <div class="table-actions">${startBtn}</div>
+  </div>`;
+}
+
+function renderEmptyTableCard(tableNum, tableId) {
+  const canSit = !_myTableId;
+  return `<div class="friend-table-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <span style="font-size:0.78rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600">Table ${tableNum}</span>
+      <span style="font-size:0.72rem;color:var(--text-dim)">0/4 seated</span>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-start;">
+      <div class="table-circle">TABLE<br>${tableNum}</div>
+      <div class="table-seats">
+        ${[1,2,3,4].map(i => canSit
+          ? `<div class="table-seat empty" onclick="createAndJoinTable(${i})">
+              <div class="seat-avatar" style="background:rgba(100,160,255,0.2);color:rgba(100,160,255,0.6)">+</div>
+              <span>Click to sit</span>
+             </div>`
+          : `<div class="table-seat empty" style="cursor:default;opacity:0.4">
+              <div class="seat-avatar">·</div><span>Empty</span>
+             </div>`
+        ).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Create new table and join it ──────────────────────────
+async function createAndJoinTable(seatNum) {
+  if (!supaClient || !supaUser || _myTableId) return;
+  try {
+    const seatCol = 'seat_' + seatNum;
+    const newTable = {
+      table_group: _currentTableGroup,
+      host_id: supaUser.id,
+      status: 'waiting',
+      [seatCol]: supaUser.id
+    };
+    const { data, error } = await supaClient
+      .from('friend_tables').insert(newTable).select().single();
+    if (error) throw error;
+    _myTableId   = data.id;
+    _myTableSeat = seatNum;
+    await notifyFriendsTableStarted(data.id);
+    loadTables();
+  } catch(e) { console.warn('createAndJoinTable:', e); toast('Error creating table.'); }
+}
+
+// ── Join existing table ───────────────────────────────────
+async function joinTable(tableId, seatNum) {
+  if (!supaClient || !supaUser || _myTableId) return;
+  try {
+    const seatCol = 'seat_' + seatNum;
+    const { data: current } = await supaClient
+      .from('friend_tables').select('*').eq('id', tableId).single();
+    if (current[seatCol]) { toast('That seat was just taken!'); loadTables(); return; }
+
+    const { error } = await supaClient
+      .from('friend_tables').update({ [seatCol]: supaUser.id }).eq('id', tableId);
+    if (error) throw error;
+    _myTableId   = tableId;
+    _myTableSeat = seatNum;
+
+    // Check if table is now full → start immediately
+    const updated = { ...current, [seatCol]: supaUser.id };
+    const seats = [updated.seat_1, updated.seat_2, updated.seat_3, updated.seat_4];
+    if (seats.every(Boolean)) {
+      await startTableNow(tableId);
+    } else {
+      toast('Joined table! Waiting for others…');
+      loadTables();
+    }
+  } catch(e) { console.warn('joinTable:', e); toast('Error joining table.'); }
+}
+
+// ── Leave table ───────────────────────────────────────────
+async function leaveCurrentTable() {
+  if (!supaClient || !supaUser || !_myTableId) return;
+  try {
+    const seatCol = 'seat_' + _myTableSeat;
+    const { data: current } = await supaClient
+      .from('friend_tables').select('*').eq('id', _myTableId).single();
+
+    // Check if this was the only person — delete table, else clear seat
+    const remaining = [current.seat_1, current.seat_2, current.seat_3, current.seat_4]
+      .filter(id => id && id !== supaUser.id).length;
+
+    if (remaining === 0) {
+      await supaClient.from('friend_tables').delete().eq('id', _myTableId);
+    } else {
+      await supaClient.from('friend_tables').update({ [seatCol]: null }).eq('id', _myTableId);
+    }
+    _myTableId = null; _myTableSeat = null;
+    stopTableTimer();
+    loadTables();
+    toast('Left the table.');
+  } catch(e) { console.warn('leaveCurrentTable:', e); }
+}
+
+// ── Start table now ───────────────────────────────────────
+async function startTableNow(tableId) {
+  if (!supaClient || !supaUser) return;
+  try {
+    const { data: table } = await supaClient
+      .from('friend_tables').select('*').eq('id', tableId).single();
+
+    // Mark as playing
+    await supaClient.from('friend_tables').update({
+      status: 'playing', started_at: new Date().toISOString()
+    }).eq('id', tableId);
+
+    stopTableTimer();
+    closeFriendRoom();
+    launchFriendTableGame(table);
+  } catch(e) { console.warn('startTableNow:', e); }
+}
+
+// ── Launch the game from friend table ────────────────────
+function launchFriendTableGame(table) {
+  const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
+  const mySeatIdx = seats.indexOf(supaUser.id); // 0-based
+  const npcSlots = seats.map(s => !s); // null seats = NPC
+
+  toast('Starting Friend Table game!');
+  // Map to selectedMode based on table group
+  const prevMode = selectedMode;
+  selectedMode = table.table_group;
+
+  // Use existing MP-style game setup
+  mpGameMode  = 'vs_human';
+  mpMySeat    = mySeatIdx;
+  mpIsHost    = table.host_id === supaUser.id;
+  mpNpcSlots  = [false, false, false, false];
+  npcSlots.forEach((isNpc, i) => { if (isNpc) mpNpcSlots[i] = true; });
+
+  // Build seat names (human names from profiles needed — use username for now)
+  mpSeats = seats.map((uid, i) => ({
+    name: uid ? (uid === supaUser.id ? playerCustomName : 'Friend ' + (i+1)) : 'NPC ' + (i+1),
+    conn: null
+  }));
+
+  if (mpIsHost) {
+    startGame();
+  } else {
+    // Guest — wait for host to start via realtime
+    toast('Waiting for host to start…');
+  }
+}
+
+// ── Timer ─────────────────────────────────────────────────
+let _timerSeconds = 60;
+
+function startTableTimer(table) {
+  stopTableTimer();
+  const created = new Date(table.created_at).getTime();
+  const elapsed = Math.floor((Date.now() - created) / 1000);
+  _timerSeconds = Math.max(0, 60 - elapsed);
+
+  _tableTimerInterval = setInterval(() => {
+    _timerSeconds--;
+    const timerEl = document.getElementById('table-timer-' + table.id);
+    if (timerEl) timerEl.textContent = '⏱ Starting in ' + _timerSeconds + 's';
+    if (_timerSeconds <= 0) {
+      stopTableTimer();
+      if (_myTableId === table.id) startTableNow(table.id);
+    }
+  }, 1000);
+}
+
+function stopTableTimer() {
+  if (_tableTimerInterval) { clearInterval(_tableTimerInterval); _tableTimerInterval = null; }
+}
+
+// ── Notify friends ────────────────────────────────────────
+async function notifyFriendsTableStarted(tableId) {
+  if (!supaClient || !supaUser) return;
+  try {
+    // Get friend IDs
+    const { data: fs } = await supaClient
+      .from('friendships').select('user_id, friend_id')
+      .eq('status', 'accepted')
+      .or('user_id.eq.'+supaUser.id+',friend_id.eq.'+supaUser.id);
+    const friendIds = (fs||[]).map(f => f.user_id === supaUser.id ? f.friend_id : f.user_id);
+
+    // Insert notification for each friend
+    const myName = playerCustomName || supaUser.user_metadata?.username || 'A friend';
+    const notifs = friendIds.map(fid => ({
+      sender_id:    supaUser.id,
+      recipient_id: fid,
+      type:         'table_started',
+      payload:      { table_id: tableId, group: _currentTableGroup, host_name: myName }
+    }));
+    if (notifs.length > 0) {
+      await supaClient.from('friend_notifications').insert(notifs);
+    }
+  } catch(e) { console.warn('notifyFriends:', e); }
+}
+
+// ── Realtime subscription for tables ─────────────────────
+function subscribeToTables() {
+  if (!supaClient || _tableRealtimeSub) return;
+  _tableRealtimeSub = supaClient
+    .channel('friend_tables_changes')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table:  'friend_tables',
+      filter: 'table_group=eq.' + _currentTableGroup
+    }, () => { loadTables(); })
+    .subscribe();
+}
+
+function unsubscribeFromTables() {
+  if (_tableRealtimeSub) {
+    supaClient.removeChannel(_tableRealtimeSub);
+    _tableRealtimeSub = null;
+  }
+}
+
+// ── Poll for friend notifications (table invites) ─────────
+async function pollFriendNotifications() {
+  if (!supaClient || !supaUser) return;
+  try {
+    const { data } = await supaClient
+      .from('friend_notifications')
+      .select('*')
+      .eq('recipient_id', supaUser.id)
+      .eq('read', false)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (!data || data.length === 0) return;
+
+    // Show badge on Friend Room button
+    const badge = document.getElementById('friend-notif-badge');
+    if (badge) { badge.style.display = 'inline'; badge.textContent = data.length; }
+
+    // Show toast for table_started notifications
+    data.filter(n => n.type === 'table_started').forEach(n => {
+      const name = n.payload?.host_name || 'A friend';
+      const grp  = n.payload?.group || 'beginner';
+      showTableInviteToast(name, grp, n.payload?.table_id, n.id);
+    });
+
+    // Mark as read
+    const ids = data.map(n => n.id);
+    await supaClient.from('friend_notifications').update({ read: true }).in('id', ids);
+  } catch(e) {}
+}
+
+function showTableInviteToast(fromName, group, tableId, notifId) {
+  const existing = document.getElementById('table-invite-toast-'+notifId);
+  if (existing) return; // already shown
+
+  const div = document.createElement('div');
+  div.id = 'table-invite-toast-' + notifId;
+  div.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(20,50,30,0.97);border:1px solid rgba(45,138,80,0.6);border-radius:12px;padding:10px 14px;z-index:500;font-family:Crimson Pro,serif;font-size:0.85rem;color:#7fffaa;max-width:300px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.6);';
+  div.innerHTML = `<div style="font-weight:700;margin-bottom:4px">🏓 ${fromName} started a ${group} table!</div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button onclick="openFriendRoom();friendSwitchTab('tables');this.closest('div[id]').remove();"
+        style="flex:1;background:rgba(45,138,80,0.4);border:1px solid rgba(45,138,80,0.6);border-radius:6px;color:#7fffaa;padding:5px;cursor:pointer;font-family:'Crimson Pro',serif;font-size:0.82rem;">Join Table</button>
+      <button onclick="this.closest('div[id]').remove();"
+        style="background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:rgba(255,255,255,0.4);padding:5px 10px;cursor:pointer;font-size:0.82rem;">✕</button>
+    </div>`;
+  document.body.appendChild(div);
+  setTimeout(() => { if (div.parentNode) div.remove(); }, 15000);
+}
 
 // ════════════════════════════════════════
 //  INIT
