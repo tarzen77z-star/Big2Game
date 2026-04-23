@@ -3903,6 +3903,7 @@ function executePlay(playerIdx, cards, play) {
   saveGameState();
   renderAll(); // show the card on the pile first
   if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFriendTableState(_myTableId);
 
   if (powerPlay) {
     // After a short delay, clear the pile and let player play again
@@ -6346,6 +6347,9 @@ async function joinTable(tableId, seatNum) {
     _myTableId   = tableId;
     _myTableSeat = seatNum;
 
+    // Notify friends that someone joined
+    await notifyFriendsTableStarted(tableId);
+
     // Check if table is now full → start immediately
     const updated = { ...current, [seatCol]: supaUser.id };
     const seats = [updated.seat_1, updated.seat_2, updated.seat_3, updated.seat_4];
@@ -6401,34 +6405,149 @@ async function startTableNow(tableId) {
 }
 
 // ── Launch the game from friend table ────────────────────
-function launchFriendTableGame(table) {
+async function launchFriendTableGame(table) {
   const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
   const mySeatIdx = seats.indexOf(supaUser.id); // 0-based
-  const npcSlots = seats.map(s => !s); // null seats = NPC
 
-  toast('Starting Friend Table game!');
-  // Map to selectedMode based on table group
-  const prevMode = selectedMode;
+  // Load player usernames from profiles
+  const humanIds = seats.filter(Boolean);
+  let nameMap = {};
+  if (humanIds.length > 0) {
+    const { data: profiles } = await supaClient
+      .from('profiles').select('id, username').in('id', humanIds);
+    (profiles||[]).forEach(p => { nameMap[p.id] = p.username; });
+  }
+
   selectedMode = table.table_group;
 
-  // Use existing MP-style game setup
-  mpGameMode  = 'vs_human';
-  mpMySeat    = mySeatIdx;
-  mpIsHost    = table.host_id === supaUser.id;
-  mpNpcSlots  = [false, false, false, false];
-  npcSlots.forEach((isNpc, i) => { if (isNpc) mpNpcSlots[i] = true; });
-
-  // Build seat names (human names from profiles needed — use username for now)
+  // Build mpSeats in host-global order
   mpSeats = seats.map((uid, i) => ({
-    name: uid ? (uid === supaUser.id ? playerCustomName : 'Friend ' + (i+1)) : 'NPC ' + (i+1),
+    name: uid ? (nameMap[uid] || 'Player '+(i+1)) : 'NPC '+(i+1),
     conn: null
   }));
 
+  // NPC slots: seats with no user
+  mpNpcSlots = seats.map(uid => !uid);
+
+  mpMySeat    = mySeatIdx;
+  mpIsHost    = table.host_id === supaUser.id;
+  mpGameMode  = 'vs_human';
+  mpTurnToken = 0;
+
+  toast('🏓 Friend Table game starting!');
+
+  // Set up game screen for all players
+  document.getElementById('splash').style.display    = 'none';
+  document.getElementById('game').style.display      = 'block';
+  const ff = document.getElementById('btn-forfeit');
+  if (ff) ff.style.display = 'none';
+  const zb = document.getElementById('btn-hand-zoom');
+  if (zb) zb.style.top = '12px';
+
+  // Set player name label
+  const lbl = document.getElementById('player-name-label');
+  if (lbl) lbl.textContent = playerCustomName;
+
+  // Set up NPC zone labels
+  const zoneMap = [
+    {zoneId:'npc-right', nameId:'name-p2', localIdx:1},
+    {zoneId:'npc-top',   nameId:'name-p3', localIdx:2},
+    {zoneId:'npc-left',  nameId:'name-p4', localIdx:3},
+  ];
+  zoneMap.forEach(({zoneId,nameId,localIdx}) => {
+    const globalSeat = (mySeatIdx + localIdx) % 4;
+    const isNpc = !seats[globalSeat];
+    const ne = document.getElementById(nameId);
+    if (ne) ne.textContent = (isNpc ? '🤖 ' : '👤 ') + mpSeats[globalSeat].name;
+    const ze = document.getElementById(zoneId);
+    if (ze) ze.classList.toggle('mp-human', !isNpc);
+    const scoreEl = document.getElementById('score-p' + nameId.replace('name-p',''));
+    if (scoreEl) scoreEl.style.display = isNpc ? 'none' : 'block';
+  });
+
   if (mpIsHost) {
+    // Host deals cards and broadcasts via Supabase realtime
     startGame();
+    // Broadcast initial game state to all players via friend_notifications
+    setTimeout(() => broadcastFriendTableState(table.id), 500);
   } else {
-    // Guest — wait for host to start via realtime
-    toast('Waiting for host to start…');
+    // Non-host: subscribe to game state updates from host
+    subscribeFriendTableGame(table.id);
+    setPlayerControls(false);
+    updateTurnIndicator();
+    renderAll();
+  }
+}
+
+// ── Broadcast game state to friend table players via Supabase ──
+async function broadcastFriendTableState(tableId) {
+  if (!supaClient || !supaUser || !mpIsHost) return;
+  // Store game state in the friend_tables payload column
+  try {
+    const snapshot = {
+      hands, currentPlayer, lastPlay, passCount, firstTurn,
+      openingPlayer, currentRoundPlays,
+      globalDiscardedCards: [...globalDiscardedCards],
+      gameActive, mpNpcSlots,
+      seatNames: mpSeats.map(s=>s.name)
+    };
+    await supaClient.from('friend_tables')
+      .update({ payload: snapshot })
+      .eq('id', tableId);
+  } catch(e) { console.warn('broadcastFriendTableState:', e); }
+}
+
+// ── Subscribe to game state as non-host ──
+let _friendTableGameSub = null;
+function subscribeFriendTableGame(tableId) {
+  if (_friendTableGameSub) supaClient.removeChannel(_friendTableGameSub);
+  _friendTableGameSub = supaClient
+    .channel('ftable_game_' + tableId)
+    .on('postgres_changes', {
+      event: 'UPDATE', schema: 'public', table: 'friend_tables',
+      filter: 'id=eq.' + tableId
+    }, (payload) => {
+      const snap = payload.new?.payload;
+      if (!snap || !snap.gameActive) return;
+      applyFriendTableSnapshot(snap, tableId);
+    })
+    .subscribe();
+}
+
+function applyFriendTableSnapshot(snap, tableId) {
+  if (!snap) return;
+  // Rotate from host perspective to my local perspective
+  const rotation = mpMySeat; // my global seat = how much to rotate
+  const rotated = (idx) => (idx - rotation + 4) % 4;
+  const rotatedHands = [0,1,2,3].map(li => snap.hands[(rotation+li)%4]);
+  hands               = rotatedHands;
+  currentPlayer       = rotated(snap.currentPlayer);
+  openingPlayer       = rotated(snap.openingPlayer);
+  passCount           = snap.passCount;
+  firstTurn           = snap.firstTurn;
+  lastPlay            = snap.lastPlay ? {...snap.lastPlay, playerIdx: rotated(snap.lastPlay.playerIdx)} : null;
+  currentRoundPlays   = (snap.currentRoundPlays||[]).map(p=>({...p,playerIdx:rotated(p.playerIdx)}));
+  globalDiscardedCards= new Set(snap.globalDiscardedCards||[]);
+  gameActive          = snap.gameActive;
+
+  selectedCards = [];
+  renderAll();
+  updateScoreboard();
+  setPlayerControls(currentPlayer === 0 && gameActive);
+
+  // Check for game end
+  if (snap.hands) {
+    const winnerHost = snap.hands.findIndex(h => h.length === 0);
+    if (winnerHost >= 0 && !gameActive) {
+      const winnerLocal = rotated(winnerHost);
+      const names = [0,1,2,3].map(li => mpSeats[(rotation+li)%4]?.name||'Player');
+      showWinCelebration(winnerLocal, names, () => {
+        // Simple end banner for friend table non-host
+        document.getElementById('winner-banner').style.display = 'flex';
+        document.getElementById('winner-title').textContent = winnerLocal===0?'🏆 You Win!':'🃏 '+names[winnerLocal]+' Wins!';
+        if (_friendTableGameSub) { supaClient.removeChannel(_friendTableGameSub); _friendTableGameSub=null; }
+      });
+    }
   }
 }
 
