@@ -1936,11 +1936,18 @@
 
       <!-- Invite Tab -->
       <div class="friend-section" id="fsec-invite">
-        <p style="font-size:0.78rem;color:rgba(160,184,255,0.7);margin-bottom:10px">Browse players to add as friends. Showing 10 recent accounts.</p>
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+          <input id="invite-search" type="text" placeholder="Search by username…" maxlength="16"
+            style="flex:1;background:rgba(0,0,0,0.4);border:1px solid rgba(100,140,255,0.25);border-radius:8px;color:var(--text-light);font-family:'Crimson Pro',serif;font-size:0.92rem;padding:7px 12px;outline:none;"
+            oninput="loadInvitePlayers(this.value)"
+            autocomplete="off" spellcheck="false"/>
+          <button onclick="loadInvitePlayers(document.getElementById('invite-search').value)"
+            style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--text-dim);font-family:'Crimson Pro',serif;font-size:0.88rem;padding:7px 12px;cursor:pointer;white-space:nowrap;">🔄</button>
+        </div>
+        <p style="font-size:0.75rem;color:rgba(160,184,255,0.55);margin-bottom:8px">Showing 10 most recent players. Search by name to find anyone.</p>
         <div id="invite-list-content">
           <div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading players…</div>
         </div>
-        <button onclick="loadInvitePlayers()" style="width:100%;margin-top:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--text-dim);font-family:'Crimson Pro',serif;font-size:0.88rem;padding:7px;cursor:pointer;">🔄 Refresh</button>
       </div>
 
       <!-- Requests Tab -->
@@ -5650,7 +5657,11 @@ function friendSwitchTab(tab) {
     document.getElementById('ftab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('fsec-'+t)?.classList.toggle('active', t===tab);
   });
-  if (tab === 'invite') loadInvitePlayers();
+  if (tab === 'invite') {
+    const searchEl = document.getElementById('invite-search');
+    if (searchEl) searchEl.value = '';
+    loadInvitePlayers('');
+  }
   if (tab === 'requests') loadPendingRequests();
 }
 
@@ -5758,33 +5769,41 @@ async function removeFriend(friendId, friendName) {
 }
 
 // ── Invite Players ────────────────────────────────────────
-let _inviteOffset = 0;
-
-async function loadInvitePlayers() {
+async function loadInvitePlayers(searchTerm) {
   if (!supaClient || !supaUser) return;
   const el = document.getElementById('invite-list-content');
   el.innerHTML = '<div class="friend-status-msg">Loading players…</div>';
   try {
-    // Get existing friends + pending to exclude them
+    // Get existing friends + pending to exclude
     const { data: existing } = await supaClient
       .from('friendships')
       .select('user_id, friend_id')
       .or('user_id.eq.'+supaUser.id+',friend_id.eq.'+supaUser.id);
-    const excludeIds = new Set([supaUser.id]);
-    (existing||[]).forEach(f => { excludeIds.add(f.user_id); excludeIds.add(f.friend_id); });
+    const excludeIds = [supaUser.id];
+    (existing||[]).forEach(f => {
+      if (!excludeIds.includes(f.user_id)) excludeIds.push(f.user_id);
+      if (!excludeIds.includes(f.friend_id)) excludeIds.push(f.friend_id);
+    });
 
-    // Random offset for "refresh"
-    _inviteOffset = Math.floor(Math.random() * 50);
-
-    const { data: profiles } = await supaClient
+    let query = supaClient
       .from('profiles')
       .select('id, username, last_active')
-      .not('id', 'in', '('+[...excludeIds].join(',')+')')
+      .not('id', 'in', '('+excludeIds.join(',')+')')
       .order('created_at', { ascending: false })
-      .range(_inviteOffset, _inviteOffset + 9);
+      .limit(10);
+
+    // Apply search filter if provided
+    if (searchTerm && searchTerm.trim().length > 0) {
+      query = query.ilike('username', '%' + searchTerm.trim() + '%');
+    }
+
+    const { data: profiles, error } = await query;
+    if (error) { console.warn('invite query error:', error); }
 
     if (!profiles || profiles.length === 0) {
-      el.innerHTML = '<div class="friend-status-msg">No new players found. Try refreshing!</div>';
+      el.innerHTML = '<div class="friend-status-msg">' +
+        (searchTerm ? 'No players found matching "'+searchTerm+'". Try a different name.' : 'No new players found.') +
+        '</div>';
       return;
     }
 
