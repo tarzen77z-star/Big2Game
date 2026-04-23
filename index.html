@@ -857,6 +857,7 @@
 
     /* ── FEATS BUTTON ── */
     #feats-toggle { font-size: 0.85rem; padding: 7px 22px; margin-top: 0.4rem; border-radius: 20px; }
+    #btn-friend-room { font-size: 0.85rem; padding: 7px 18px; margin-top: 0.4rem; border-radius: 20px; }
 
     /* ── TOAST ── */
     #toast { top: calc(14vh + 44px); bottom: auto; font-size: 0.76rem; padding: 5px 12px; }
@@ -1731,6 +1732,8 @@
     font-weight: 600;
     box-shadow: 0 2px 12px rgba(60,100,200,0.2);
     -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
   }
   #btn-friend-room:hover { border-color: rgba(100,160,255,0.8); box-shadow: 0 4px 20px rgba(60,100,200,0.4); transform: translateY(-1px); }
 
@@ -1901,7 +1904,7 @@
   <!-- CONNECT section -->
   <div class="splash-section-label">CONNECT</div>
   <button id="btn-multiplayer" onclick="openMpLobby()">👥 Multiplayer</button>
-  <button id="btn-friend-room" onclick="openFriendRoom()">🏠 Friend Room <span id="friend-notif-badge" style="display:none;background:#ff6b6b;color:#fff;border-radius:50%;padding:1px 6px;font-size:0.7rem;margin-left:4px;font-family:sans-serif">!</span></button>
+  <button id="btn-friend-room" onclick="openFriendRoom()">🏠 Friend Room <span id="friend-notif-badge" style="display:none;background:#ff6b6b;color:#fff;border-radius:50%;padding:1px 6px;font-size:0.7rem;margin-left:4px;font-family:sans-serif;pointer-events:none">!</span></button>
   <button id="legend-toggle" onclick="document.getElementById('legend-panel').classList.add('open')">📖 Rank &amp; Mode Guide</button>
 </div>
 
