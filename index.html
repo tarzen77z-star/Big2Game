@@ -1716,6 +1716,111 @@
     100% { transform: translateY(100vh) rotate(720deg); opacity:0; }
   }
 
+  /* ── FRIEND ROOM BUTTON ── */
+  #btn-friend-room {
+    margin-top: 0.5rem;
+    background: linear-gradient(135deg, rgba(20,60,100,0.7), rgba(40,100,180,0.5), rgba(20,60,100,0.7));
+    border: 1.5px solid rgba(100,160,255,0.5);
+    color: rgba(180,210,255,0.95);
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.92rem;
+    padding: 8px 22px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+    box-shadow: 0 2px 12px rgba(60,100,200,0.2);
+    -webkit-tap-highlight-color: transparent;
+  }
+  #btn-friend-room:hover { border-color: rgba(100,160,255,0.8); box-shadow: 0 4px 20px rgba(60,100,200,0.4); transform: translateY(-1px); }
+
+  /* ── FRIEND ROOM MODAL ── */
+  #friend-room-overlay { display: none; }
+  #friend-room-overlay.open { display: flex; }
+  #friend-room-box {
+    background: linear-gradient(160deg,#0f1a2e,#1a2640);
+    border: 1px solid rgba(100,140,255,0.3);
+    border-radius: 16px;
+    padding: 24px 20px 20px;
+    width: min(440px, 96vw);
+    position: relative;
+    margin: auto;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.8);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .friend-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 14px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(100,140,255,0.2);
+    flex-shrink: 0;
+  }
+  .friend-tab {
+    flex: 1;
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 0.8rem;
+    font-family: 'Crimson Pro', serif;
+    color: rgba(160,184,255,0.55);
+    background: rgba(0,0,0,0.2);
+    cursor: pointer;
+    transition: all 0.15s;
+    border-right: 1px solid rgba(100,140,255,0.15);
+  }
+  .friend-tab:last-child { border-right: none; }
+  .friend-tab.active { background: rgba(60,100,200,0.3); color: rgba(160,184,255,1); font-weight: 600; }
+  .friend-section { display: none; overflow-y: auto; flex: 1; }
+  .friend-section.active { display: block; }
+
+  /* Friend row card */
+  .friend-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 6px;
+  }
+  .friend-avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: rgba(60,100,200,0.4);
+    border: 1.5px solid rgba(100,140,255,0.4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; font-weight: 700; color: rgba(180,210,255,0.9);
+    flex-shrink: 0;
+    font-family: 'Crimson Pro', serif;
+  }
+  .friend-info { flex: 1; min-width: 0; }
+  .friend-name { font-size: 0.9rem; color: var(--text-light); font-weight: 600; font-family: 'Crimson Pro', serif; }
+  .friend-meta { font-size: 0.7rem; color: var(--text-dim); margin-top: 1px; }
+  .friend-online { color: #7fffaa; }
+  .friend-offline { color: var(--text-dim); }
+  .friend-action-btn {
+    background: none;
+    border: 1px solid rgba(100,140,255,0.35);
+    border-radius: 6px;
+    color: rgba(160,184,255,0.8);
+    font-size: 0.72rem;
+    padding: 4px 9px;
+    cursor: pointer;
+    font-family: 'Crimson Pro', serif;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .friend-action-btn:hover { background: rgba(60,100,200,0.25); border-color: rgba(100,140,255,0.7); }
+  .friend-action-btn.danger { border-color: rgba(200,60,60,0.35); color: rgba(255,150,150,0.8); }
+  .friend-action-btn.danger:hover { background: rgba(180,30,30,0.2); }
+  .friend-action-btn.accept { border-color: rgba(45,138,80,0.5); color: #7fffaa; }
+  .friend-action-btn.accept:hover { background: rgba(45,138,80,0.2); }
+  .friend-status-msg { text-align: center; padding: 16px; color: var(--text-dim); font-style: italic; font-size: 0.82rem; }
+
 </style>
 </head>
 <body>
@@ -1785,7 +1890,53 @@
   <!-- CONNECT section -->
   <div class="splash-section-label">CONNECT</div>
   <button id="btn-multiplayer" onclick="openMpLobby()">👥 Multiplayer</button>
+  <button id="btn-friend-room" onclick="openFriendRoom()">🏠 Friend Room <span id="friend-notif-badge" style="display:none;background:#ff6b6b;color:#fff;border-radius:50%;padding:1px 6px;font-size:0.7rem;margin-left:4px;font-family:sans-serif">!</span></button>
   <button id="legend-toggle" onclick="document.getElementById('legend-panel').classList.add('open')">📖 Rank &amp; Mode Guide</button>
+</div>
+
+
+<!-- FRIEND ROOM MODAL -->
+<div id="friend-room-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:350;align-items:flex-start;justify-content:center;overflow-y:auto;padding:16px;box-sizing:border-box;">
+  <div id="friend-room-box">
+    <button onclick="closeFriendRoom()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:rgba(255,255,255,0.5);font-size:1.3rem;cursor:pointer">✕</button>
+    <h2 style="font-family:'Playfair Display',serif;color:var(--gold-light);margin-bottom:4px;font-size:1.3rem;">🏠 Friend Room</h2>
+    <div id="friend-auth-warning" style="display:none;text-align:center;padding:20px;color:rgba(160,184,255,0.7);font-size:0.85rem;">
+      <div style="font-size:2rem;margin-bottom:8px">🔒</div>
+      Sign in to access Friend Room features.
+      <br><button onclick="closeFriendRoom();showAuthModal();" style="margin-top:12px;background:rgba(60,100,200,0.35);border:1px solid rgba(100,140,255,0.5);border-radius:8px;color:rgba(180,200,255,0.95);font-family:'Crimson Pro',serif;font-size:0.95rem;padding:8px 20px;cursor:pointer;">Sign In</button>
+    </div>
+    <div id="friend-room-content" style="display:none">
+      <!-- Tabs -->
+      <div class="friend-tabs">
+        <div class="friend-tab active" id="ftab-friends" onclick="friendSwitchTab('friends')">👥 Friends</div>
+        <div class="friend-tab" id="ftab-invite" onclick="friendSwitchTab('invite')">➕ Invite</div>
+        <div class="friend-tab" id="ftab-requests" onclick="friendSwitchTab('requests')">📬 Requests <span id="ftab-requests-badge" style="display:none;background:#ff6b6b;color:#fff;border-radius:50%;padding:0 5px;font-size:0.65rem;margin-left:2px">0</span></div>
+      </div>
+
+      <!-- Friends List -->
+      <div class="friend-section active" id="fsec-friends">
+        <div id="friends-list-content">
+          <div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading friends…</div>
+        </div>
+      </div>
+
+      <!-- Invite Tab -->
+      <div class="friend-section" id="fsec-invite">
+        <p style="font-size:0.78rem;color:rgba(160,184,255,0.7);margin-bottom:10px">Browse players to add as friends. Showing 10 recent accounts.</p>
+        <div id="invite-list-content">
+          <div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading players…</div>
+        </div>
+        <button onclick="loadInvitePlayers()" style="width:100%;margin-top:8px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--text-dim);font-family:'Crimson Pro',serif;font-size:0.88rem;padding:7px;cursor:pointer;">🔄 Refresh</button>
+      </div>
+
+      <!-- Requests Tab -->
+      <div class="friend-section" id="fsec-requests">
+        <div id="requests-list-content">
+          <div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading requests…</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- MULTIPLAYER LOBBY -->
@@ -5444,6 +5595,321 @@ function clearConfetti() {
   _confettiPieces.forEach(el => { try { el.remove(); } catch(e) {} });
   _confettiPieces.length = 0;
 }
+
+
+// ════════════════════════════════════════════════════════════
+//  FRIEND ROOM — PHASE 1: Friends, Invite, Requests
+// ════════════════════════════════════════════════════════════
+
+function openFriendRoom() {
+  const overlay = document.getElementById('friend-room-overlay');
+  overlay.classList.add('open');
+  const warning = document.getElementById('friend-auth-warning');
+  const content = document.getElementById('friend-room-content');
+  if (!supaUser) {
+    warning.style.display = 'block';
+    content.style.display = 'none';
+    return;
+  }
+  warning.style.display = 'none';
+  content.style.display = 'block';
+  friendSwitchTab('friends');
+  loadFriendsList();
+  loadPendingRequests();
+  // Update online status
+  if (supaClient && supaUser) {
+    supaClient.from('profiles').update({ is_online: true, last_active: new Date().toISOString() })
+      .eq('id', supaUser.id).then(()=>{});
+  }
+}
+
+function closeFriendRoom() {
+  document.getElementById('friend-room-overlay').classList.remove('open');
+  if (supaClient && supaUser) {
+    supaClient.from('profiles').update({ is_online: false })
+      .eq('id', supaUser.id).then(()=>{});
+  }
+}
+
+function friendSwitchTab(tab) {
+  ['friends','invite','requests'].forEach(t => {
+    document.getElementById('ftab-'+t)?.classList.toggle('active', t===tab);
+    document.getElementById('fsec-'+t)?.classList.toggle('active', t===tab);
+  });
+  if (tab === 'invite') loadInvitePlayers();
+  if (tab === 'requests') loadPendingRequests();
+}
+
+// ── Rank helpers ──────────────────────────────────────────
+function rankFromScore(rs) {
+  if (rs >= 6100) return { name:'Gold',   cls:'gold',   icon:'🥇' };
+  if (rs >= 1100) return { name:'Silver', cls:'silver', icon:'🥈' };
+  if (rs >= 100)  return { name:'Bronze', cls:'bronze', icon:'🥉' };
+  return { name:'Normal', cls:'beginner', icon:'🏅' };
+}
+
+function timeAgo(ts) {
+  if (!ts) return 'never';
+  const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (diff < 60)   return 'just now';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400)return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+
+function initials(name) {
+  return (name||'?').slice(0,2).toUpperCase();
+}
+
+// ── Friends List ──────────────────────────────────────────
+async function loadFriendsList() {
+  if (!supaClient || !supaUser) return;
+  const el = document.getElementById('friends-list-content');
+  el.innerHTML = '<div class="friend-status-msg">Loading…</div>';
+  try {
+    // Get accepted friendships
+    const { data: fs } = await supaClient
+      .from('friendships')
+      .select('user_id, friend_id')
+      .eq('status', 'accepted')
+      .or('user_id.eq.'+supaUser.id+',friend_id.eq.'+supaUser.id);
+
+    if (!fs || fs.length === 0) {
+      el.innerHTML = '<div class="friend-status-msg">No friends yet. Use the Invite tab to add friends!</div>';
+      return;
+    }
+
+    // Get the other user IDs
+    const friendIds = fs.map(f => f.user_id === supaUser.id ? f.friend_id : f.user_id);
+
+    // Load profiles + scores
+    const { data: profiles } = await supaClient
+      .from('profiles')
+      .select('id, username, is_online, last_active')
+      .in('id', friendIds);
+
+    // Load rank scores (mode bests) from player_scores
+    const { data: scores } = await supaClient
+      .from('player_scores')
+      .select('user_id, mode_best')
+      .in('user_id', friendIds);
+
+    // Build rank score per user
+    const rsMap = {};
+    (scores||[]).forEach(s => {
+      rsMap[s.user_id] = (rsMap[s.user_id]||0) + Math.min(
+        s.mode_best,
+        s.mode_best >= 0 ? ({beginner:100,intermediate:1000,hard:5000}[s.mode]||Infinity) : 0
+      );
+    });
+
+    if (!profiles || profiles.length === 0) {
+      el.innerHTML = '<div class="friend-status-msg">No friends found.</div>';
+      return;
+    }
+
+    // Sort: online first, then by last active
+    profiles.sort((a,b) => {
+      if (a.is_online !== b.is_online) return b.is_online ? 1 : -1;
+      return new Date(b.last_active||0) - new Date(a.last_active||0);
+    });
+
+    el.innerHTML = profiles.map(p => {
+      const rs = rsMap[p.id] || 0;
+      const rank = rankFromScore(rs);
+      const onlineStr = p.is_online
+        ? '<span class="friend-online">● Online</span>'
+        : '<span class="friend-offline">Last seen ' + timeAgo(p.last_active) + '</span>';
+      return `<div class="friend-row">
+        <div class="friend-avatar">${initials(p.username)}</div>
+        <div class="friend-info">
+          <div class="friend-name">${p.username}</div>
+          <div class="friend-meta">${rank.icon} ${rank.name} &nbsp;·&nbsp; ✦ ${rs} &nbsp;·&nbsp; ${onlineStr}</div>
+        </div>
+        <button class="friend-action-btn danger" onclick="removeFriend('${p.id}','${p.username}')">Remove</button>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="friend-status-msg">Error loading friends.</div>';
+    console.warn('loadFriendsList:', e);
+  }
+}
+
+async function removeFriend(friendId, friendName) {
+  if (!confirm('Remove ' + friendName + ' from friends?')) return;
+  await supaClient.from('friendships').delete()
+    .or('and(user_id.eq.'+supaUser.id+',friend_id.eq.'+friendId+'),and(user_id.eq.'+friendId+',friend_id.eq.'+supaUser.id+')');
+  loadFriendsList();
+  toast('Removed ' + friendName + ' from friends.');
+}
+
+// ── Invite Players ────────────────────────────────────────
+let _inviteOffset = 0;
+
+async function loadInvitePlayers() {
+  if (!supaClient || !supaUser) return;
+  const el = document.getElementById('invite-list-content');
+  el.innerHTML = '<div class="friend-status-msg">Loading players…</div>';
+  try {
+    // Get existing friends + pending to exclude them
+    const { data: existing } = await supaClient
+      .from('friendships')
+      .select('user_id, friend_id')
+      .or('user_id.eq.'+supaUser.id+',friend_id.eq.'+supaUser.id);
+    const excludeIds = new Set([supaUser.id]);
+    (existing||[]).forEach(f => { excludeIds.add(f.user_id); excludeIds.add(f.friend_id); });
+
+    // Random offset for "refresh"
+    _inviteOffset = Math.floor(Math.random() * 50);
+
+    const { data: profiles } = await supaClient
+      .from('profiles')
+      .select('id, username, last_active')
+      .not('id', 'in', '('+[...excludeIds].join(',')+')')
+      .order('created_at', { ascending: false })
+      .range(_inviteOffset, _inviteOffset + 9);
+
+    if (!profiles || profiles.length === 0) {
+      el.innerHTML = '<div class="friend-status-msg">No new players found. Try refreshing!</div>';
+      return;
+    }
+
+    // Get rank scores
+    const pIds = profiles.map(p=>p.id);
+    const { data: scores } = await supaClient
+      .from('player_scores').select('user_id, mode_best').in('user_id', pIds);
+    const rsMap = {};
+    (scores||[]).forEach(s => { rsMap[s.user_id] = (rsMap[s.user_id]||0) + (s.mode_best||0); });
+
+    el.innerHTML = profiles.map(p => {
+      const rs = rsMap[p.id] || 0;
+      const rank = rankFromScore(rs);
+      return `<div class="friend-row">
+        <div class="friend-avatar">${initials(p.username)}</div>
+        <div class="friend-info">
+          <div class="friend-name">${p.username}</div>
+          <div class="friend-meta">${rank.icon} ${rank.name} &nbsp;·&nbsp; ✦ ${rs}</div>
+        </div>
+        <button class="friend-action-btn" id="inv-btn-${p.id}" onclick="sendFriendRequest('${p.id}','${p.username}')">➕ Add</button>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="friend-status-msg">Error loading players.</div>';
+    console.warn('loadInvitePlayers:', e);
+  }
+}
+
+async function sendFriendRequest(toId, toName) {
+  if (!supaClient || !supaUser) return;
+  const btn = document.getElementById('inv-btn-'+toId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    const { error } = await supaClient.from('friendships').insert({
+      user_id: supaUser.id,
+      friend_id: toId,
+      status: 'pending'
+    });
+    if (error) throw error;
+    if (btn) { btn.textContent = '✓ Sent'; btn.style.color = '#7fffaa'; btn.style.borderColor = 'rgba(45,138,80,0.5)'; }
+    toast('Friend request sent to ' + toName + '!');
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '➕ Add'; }
+    if (e.code === '23505') { // duplicate
+      toast('Already sent a request to ' + toName);
+      if (btn) { btn.textContent = 'Sent'; btn.disabled = true; }
+    } else {
+      toast('Error sending request.');
+    }
+  }
+}
+
+// ── Pending Requests ──────────────────────────────────────
+async function loadPendingRequests() {
+  if (!supaClient || !supaUser) return;
+  const el = document.getElementById('requests-list-content');
+  el.innerHTML = '<div class="friend-status-msg">Loading…</div>';
+  try {
+    // Requests sent TO me
+    const { data: reqs } = await supaClient
+      .from('friendships')
+      .select('user_id, created_at')
+      .eq('friend_id', supaUser.id)
+      .eq('status', 'pending');
+
+    const badge = document.getElementById('ftab-requests-badge');
+    const mainBadge = document.getElementById('friend-notif-badge');
+    if (badge) {
+      if (reqs && reqs.length > 0) {
+        badge.style.display = 'inline'; badge.textContent = reqs.length;
+        if (mainBadge) { mainBadge.style.display = 'inline'; mainBadge.textContent = reqs.length; }
+      } else {
+        badge.style.display = 'none';
+        if (mainBadge) mainBadge.style.display = 'none';
+      }
+    }
+
+    if (!reqs || reqs.length === 0) {
+      el.innerHTML = '<div class="friend-status-msg">No pending friend requests.</div>';
+      return;
+    }
+
+    // Load senders' profiles
+    const senderIds = reqs.map(r => r.user_id);
+    const { data: profiles } = await supaClient
+      .from('profiles').select('id, username').in('id', senderIds);
+    const { data: scores } = await supaClient
+      .from('player_scores').select('user_id, mode_best').in('user_id', senderIds);
+    const rsMap = {};
+    (scores||[]).forEach(s => { rsMap[s.user_id] = (rsMap[s.user_id]||0) + (s.mode_best||0); });
+    const profileMap = {};
+    (profiles||[]).forEach(p => { profileMap[p.id] = p; });
+
+    el.innerHTML = reqs.map(r => {
+      const p = profileMap[r.user_id] || { username: 'Unknown' };
+      const rs = rsMap[r.user_id] || 0;
+      const rank = rankFromScore(rs);
+      const ago = timeAgo(r.created_at);
+      return `<div class="friend-row">
+        <div class="friend-avatar">${initials(p.username)}</div>
+        <div class="friend-info">
+          <div class="friend-name">${p.username}</div>
+          <div class="friend-meta">${rank.icon} ${rank.name} &nbsp;·&nbsp; ✦ ${rs} &nbsp;·&nbsp; ${ago}</div>
+        </div>
+        <div style="display:flex;gap:5px;flex-shrink:0">
+          <button class="friend-action-btn accept" onclick="respondFriendRequest('${r.user_id}','${p.username}',true)">Accept</button>
+          <button class="friend-action-btn danger" onclick="respondFriendRequest('${r.user_id}','${p.username}',false)">Decline</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="friend-status-msg">Error loading requests.</div>';
+    console.warn('loadPendingRequests:', e);
+  }
+}
+
+async function respondFriendRequest(fromId, fromName, accept) {
+  if (!supaClient || !supaUser) return;
+  if (accept) {
+    await supaClient.from('friendships')
+      .update({ status: 'accepted' })
+      .eq('user_id', fromId).eq('friend_id', supaUser.id);
+    toast('✓ Now friends with ' + fromName + '!');
+  } else {
+    await supaClient.from('friendships')
+      .delete()
+      .eq('user_id', fromId).eq('friend_id', supaUser.id);
+    toast('Declined request from ' + fromName + '.');
+  }
+  loadPendingRequests();
+  if (accept) loadFriendsList();
+}
+
+// ── Poll for new requests every 60s while Friend Room open ──
+setInterval(() => {
+  if (supaUser && document.getElementById('friend-room-overlay')?.classList.contains('open')) {
+    loadPendingRequests();
+  }
+}, 60000);
 
 // ════════════════════════════════════════
 //  INIT
