@@ -1833,7 +1833,124 @@
   .friend-action-btn.danger:hover { background: rgba(180,30,30,0.2); }
   .friend-action-btn.accept { border-color: rgba(45,138,80,0.5); color: #7fffaa; }
   .friend-action-btn.accept:hover { background: rgba(45,138,80,0.2); }
-  .friend-status-msg { text-align: center; padding: 16px; color: var(--text-dim); font-style: italic; font-size: 0.82rem; }
+  .friend-feature-item {
+    font-size: 0.82rem;
+    color: rgba(200,220,255,0.8);
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-family: 'Crimson Pro', serif;
+    line-height: 1.4;
+  }
+  .friend-feature-item:last-child { border-bottom: none; }
+  .friend-feature-item strong { color: rgba(220,235,255,0.95); }
+
+  /* ── Friend Tables ── */
+  .table-group-btn {
+    padding: 5px 12px;
+    border-radius: 16px;
+    font-size: 0.75rem;
+    font-family: 'Crimson Pro', serif;
+    border: 1px solid rgba(100,140,255,0.3);
+    background: rgba(0,0,0,0.2);
+    color: rgba(160,184,255,0.7);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .table-group-btn.active {
+    background: rgba(60,100,200,0.35);
+    border-color: rgba(100,160,255,0.6);
+    color: rgba(200,220,255,1);
+    font-weight: 600;
+  }
+  .table-group-btn.locked { opacity: 0.4; cursor: not-allowed; }
+
+  /* Round table card */
+  .friend-table-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    position: relative;
+  }
+  .friend-table-card.my-table {
+    border-color: rgba(45,138,80,0.5);
+    background: rgba(45,138,80,0.07);
+  }
+  .table-round-visual {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin: 10px 0;
+  }
+  .table-circle {
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(40,80,40,0.8), rgba(20,50,20,0.9));
+    border: 2px solid rgba(201,168,76,0.4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.65rem;
+    color: rgba(201,168,76,0.6);
+    font-family: 'Crimson Pro', serif;
+    letter-spacing: 0.1em;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+    flex-shrink: 0;
+  }
+  .table-seats {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+  }
+  .table-seat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(0,0,0,0.2);
+    font-size: 0.78rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+  .table-seat.occupied { color: var(--text-light); border-color: rgba(255,255,255,0.06); cursor: default; }
+  .table-seat.empty { color: rgba(100,160,255,0.6); border-color: rgba(100,160,255,0.15); }
+  .table-seat.empty:hover { background: rgba(60,100,200,0.2); border-color: rgba(100,160,255,0.4); color: rgba(160,200,255,0.9); }
+  .table-seat.my-seat { color: #7fffaa; border-color: rgba(45,138,80,0.4); cursor: default; }
+  .seat-avatar {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: rgba(60,100,200,0.4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.6rem; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .table-timer {
+    font-size: 0.72rem;
+    color: rgba(255,180,80,0.8);
+    margin-top: 6px;
+    text-align: center;
+  }
+  .table-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    justify-content: center;
+  }
+  .btn-table-start {
+    background: rgba(45,138,80,0.3);
+    border: 1px solid rgba(45,138,80,0.5);
+    color: #7fffaa;
+    border-radius: 8px;
+    padding: 5px 14px;
+    font-size: 0.8rem;
+    font-family: 'Crimson Pro', serif;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-table-start:hover { background: rgba(45,138,80,0.5); }
 
 </style>
 </head>
@@ -1914,10 +2031,35 @@
   <div id="friend-room-box">
     <button onclick="closeFriendRoom()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:rgba(255,255,255,0.5);font-size:1.3rem;cursor:pointer">✕</button>
     <h2 style="font-family:'Playfair Display',serif;color:var(--gold-light);margin-bottom:4px;font-size:1.3rem;">🏠 Friend Room</h2>
-    <div id="friend-auth-warning" style="display:none;text-align:center;padding:20px;color:rgba(160,184,255,0.7);font-size:0.85rem;">
-      <div style="font-size:2rem;margin-bottom:8px">🔒</div>
-      Sign in to access Friend Room features.
-      <br><button onclick="closeFriendRoom();showAuthModal();" style="margin-top:12px;background:rgba(60,100,200,0.35);border:1px solid rgba(100,140,255,0.5);border-radius:8px;color:rgba(180,200,255,0.95);font-family:'Crimson Pro',serif;font-size:0.95rem;padding:8px 20px;cursor:pointer;">Sign In</button>
+    <div id="friend-auth-warning" style="display:none;text-align:center;padding:10px 4px 20px;">
+      <!-- Hero icon with glow -->
+      <div style="font-size:3.5rem;margin-bottom:12px;filter:drop-shadow(0 0 18px rgba(201,168,76,0.5))">🏠</div>
+      <div style="font-family:'Playfair Display',serif;font-size:1.35rem;color:var(--gold-light);font-weight:700;margin-bottom:6px">Friend Room</div>
+      <div style="font-size:0.82rem;color:rgba(160,184,255,0.8);margin-bottom:18px;line-height:1.6">Your social hub for Big 2.</div>
+
+      <!-- Feature list -->
+      <div style="text-align:left;background:rgba(0,0,0,0.25);border:1px solid rgba(100,140,255,0.15);border-radius:12px;padding:14px 16px;margin-bottom:18px;">
+        <div style="font-size:0.72rem;letter-spacing:0.15em;color:rgba(201,168,76,0.55);margin-bottom:10px;font-family:'Crimson Pro',serif">WITH A FREE ACCOUNT YOU GET</div>
+        <div class="friend-feature-item">👥 <strong>Friends List</strong> — add and track friends across all devices</div>
+        <div class="friend-feature-item">📬 <strong>Friend Invites</strong> — send &amp; receive friend requests</div>
+        <div class="friend-feature-item">🏓 <strong>Friend Tables</strong> — play together in private rooms <span style="color:rgba(201,168,76,0.6);font-size:0.7rem">(coming soon)</span></div>
+        <div class="friend-feature-item">🏆 <strong>Leaderboard</strong> — rank among your friends <span style="color:rgba(201,168,76,0.6);font-size:0.7rem">(coming soon)</span></div>
+        <div class="friend-feature-item">☁ <strong>Cloud Save</strong> — your progress syncs everywhere</div>
+      </div>
+
+      <!-- CTA buttons -->
+      <button onclick="closeFriendRoom();showAuthModal();document.getElementById('auth-tab-signup')?.click();"
+        style="width:100%;padding:11px;background:linear-gradient(135deg,rgba(40,80,200,0.6),rgba(80,130,255,0.5));border:1.5px solid rgba(100,160,255,0.6);border-radius:10px;color:rgba(200,220,255,0.95);font-family:'Crimson Pro',serif;font-size:1rem;font-weight:700;cursor:pointer;margin-bottom:8px;letter-spacing:0.04em;">
+        ✨ Create Free Account
+      </button>
+      <button onclick="closeFriendRoom();showAuthModal();"
+        style="width:100%;padding:9px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(200,220,255,0.6);font-family:'Crimson Pro',serif;font-size:0.9rem;cursor:pointer;margin-bottom:10px;">
+        Sign In to Existing Account
+      </button>
+      <button onclick="closeFriendRoom()"
+        style="background:none;border:none;color:rgba(255,255,255,0.25);font-size:0.78rem;cursor:pointer;font-family:'Crimson Pro',serif;">
+        Maybe later
+      </button>
     </div>
     <div id="friend-room-content" style="display:none">
       <!-- Tabs -->
@@ -1925,6 +2067,7 @@
         <div class="friend-tab active" id="ftab-friends" onclick="friendSwitchTab('friends')">👥 Friends</div>
         <div class="friend-tab" id="ftab-invite" onclick="friendSwitchTab('invite')">➕ Invite</div>
         <div class="friend-tab" id="ftab-requests" onclick="friendSwitchTab('requests')">📬 Requests <span id="ftab-requests-badge" style="display:none;background:#ff6b6b;color:#fff;border-radius:50%;padding:0 5px;font-size:0.65rem;margin-left:2px">0</span></div>
+        <div class="friend-tab" id="ftab-tables" onclick="friendSwitchTab('tables')">🏓 Tables</div>
       </div>
 
       <!-- Friends List -->
@@ -1947,6 +2090,25 @@
         <p style="font-size:0.75rem;color:rgba(160,184,255,0.55);margin-bottom:8px">Showing 10 most recent players. Search by name to find anyone.</p>
         <div id="invite-list-content">
           <div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading players…</div>
+        </div>
+      </div>
+
+
+      <!-- Tables Tab -->
+      <div class="friend-section" id="fsec-tables">
+        <!-- Group selector -->
+        <div id="tables-group-bar" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+          <button class="table-group-btn active" id="tgrp-beginner"    onclick="selectTableGroup('beginner')">🌱 Beginner</button>
+          <button class="table-group-btn locked"  id="tgrp-intermediate" onclick="selectTableGroup('intermediate')" disabled>🥉 Intermediate</button>
+          <button class="table-group-btn locked"  id="tgrp-hard"       onclick="selectTableGroup('hard')" disabled>🥈 Hard</button>
+          <button class="table-group-btn locked"  id="tgrp-pro"        onclick="selectTableGroup('pro')" disabled>🥇 Pro</button>
+        </div>
+        <div id="tables-list-content">
+          <div class="friend-status-msg">Loading tables…</div>
+        </div>
+        <div id="my-table-banner" style="display:none;background:rgba(45,138,80,0.15);border:1px solid rgba(45,138,80,0.4);border-radius:10px;padding:10px 14px;margin-top:10px;font-size:0.82rem;color:#7fffaa;text-align:center;">
+          <span id="my-table-banner-text">You are seated at a table</span>
+          <button onclick="leaveCurrentTable()" style="margin-left:10px;background:rgba(180,30,30,0.3);border:1px solid rgba(200,60,60,0.4);color:#ffaaaa;border-radius:6px;padding:3px 10px;font-size:0.75rem;cursor:pointer;font-family:'Crimson Pro',serif;">Leave</button>
         </div>
       </div>
 
@@ -5622,6 +5784,38 @@ function clearConfetti() {
 //  FRIEND ROOM — PHASE 1: Friends, Invite, Requests
 // ════════════════════════════════════════════════════════════
 
+
+// ── Shared helper: build rsMap from supabase player_scores rows ──
+function buildRsMap(scores) {
+  const MODE_CAPS = { beginner:100, intermediate:1000, hard:5000, pro:Infinity };
+  const rsMap = {};
+  (scores||[]).forEach(s => {
+    const cap = MODE_CAPS[s.mode];
+    const contrib = (cap === undefined || !isFinite(cap))
+      ? Math.max(s.mode_best||0, 0)
+      : Math.min(Math.max(s.mode_best||0, 0), cap);
+    rsMap[s.user_id] = (rsMap[s.user_id]||0) + contrib;
+  });
+  return rsMap;
+}
+
+// ── Shared helper: render a single friend row ──
+function renderFriendRow(p, rs, extraBtn, statusHtml) {
+  const rank = rankFromScore(rs||0);
+  // Build a small trophy badge using same CSS as game
+  const trophyHtml = `<span style="display:inline-flex;align-items:center;gap:3px;font-size:0.72rem">${rank.icon} <span style="color:var(--gold-light)">${rank.name}</span></span>`;
+  const rankScoreHtml = `<span style="color:var(--gold-light);font-weight:600">✦ ${rs||0}</span>`;
+  const statusPart = statusHtml ? ` &nbsp;·&nbsp; ${statusHtml}` : '';
+  return `<div class="friend-row">
+    <div class="friend-avatar">${initials(p.username)}</div>
+    <div class="friend-info">
+      <div class="friend-name">${p.username||'Unknown'}</div>
+      <div class="friend-meta">${trophyHtml} &nbsp;·&nbsp; ${rankScoreHtml}${statusPart}</div>
+    </div>
+    ${extraBtn}
+  </div>`;
+}
+
 function openFriendRoom() {
   const overlay = document.getElementById('friend-room-overlay');
   overlay.classList.add('open');
@@ -5719,14 +5913,7 @@ async function loadFriendsList() {
       .select('user_id, mode, mode_best')
       .in('user_id', friendIds);
 
-    // Build rank score with correct per-mode caps
-    const MODE_CAPS = { beginner:100, intermediate:1000, hard:5000, pro:Infinity };
-    const rsMap = {};
-    (scores||[]).forEach(s => {
-      const cap = MODE_CAPS[s.mode] ?? 0;
-      const contrib = Math.min(Math.max(s.mode_best||0, 0), isFinite(cap) ? cap : s.mode_best||0);
-      rsMap[s.user_id] = (rsMap[s.user_id]||0) + contrib;
-    });
+    const rsMap = buildRsMap(scores);
 
     if (!profiles || profiles.length === 0) {
       el.innerHTML = '<div class="friend-status-msg">No friends found.</div>';
@@ -5741,18 +5928,11 @@ async function loadFriendsList() {
 
     el.innerHTML = profiles.map(p => {
       const rs = rsMap[p.id] || 0;
-      const rank = rankFromScore(rs);
       const onlineStr = p.is_online
         ? '<span class="friend-online">● Online</span>'
         : '<span class="friend-offline">Last seen ' + timeAgo(p.last_active) + '</span>';
-      return `<div class="friend-row">
-        <div class="friend-avatar">${initials(p.username)}</div>
-        <div class="friend-info">
-          <div class="friend-name">${p.username}</div>
-          <div class="friend-meta">${rank.icon} ${rank.name} &nbsp;·&nbsp; ✦ ${rs} &nbsp;·&nbsp; ${onlineStr}</div>
-        </div>
-        <button class="friend-action-btn danger" onclick="removeFriend('${p.id}','${p.username}')">Remove</button>
-      </div>`;
+      const btn = `<button class="friend-action-btn danger" onclick="removeFriend('${p.id}','${p.username}')">Remove</button>`;
+      return renderFriendRow(p, rs, btn, onlineStr);
     }).join('');
   } catch(e) {
     el.innerHTML = '<div class="friend-status-msg">Error loading friends.</div>';
@@ -5821,15 +6001,8 @@ async function loadInvitePlayers(searchTerm) {
 
     el.innerHTML = profiles.map(p => {
       const rs = rsMap[p.id] || 0;
-      const rank = rankFromScore(rs);
-      return `<div class="friend-row">
-        <div class="friend-avatar">${initials(p.username)}</div>
-        <div class="friend-info">
-          <div class="friend-name">${p.username}</div>
-          <div class="friend-meta">${rank.icon} ${rank.name} &nbsp;·&nbsp; ✦ ${rs}</div>
-        </div>
-        <button class="friend-action-btn" id="inv-btn-${p.id}" onclick="sendFriendRequest('${p.id}','${p.username}')">➕ Add</button>
-      </div>`;
+      const btn = `<button class="friend-action-btn" id="inv-btn-${p.id}" onclick="sendFriendRequest('${p.id}','${p.username}')">➕ Add</button>`;
+      return renderFriendRow(p, rs, btn, '');
     }).join('');
   } catch(e) {
     el.innerHTML = '<div class="friend-status-msg">Error loading players.</div>';
@@ -5910,19 +6083,12 @@ async function loadPendingRequests() {
     el.innerHTML = reqs.map(r => {
       const p = profileMap[r.user_id] || { username: 'Unknown' };
       const rs = rsMap[r.user_id] || 0;
-      const rank = rankFromScore(rs);
       const ago = timeAgo(r.created_at);
-      return `<div class="friend-row">
-        <div class="friend-avatar">${initials(p.username)}</div>
-        <div class="friend-info">
-          <div class="friend-name">${p.username}</div>
-          <div class="friend-meta">${rank.icon} ${rank.name} &nbsp;·&nbsp; ✦ ${rs} &nbsp;·&nbsp; ${ago}</div>
-        </div>
-        <div style="display:flex;gap:5px;flex-shrink:0">
-          <button class="friend-action-btn accept" onclick="respondFriendRequest('${r.user_id}','${p.username}',true)">Accept</button>
-          <button class="friend-action-btn danger" onclick="respondFriendRequest('${r.user_id}','${p.username}',false)">Decline</button>
-        </div>
+      const btns = `<div style="display:flex;gap:5px;flex-shrink:0">
+        <button class="friend-action-btn accept" onclick="respondFriendRequest('${r.user_id}','${p.username}',true)">Accept</button>
+        <button class="friend-action-btn danger" onclick="respondFriendRequest('${r.user_id}','${p.username}',false)">Decline</button>
       </div>`;
+      return renderFriendRow(p, rs, btns, ago);
     }).join('');
   } catch(e) {
     el.innerHTML = '<div class="friend-status-msg">Error loading requests.</div>';
