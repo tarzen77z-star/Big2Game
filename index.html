@@ -6377,6 +6377,7 @@ async function createAndJoinTable(seatNum) {
     if (error) throw error;
     _myTableId   = data.id;
     _myTableSeat = seatNum;
+    watchMyTable(data.id);
     await notifyFriendsTableStarted(data.id);
     loadTables();
   } catch(e) { console.warn('createAndJoinTable:', e); toast('Error creating table.'); }
@@ -6396,6 +6397,9 @@ async function joinTable(tableId, seatNum) {
     if (error) throw error;
     _myTableId   = tableId;
     _myTableSeat = seatNum;
+
+    // Watch this table for game start even if Friend Room is closed
+    watchMyTable(tableId);
 
     // Notify friends that someone joined
     await notifyFriendsTableStarted(tableId);
@@ -6686,8 +6690,49 @@ function subscribeToTables() {
       schema: 'public',
       table:  'friend_tables',
       filter: 'table_group=eq.' + _currentTableGroup
-    }, () => { loadTables(); })
-    .subscribe();
+    }, (payload) => {
+      const row = payload.new;
+      // If MY table just changed to 'playing' and I'm not the host → launch game
+      if (row && row.id === _myTableId && row.status === 'playing' && !mpIsHost) {
+        console.log('Table started by host, launching game for non-host');
+        stopTableTimer();
+        closeFriendRoom();
+        launchFriendTableGame(row);
+        return;
+      }
+      loadTables();
+    })
+    .subscribe((status) => {
+      console.log('Tables subscription status:', status);
+    });
+}
+
+// ── Persistent my-table watcher (survives Friend Room close) ──
+let _myTableWatchSub = null;
+
+function watchMyTable(tableId) {
+  if (_myTableWatchSub) supaClient.removeChannel(_myTableWatchSub);
+  if (!tableId || !supaClient) return;
+  console.log('Watching my table for game start:', tableId);
+  _myTableWatchSub = supaClient
+    .channel('my_table_watch_' + tableId)
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table:  'friend_tables',
+      filter: 'id=eq.' + tableId
+    }, (payload) => {
+      const row = payload.new;
+      console.log('My table updated:', row?.status, 'mpIsHost:', mpIsHost);
+      if (row && row.status === 'playing' && !mpIsHost) {
+        console.log('Game started! Launching for non-host player');
+        stopTableTimer();
+        closeFriendRoom();
+        if (_myTableWatchSub) { supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null; }
+        launchFriendTableGame(row);
+      }
+    })
+    .subscribe((status) => console.log('My table watch status:', status));
 }
 
 function unsubscribeFromTables() {
