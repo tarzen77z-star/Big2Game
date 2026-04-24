@@ -5446,6 +5446,7 @@ function initSupabase() {
         updateAccountBar(true);
         loadCloudData();
         subscribeToNotifications();
+        pingOnline();
       } else {
         updateAccountBar(false);
       }
@@ -5602,6 +5603,7 @@ async function doSignIn() {
     supaUser = data.user;
     updateAccountBar(true);
     subscribeToNotifications();
+    pingOnline();
     setAuthStatus('✓ Signed in!','success','signin');
     const pendingImport = localStorage.getItem('big2_pending_import');
     if (pendingImport && guestHasProgress()) {
@@ -5730,6 +5732,11 @@ async function saveCloudData() {
       }, { onConflict: 'user_id,mode' });
       if (error) console.warn('player_scores upsert error:', error);
     }
+    // Update rank_score in profiles for friend list display
+    await supaClient.from('profiles')
+      .update({ rank_score: rankScore })
+      .eq('id', supaUser.id);
+
     // Save feats
     const { error: fe } = await supaClient.from('player_feats').upsert({
       user_id:    supaUser.id,
@@ -5804,9 +5811,22 @@ function clearConfetti() {
 
 // ── Shared helper: build rsMap from supabase player_scores rows ──
 function buildRsMap(scores) {
-  const MODE_CAPS = { beginner:100, intermediate:1000, hard:5000, pro:Infinity };
+  // First pass: use rank_score column if available (already computed total)
   const rsMap = {};
+  const hasTotalRs = {};
   (scores||[]).forEach(s => {
+    if (s.rank_score != null && s.rank_score > 0) {
+      // Use the max rank_score seen across modes (it's the same total stored redundantly)
+      if (!hasTotalRs[s.user_id] || s.rank_score > rsMap[s.user_id]) {
+        rsMap[s.user_id] = s.rank_score;
+        hasTotalRs[s.user_id] = true;
+      }
+    }
+  });
+  // Second pass: for users with no rank_score, compute from mode_best
+  const MODE_CAPS = { beginner:100, intermediate:1000, hard:5000, pro:Infinity };
+  (scores||[]).forEach(s => {
+    if (hasTotalRs[s.user_id]) return; // already have total
     const cap = MODE_CAPS[s.mode];
     const contrib = (cap === undefined || !isFinite(cap))
       ? Math.max(s.mode_best||0, 0)
@@ -5859,7 +5879,8 @@ function closeFriendRoom() {
   document.getElementById('friend-room-overlay').classList.remove('open');
   unsubscribeFromTables();
   if (supaClient && supaUser) {
-    supaClient.from('profiles').update({ is_online: false })
+    supaClient.from('profiles')
+      .update({ is_online: false, last_active: new Date().toISOString() })
       .eq('id', supaUser.id).then(()=>{});
   }
 }
@@ -5927,7 +5948,7 @@ async function loadFriendsList() {
     // Load profiles + scores + table status
     const { data: profiles } = await supaClient
       .from('profiles')
-      .select('id, username, is_online, last_active')
+      .select('id, username, is_online, last_active, rank_score')
       .in('id', friendIds);
 
     // Load rank scores
@@ -5974,9 +5995,15 @@ async function loadFriendsList() {
     });
 
     el.innerHTML = profiles.map(p => {
-      const rs = rsMap[p.id] || 0;
+      // Use profile rank_score if available (most up-to-date), fallback to computed
+      const rs = (p.rank_score != null && p.rank_score > 0) ? p.rank_score : (rsMap[p.id] || 0);
       const tableInfo = friendTableMap[p.id];
-      const onlineStr = p.is_online
+      // Consider online if active within last 5 minutes
+      const lastActiveMins = p.last_active
+        ? (Date.now() - new Date(p.last_active).getTime()) / 60000
+        : Infinity;
+      const isOnline = lastActiveMins < 5;
+      const onlineStr = isOnline
         ? '<span class="friend-online">● Online</span>'
         : '<span class="friend-offline">Last seen ' + timeAgo(p.last_active) + '</span>';
 
@@ -6055,7 +6082,7 @@ async function loadInvitePlayers(searchTerm) {
     // Get rank scores with correct per-mode caps
     const pIds = profiles.map(p=>p.id);
     const { data: scores } = await supaClient
-      .from('player_scores').select('user_id, mode, mode_best').in('user_id', pIds);
+      .from('player_scores').select('user_id, mode, mode_best, rank_score').in('user_id', pIds);
     const MODE_CAPS = { beginner:100, intermediate:1000, hard:5000, pro:Infinity };
     const rsMap = {};
     (scores||[]).forEach(s => {
@@ -6065,7 +6092,7 @@ async function loadInvitePlayers(searchTerm) {
     });
 
     el.innerHTML = profiles.map(p => {
-      const rs = rsMap[p.id] || 0;
+      const rs = (p.rank_score != null && p.rank_score > 0) ? p.rank_score : (rsMap[p.id] || 0);
       const btn = `<button class="friend-action-btn" id="inv-btn-${p.id}" onclick="sendFriendRequest('${p.id}','${p.username}')">➕ Add</button>`;
       return renderFriendRow(p, rs, btn, '');
     }).join('');
@@ -6132,9 +6159,9 @@ async function loadPendingRequests() {
     // Load senders' profiles
     const senderIds = reqs.map(r => r.user_id);
     const { data: profiles } = await supaClient
-      .from('profiles').select('id, username').in('id', senderIds);
+      .from('profiles').select('id, username, rank_score').in('id', senderIds);
     const { data: scores } = await supaClient
-      .from('player_scores').select('user_id, mode, mode_best').in('user_id', senderIds);
+      .from('player_scores').select('user_id, mode, mode_best, rank_score').in('user_id', senderIds);
     const MODE_CAPS = { beginner:100, intermediate:1000, hard:5000, pro:Infinity };
     const rsMap = {};
     (scores||[]).forEach(s => {
@@ -6147,7 +6174,7 @@ async function loadPendingRequests() {
 
     el.innerHTML = reqs.map(r => {
       const p = profileMap[r.user_id] || { username: 'Unknown' };
-      const rs = rsMap[r.user_id] || 0;
+      const rs = (p.rank_score != null && p.rank_score > 0) ? p.rank_score : (rsMap[r.user_id] || 0);
       const ago = timeAgo(r.created_at);
       const btns = `<div style="display:flex;gap:5px;flex-shrink:0">
         <button class="friend-action-btn accept" onclick="respondFriendRequest('${r.user_id}','${p.username}',true)">Accept</button>
@@ -6204,12 +6231,23 @@ function subscribeToNotifications() {
       // Don't show table notification if already seated at a table
       if (n.type === 'table_started') {
         if (_myTableId) return; // already at a table — ignore
-        const name = n.payload?.host_name || 'A friend';
-        const grp  = n.payload?.group || 'beginner';
-        showTableInviteToast(name, grp, n.payload?.table_id, n.id);
-        // Show badge
-        const badge = document.getElementById('friend-notif-badge');
-        if (badge) { badge.style.display = 'inline'; badge.textContent = '!'; }
+        const tableId = n.payload?.table_id;
+        if (!tableId) return;
+        // Verify table still exists and is waiting before showing toast
+        supaClient.from('friend_tables').select('id, status').eq('id', tableId).single()
+          .then(({ data: t }) => {
+            if (!t || t.status !== 'waiting') {
+              // Table gone — mark notification read silently
+              markNotifRead(n.id);
+              return;
+            }
+            const name = n.payload?.host_name || 'A friend';
+            const grp  = n.payload?.group || 'beginner';
+            showTableInviteToast(name, grp, tableId, n.id);
+            // Show badge
+            const badge = document.getElementById('friend-notif-badge');
+            if (badge) { badge.style.display = 'inline'; badge.textContent = '!'; }
+          });
       } else if (n.type === 'friend_request') {
         toast('📬 New friend request!');
         const badge = document.getElementById('friend-notif-badge');
@@ -6220,6 +6258,40 @@ function subscribeToNotifications() {
       console.log('Notif subscription status:', status);
     });
 }
+
+
+// ── Heartbeat: update last_active every 2 minutes ────────
+setInterval(async () => {
+  if (supaUser && supaClient) {
+    try {
+      await supaClient.from('profiles')
+        .update({ last_active: new Date().toISOString(), is_online: true })
+        .eq('id', supaUser.id);
+    } catch(e) {}
+  }
+}, 2 * 60 * 1000);
+
+// Initial ping on sign-in
+async function pingOnline() {
+  if (!supaUser || !supaClient) return;
+  try {
+    await supaClient.from('profiles')
+      .update({ last_active: new Date().toISOString(), is_online: true })
+      .eq('id', supaUser.id);
+  } catch(e) {}
+}
+
+// Mark offline on page unload
+window.addEventListener('beforeunload', () => {
+  if (supaUser && supaClient) {
+    // Use sendBeacon for reliability on page close
+    const url = `https://snelikvzlwamwbnwceff.supabase.co/rest/v1/profiles?id=eq.${supaUser.id}`;
+    const data = JSON.stringify({ is_online: false });
+    try {
+      navigator.sendBeacon(url, new Blob([data], { type: 'application/json' }));
+    } catch(e) {}
+  }
+});
 
 // ── Poll for friend notifications every 10s when signed in ──
 setInterval(() => { if (supaUser && supaClient) pollFriendNotifications(); }, 10000);
@@ -6731,6 +6803,7 @@ async function broadcastFriendTableState(tableId) {
 }
 function subscribeFriendTableGame(tableId, onReady) {
   if (_friendTableGameSub) supaClient.removeChannel(_friendTableGameSub);
+  let _lastPayloadCP = null; // track last applied currentPlayer to avoid re-applying same state
   _friendTableGameSub = supaClient
     .channel('ftable_game_' + tableId)
     .on('postgres_changes', {
@@ -6739,7 +6812,14 @@ function subscribeFriendTableGame(tableId, onReady) {
     }, (payload) => {
       const snap = payload.new?.payload;
       if (!snap || !snap.gameActive) return;
-      console.log('Friend table snapshot received', snap.currentPlayer);
+      // Only apply if the game state actually changed (currentPlayer or hands changed)
+      const snapKey = snap.currentPlayer + '|' + (snap.hands||[]).map(h=>h.length).join(',');
+      if (snapKey === _lastPayloadCP) {
+        console.log('Snapshot unchanged, skipping (pending_move update)');
+        return;
+      }
+      _lastPayloadCP = snapKey;
+      console.log('Friend table snapshot received, CP:', snap.currentPlayer);
       applyFriendTableSnapshot(snap, tableId);
     })
     .subscribe((status) => {
@@ -6899,7 +6979,10 @@ function watchMyTable(tableId) {
       filter: 'id=eq.' + tableId
     }, (payload) => {
       const row = payload.new;
-      console.log('My table updated:', row?.status, 'mpIsHost:', mpIsHost);
+      console.log('My table updated:', row?.status, 'mpIsHost:', mpIsHost, 'gameActive:', gameActive);
+      // Host: ignore updates triggered by own broadcastFriendTableState
+      // (payload changes are from host's own writes — don't re-apply)
+      if (mpIsHost && gameActive && !row?.pending_move) return;
       if (row && row.status === 'playing' && !mpIsHost) {
         // Only launch if not already in a game
         if (gameActive) return;
@@ -6926,25 +7009,24 @@ function watchMyTable(tableId) {
       // Host processes pending move from a guest
       if (mpIsHost && row && row.pending_move && gameActive) {
         const pm = row.pending_move;
-        // Check it's recent (within 10 seconds) and from correct player
         if (pm.ts && Date.now() - pm.ts < 10000) {
-          // Convert global seat to local index
-          const localIdx = (pm.from_seat - mpMySeat + 4) % 4; // wait — guest local is mpMySeat rotation
-          // Guest submitted from their local 0 → their global seat
+          // Guest's global seat → host local index
+          // Host rotated by _friendTableHostRotation, so:
+          // hostLocal = (globalSeat - _friendTableHostRotation + 4) % 4
           const guestGlobalSeat = pm.from_seat;
-          const hostLocalIdx = (guestGlobalSeat - (mpMySeat - _friendTableHostRotation + 4) % 4 + 4) % 4;
-          // Simpler: guest is always the non-zero human seat in local space
-          // Find which local seat corresponds to the guest
-          const guestLocal = [0,1,2,3].find(li => li!==0 && !mpNpcSlots[li] && (mpMySeat+li)%4===pm.from_seat);
-          if (guestLocal !== undefined && currentPlayer === guestLocal) {
-            // Clear pending move first to avoid re-processing
+          const guestLocal = (guestGlobalSeat - _friendTableHostRotation + 4) % 4;
+          console.log('Pending move from global seat', guestGlobalSeat, '→ host local', guestLocal, 'currentPlayer:', currentPlayer);
+          if (guestLocal !== 0 && currentPlayer === guestLocal) {
+            // Clear pending move first
             supaClient.from('friend_tables').update({ pending_move: null }).eq('id', _myTableId).then(()=>{});
             if (pm.type === 'play') {
-              const reconstructedPlay = { type: pm.playType, subtype: pm.subtype };
+              const reconstructedPlay = { type: pm.playType, subtype: pm.subtype||null };
               executePlay(guestLocal, pm.cards, reconstructedPlay);
             } else if (pm.type === 'pass') {
               doPass(guestLocal);
             }
+          } else {
+            console.log('Move ignored: guestLocal='+guestLocal+' currentPlayer='+currentPlayer);
           }
         }
       }
@@ -6978,14 +7060,57 @@ async function pollFriendNotifications() {
     if (badge) { badge.style.display = 'inline'; badge.textContent = data.length; }
 
     // Show toast for table_started notifications (only if not already at a table)
-    data.filter(n => n.type === 'table_started' && !_myTableId).forEach(n => {
-      const name = n.payload?.host_name || 'A friend';
-      const grp  = n.payload?.group || 'beginner';
-      showTableInviteToast(name, grp, n.payload?.table_id, n.id);
-    });
+    const tableNotifs = data.filter(n => n.type === 'table_started' && !_myTableId);
+    if (tableNotifs.length > 0) {
+      // Verify tables still exist and are waiting
+      const tableIds = [...new Set(tableNotifs.map(n => n.payload?.table_id).filter(Boolean))];
+      const { data: activeTables } = await supaClient
+        .from('friend_tables').select('id, status').in('id', tableIds);
+      const validTableIds = new Set((activeTables||[])
+        .filter(t => t.status === 'waiting').map(t => t.id));
+
+      const staleNotifIds = [];
+      tableNotifs.forEach(n => {
+        const tableId = n.payload?.table_id;
+        if (!tableId || !validTableIds.has(tableId)) {
+          // Table gone or already playing — mark read silently
+          staleNotifIds.push(n.id);
+          return;
+        }
+        const name = n.payload?.host_name || 'A friend';
+        const grp  = n.payload?.group || 'beginner';
+        showTableInviteToast(name, grp, tableId, n.id);
+      });
+      // Silently mark stale notifications as read
+      if (staleNotifIds.length > 0) {
+        supaClient.from('friend_notifications')
+          .update({ read: true }).in('id', staleNotifIds).then(()=>{});
+      }
+    }
 
     // Don't mark as read here — mark when user dismisses the toast
   } catch(e) { console.warn('pollFriendNotifications error:', e); }
+}
+
+async function joinTableFromToast(tableId, notifId, btn) {
+  if (!supaClient) return;
+  if (btn) { btn.textContent = 'Checking…'; btn.disabled = true; }
+  try {
+    const { data: t } = await supaClient
+      .from('friend_tables').select('id, status').eq('id', tableId).single();
+    if (!t || t.status !== 'waiting') {
+      if (btn) { btn.textContent = 'Table ended'; btn.style.color='rgba(255,150,150,0.8)'; }
+      markNotifRead(notifId);
+      setTimeout(() => btn?.closest('[id]')?.remove(), 1500);
+      return;
+    }
+    markNotifRead(notifId);
+    btn?.closest('[id]')?.remove();
+    openFriendRoom();
+    friendSwitchTab('tables');
+  } catch(e) {
+    if (btn) { btn.textContent = 'Error'; btn.disabled = false; }
+  }
 }
 
 async function markNotifRead(notifId) {
@@ -7007,7 +7132,7 @@ function showTableInviteToast(fromName, group, tableId, notifId) {
   div.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(20,50,30,0.97);border:1px solid rgba(45,138,80,0.6);border-radius:12px;padding:10px 14px;z-index:500;font-family:Crimson Pro,serif;font-size:0.85rem;color:#7fffaa;max-width:300px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.6);';
   div.innerHTML = `<div style="font-weight:700;margin-bottom:4px">🏓 ${fromName} started a ${group} table!</div>
     <div style="display:flex;gap:8px;margin-top:8px">
-      <button onclick="openFriendRoom();friendSwitchTab('tables');markNotifRead('${notifId}');this.closest('[id]').remove();"
+      <button onclick="joinTableFromToast('${tableId}','${notifId}',this)"
         style="flex:1;background:rgba(45,138,80,0.4);border:1px solid rgba(45,138,80,0.6);border-radius:6px;color:#7fffaa;padding:5px;cursor:pointer;font-family:Crimson Pro,serif;font-size:0.82rem;">Join Table</button>
       <button onclick="markNotifRead('${notifId}');this.closest('[id]').remove();"
         style="background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:rgba(255,255,255,0.4);padding:5px 10px;cursor:pointer;font-size:0.82rem;">✕</button>
