@@ -3714,16 +3714,14 @@ function playerPlay() {
 
   if (mpGameMode === 'vs_human' && !mpIsHost) {
     if (_myTableId) {
-      // Friend table guest: submit move via Supabase
-      submitFriendTableMove({ type:'play', cards:[...selectedCards], playType:play.type, subtype:play.subtype||null });
+      ftGuestPlay([...selectedCards], play);
     } else {
-      // PeerJS guest: send to host
       const msg = {type:'play', seat:mpMySeat, cards:[...selectedCards], playType:play.type, subtype:play.subtype};
       if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
+      selectedCards = [];
+      setPlayerControls(false);
+      renderHand();
     }
-    selectedCards = [];
-    setPlayerControls(false);
-    renderHand();
     return;
   }
   // Single-player or host: execute locally
@@ -3810,13 +3808,15 @@ function playerPass() {
   if (firstTurn) { toast('Cannot pass on first turn'); return; }
   if (!lastPlay) { toast('Cannot pass – you control the pile'); return; }
   if (mpGameMode === 'vs_human' && !mpIsHost) {
-    // Guest: send to host and wait for sync
-    const msg = {type:'pass', seat:mpMySeat};
-    if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
-    setPlayerControls(false);
+    if (_myTableId) {
+      ftGuestPass();
+    } else {
+      const msg = {type:'pass', seat:mpMySeat};
+      if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
+      setPlayerControls(false);
+    }
     return;
   }
-  // Single-player or host: execute locally (sync happens inside doPass)
   doPass(0);
 }
 
@@ -3911,8 +3911,9 @@ function executePlay(playerIdx, cards, play) {
   }
 
   saveGameState();
-  renderAll(); // show the card on the pile first
+  renderAll();
   if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFTState(_myTableId);
 
   if (powerPlay) {
     // After a short delay, clear the pile and let player play again
@@ -3938,7 +3939,7 @@ function executePlay(playerIdx, cards, play) {
   saveGameState();
   renderAll();
   if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFriendTableState(_myTableId);
+  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFTState(_myTableId);
   if (!isMyTurn()) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
@@ -3972,7 +3973,7 @@ function doPass(playerIdx) {
   saveGameState();
   renderAll();
   if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFriendTableState(_myTableId);
+  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFTState(_myTableId);
   if (!isMyTurn()) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
@@ -6306,18 +6307,23 @@ setTimeout(() => { if (supaUser && supaClient) pollFriendNotifications(); }, 300
 
 
 // ════════════════════════════════════════════════════════════
-//  FRIEND TABLES — PHASE 2
+//  FRIEND TABLES — PHASE 2 (Clean Supabase-only implementation)
 // ════════════════════════════════════════════════════════════
 
 let _currentTableGroup  = 'beginner';
-let _myTableId          = null;   // the table ID I'm seated at
-let _myTableSeat        = null;   // seat number 1-4
+let _myTableId          = null;
+let _myTableSeat        = null;   // 1-4 (global seat number)
+let _myGlobalSeat       = null;   // 0-3 index
 let _tableTimerInterval = null;
 let _tableRealtimeSub   = null;
-let _tablesData         = [];     // current fetched tables
+let _myTableWatchSub    = null;
+let _friendTableGameSub = null;
+let _ftIsHost           = false;  // am I the host of this table?
+let _ftSeats            = [];     // global seat user IDs [seat0..seat3]
 
 const TABLE_UNLOCK = { beginner:0, intermediate:100, hard:1100, pro:6100 };
 
+// ── Table group UI ────────────────────────────────────────
 function selectTableGroup(group) {
   _currentTableGroup = group;
   ['beginner','intermediate','hard','pro'].forEach(g => {
@@ -6331,603 +6337,503 @@ function updateTableGroupLocks() {
   ['beginner','intermediate','hard','pro'].forEach(g => {
     const btn = document.getElementById('tgrp-' + g);
     if (!btn) return;
-    const unlocked = rankScore >= (TABLE_UNLOCK[g] || 0);
-    btn.disabled = !unlocked;
-    btn.classList.toggle('locked', !unlocked);
+    btn.disabled = rankScore < (TABLE_UNLOCK[g] || 0);
+    btn.classList.toggle('locked', btn.disabled);
   });
 }
 
+// ── Load and render tables ────────────────────────────────
 async function loadTables() {
   if (!supaClient || !supaUser) return;
   const el = document.getElementById('tables-list-content');
   if (el) el.innerHTML = '<div class="friend-status-msg">Loading tables…</div>';
-
   try {
-    const { data: tables, error } = await supaClient
+    const { data: tables } = await supaClient
       .from('friend_tables')
       .select('*')
       .eq('table_group', _currentTableGroup)
       .eq('status', 'waiting')
       .order('created_at', { ascending: true });
 
-    if (error) throw error;
-    _tablesData = tables || [];
-
+    const rows = tables || [];
     // Load seat usernames
-    const userIds = new Set();
-    _tablesData.forEach(t => {
-      [t.seat_1, t.seat_2, t.seat_3, t.seat_4].forEach(id => { if (id) userIds.add(id); });
-    });
-
-    let profileMap = {};
-    if (userIds.size > 0) {
-      const { data: profiles } = await supaClient
-        .from('profiles').select('id, username')
-        .in('id', [...userIds]);
-      (profiles||[]).forEach(p => { profileMap[p.id] = p.username; });
+    const uids = new Set();
+    rows.forEach(t => [t.seat_1,t.seat_2,t.seat_3,t.seat_4].forEach(u => u && uids.add(u)));
+    let nameMap = {};
+    if (uids.size > 0) {
+      const { data: p } = await supaClient.from('profiles').select('id,username').in('id',[...uids]);
+      (p||[]).forEach(x => nameMap[x.id] = x.username);
     }
-
-    renderTables(_tablesData, profileMap);
+    renderTables(rows, nameMap);
   } catch(e) {
-    console.warn('loadTables error:', e);
+    console.warn('loadTables:', e);
     if (el) el.innerHTML = '<div class="friend-status-msg">Error loading tables.</div>';
   }
 }
 
-function renderTables(tables, profileMap) {
+function renderTables(tables, nameMap) {
   const el = document.getElementById('tables-list-content');
   if (!el) return;
 
-  // Determine how many tables to show:
-  // Count occupied tables (at least 1 seated), always show +1 empty
-  const occupiedCount = tables.filter(t => t.seat_1 || t.seat_2 || t.seat_3 || t.seat_4).length;
-  const showCount = occupiedCount + 1;
-  const displayTables = tables.slice(0, showCount);
-
-  // If no tables exist yet, show one empty
-  if (displayTables.length === 0) {
-    displayTables.push(null); // placeholder for empty table
-  }
-
-  // Update my-table banner
-  const myTable = tables.find(t => [t.seat_1,t.seat_2,t.seat_3,t.seat_4].includes(supaUser.id));
+  // My table banner
+  const myRow = tables.find(t => [t.seat_1,t.seat_2,t.seat_3,t.seat_4].includes(supaUser.id));
   const banner = document.getElementById('my-table-banner');
-  if (myTable) {
-    _myTableId = myTable.id;
-    const occupants = [myTable.seat_1,myTable.seat_2,myTable.seat_3,myTable.seat_4]
-      .filter(Boolean).length;
+  if (myRow) {
+    const occ = [myRow.seat_1,myRow.seat_2,myRow.seat_3,myRow.seat_4].filter(Boolean).length;
     const txt = document.getElementById('my-table-banner-text');
-    if (txt) txt.textContent = 'You are seated · ' + occupants + '/4 players';
+    if (txt) txt.textContent = 'You are seated · ' + occ + '/4 players';
     if (banner) banner.style.display = 'block';
-    startTableTimer(myTable);
   } else {
-    _myTableId = null;
+    _myTableId = null; _myTableSeat = null;
     if (banner) banner.style.display = 'none';
     stopTableTimer();
   }
 
-  // Render table cards
+  // Show occupied tables + 1 empty
+  const occupied = tables.filter(t => t.seat_1||t.seat_2||t.seat_3||t.seat_4);
+  const displayTables = [...occupied];
+  // Add one empty slot
+  displayTables.push(null);
+
   el.innerHTML = displayTables.map((t, idx) => {
-    const tableNum = idx + 1;
-    if (!t) return renderEmptyTableCard(tableNum, null);
-    const seats = [t.seat_1, t.seat_2, t.seat_3, t.seat_4];
+    if (!t) return renderEmptyTableCard(idx + 1);
+    const seats = [t.seat_1,t.seat_2,t.seat_3,t.seat_4];
     const isMyTable = seats.includes(supaUser.id);
-    const occupants = seats.filter(Boolean).length;
-    if (occupants >= 4) return ''; // full tables handled separately
-    return renderTableCard(t, tableNum, seats, profileMap, isMyTable);
+    return renderTableCard(t, idx + 1, seats, nameMap, isMyTable);
   }).join('');
 }
 
-function renderTableCard(t, tableNum, seats, profileMap, isMyTable) {
+function renderTableCard(t, num, seats, nameMap, isMyTable) {
+  const occ = seats.filter(Boolean).length;
   const seatHtml = seats.map((uid, i) => {
     const seatNum = i + 1;
     if (uid) {
-      const name = profileMap[uid] || 'Player';
+      const name = nameMap[uid] || 'Player';
       const isMe = uid === supaUser.id;
-      return `<div class="table-seat ${isMe ? 'my-seat' : 'occupied'}">
-        <div class="seat-avatar">${initials(name)}</div>
-        <span>${name}${isMe ? ' (you)' : ''}</span>
+      return `<div class="table-seat ${isMe?'my-seat':'occupied'}">
+        <div class="seat-avatar">${(name||'?').slice(0,2).toUpperCase()}</div>
+        <span>${name}${isMe?' (you)':''}</span>
       </div>`;
-    } else {
-      const canSit = !isMyTable && !_myTableId;
-      return canSit
-        ? `<div class="table-seat empty" onclick="joinTable('${t.id}', ${seatNum})">
-            <div class="seat-avatar" style="background:rgba(100,160,255,0.2);color:rgba(100,160,255,0.6)">+</div>
-            <span>Click to sit</span>
-           </div>`
-        : `<div class="table-seat empty" style="cursor:default;opacity:0.5">
-            <div class="seat-avatar" style="background:rgba(60,60,60,0.3)">·</div>
-            <span>Empty</span>
-           </div>`;
     }
+    const canSit = !_myTableId;
+    return canSit
+      ? `<div class="table-seat empty" onclick="joinTable('${t.id}',${seatNum})">
+          <div class="seat-avatar" style="background:rgba(100,160,255,0.2);color:rgba(100,160,255,0.6)">+</div>
+          <span>Click to sit</span></div>`
+      : `<div class="table-seat empty" style="cursor:default;opacity:0.4">
+          <div class="seat-avatar">·</div><span>Empty</span></div>`;
   }).join('');
 
-  const occupants = seats.filter(Boolean).length;
-  // Show Ready button for all seated players (not just host)
-  const startBtn = isMyTable
+  const readyBtn = isMyTable
     ? `<button class="btn-table-start" id="ready-btn-${t.id}" onclick="voteReady('${t.id}')">✓ Ready</button>`
     : '';
+  const timer = isMyTable
+    ? `<div class="table-timer" id="table-timer-${t.id}">⏱ 60s · all tap Ready to start</div>`
+    : '';
 
-  return `<div class="friend-table-card ${isMyTable ? 'my-table' : ''}">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-      <span style="font-size:0.78rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600">Table ${tableNum}</span>
-      <span style="font-size:0.72rem;color:var(--text-dim)">${occupants}/4 seated</span>
+  return `<div class="friend-table-card${isMyTable?' my-table':''}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <span style="font-size:0.78rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600">Table ${num}</span>
+      <span style="font-size:0.72rem;color:var(--text-dim)">${occ}/4 seated</span>
     </div>
-    <div style="display:flex;gap:12px;align-items:flex-start;">
-      <div class="table-circle">TABLE<br>${tableNum}</div>
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <div class="table-circle">TABLE<br>${num}</div>
       <div class="table-seats">${seatHtml}</div>
     </div>
-    ${isMyTable ? '<div class="table-timer" id="table-timer-'+t.id+'">⏱ Starting in 60s · tap Ready when set</div>' : ''}
-    <div class="table-actions">${startBtn}</div>
+    ${timer}
+    <div class="table-actions">${readyBtn}</div>
   </div>`;
 }
 
-function renderEmptyTableCard(tableNum, tableId) {
+function renderEmptyTableCard(num) {
   const canSit = !_myTableId;
   return `<div class="friend-table-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-      <span style="font-size:0.78rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600">Table ${tableNum}</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <span style="font-size:0.78rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600">Table ${num}</span>
       <span style="font-size:0.72rem;color:var(--text-dim)">0/4 seated</span>
     </div>
-    <div style="display:flex;gap:12px;align-items:flex-start;">
-      <div class="table-circle">TABLE<br>${tableNum}</div>
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <div class="table-circle">TABLE<br>${num}</div>
       <div class="table-seats">
         ${[1,2,3,4].map(i => canSit
           ? `<div class="table-seat empty" onclick="createAndJoinTable(${i})">
               <div class="seat-avatar" style="background:rgba(100,160,255,0.2);color:rgba(100,160,255,0.6)">+</div>
-              <span>Click to sit</span>
-             </div>`
+              <span>Click to sit</span></div>`
           : `<div class="table-seat empty" style="cursor:default;opacity:0.4">
-              <div class="seat-avatar">·</div><span>Empty</span>
-             </div>`
+              <div class="seat-avatar">·</div><span>Empty</span></div>`
         ).join('')}
       </div>
     </div>
   </div>`;
 }
 
-// ── Create new table and join it ──────────────────────────
+// ── Sit down ─────────────────────────────────────────────
 async function createAndJoinTable(seatNum) {
   if (!supaClient || !supaUser || _myTableId) return;
   try {
     const seatCol = 'seat_' + seatNum;
-    const newTable = {
+    const { data, error } = await supaClient.from('friend_tables').insert({
       table_group: _currentTableGroup,
       host_id: supaUser.id,
       status: 'waiting',
-      [seatCol]: supaUser.id
-    };
-    const { data, error } = await supaClient
-      .from('friend_tables').insert(newTable).select().single();
+      [seatCol]: supaUser.id,
+      ready_votes: '[]',
+      payload: {},
+      pending_move: null
+    }).select().single();
     if (error) throw error;
-    _myTableId   = data.id;
+    _myTableId = data.id;
     _myTableSeat = seatNum;
+    _myGlobalSeat = seatNum - 1;
+    _ftIsHost = true;
     watchMyTable(data.id);
     await notifyFriendsTableStarted(data.id);
     loadTables();
+    startTableTimer(data);
+    toast('Seated at Table! Waiting for friends…');
   } catch(e) { console.warn('createAndJoinTable:', e); toast('Error creating table.'); }
 }
 
-// ── Join existing table ───────────────────────────────────
 async function joinTable(tableId, seatNum) {
   if (!supaClient || !supaUser || _myTableId) return;
   try {
     const seatCol = 'seat_' + seatNum;
-    const { data: current } = await supaClient
-      .from('friend_tables').select('*').eq('id', tableId).single();
-    if (current[seatCol]) { toast('That seat was just taken!'); loadTables(); return; }
+    const { data: current } = await supaClient.from('friend_tables').select('*').eq('id', tableId).single();
+    if (!current || current[seatCol]) { toast('That seat was just taken!'); loadTables(); return; }
 
-    const { error } = await supaClient
-      .from('friend_tables').update({ [seatCol]: supaUser.id }).eq('id', tableId);
+    const { error } = await supaClient.from('friend_tables').update({ [seatCol]: supaUser.id }).eq('id', tableId);
     if (error) throw error;
-    _myTableId   = tableId;
+
+    _myTableId = tableId;
     _myTableSeat = seatNum;
-
-    // Watch this table for game start even if Friend Room is closed
+    _myGlobalSeat = seatNum - 1;
+    _ftIsHost = current.host_id === supaUser.id;
     watchMyTable(tableId);
-
-    // Notify friends that someone joined
     await notifyFriendsTableStarted(tableId);
 
-    // Check if table is now full → start immediately
-    const updated = { ...current, [seatCol]: supaUser.id };
-    const seats = [updated.seat_1, updated.seat_2, updated.seat_3, updated.seat_4];
+    const updated = {...current, [seatCol]: supaUser.id};
+    const seats = [updated.seat_1,updated.seat_2,updated.seat_3,updated.seat_4];
     if (seats.every(Boolean)) {
-      await startTableNow(tableId);
+      await startTableGame(tableId);
     } else {
-      toast('Joined table! Waiting for others…');
       loadTables();
+      startTableTimer(updated);
+      toast('Joined! Waiting for others…');
     }
   } catch(e) { console.warn('joinTable:', e); toast('Error joining table.'); }
 }
 
-// ── Leave table ───────────────────────────────────────────
 async function leaveCurrentTable() {
   if (!supaClient || !supaUser || !_myTableId) return;
   try {
     const seatCol = 'seat_' + _myTableSeat;
-    const { data: current } = await supaClient
-      .from('friend_tables').select('*').eq('id', _myTableId).single();
-
-    // Check if this was the only person — delete table, else clear seat
-    const remaining = [current.seat_1, current.seat_2, current.seat_3, current.seat_4]
-      .filter(id => id && id !== supaUser.id).length;
-
+    const { data: t } = await supaClient.from('friend_tables').select('*').eq('id', _myTableId).single();
+    const remaining = t ? [t.seat_1,t.seat_2,t.seat_3,t.seat_4].filter(u => u && u !== supaUser.id).length : 0;
     if (remaining === 0) {
       await supaClient.from('friend_tables').delete().eq('id', _myTableId);
     } else {
       await supaClient.from('friend_tables').update({ [seatCol]: null }).eq('id', _myTableId);
     }
-    _myTableId = null; _myTableSeat = null;
-    stopTableTimer();
+    cleanupFriendTable();
     loadTables();
     toast('Left the table.');
   } catch(e) { console.warn('leaveCurrentTable:', e); }
 }
 
-// ── Start table now ───────────────────────────────────────
+function cleanupFriendTable() {
+  _myTableId = null; _myTableSeat = null; _myGlobalSeat = null;
+  stopTableTimer();
+  if (_myTableWatchSub) { supaClient?.removeChannel(_myTableWatchSub); _myTableWatchSub = null; }
+  if (_friendTableGameSub) { supaClient?.removeChannel(_friendTableGameSub); _friendTableGameSub = null; }
+}
 
-// ── Ready voting system ───────────────────────────────────
+// ── Ready voting ──────────────────────────────────────────
 async function voteReady(tableId) {
-  if (!supaClient || !supaUser || !_myTableId) return;
+  if (!supaClient || !supaUser) return;
   const btn = document.getElementById('ready-btn-' + tableId);
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Waiting…'; btn.style.opacity='0.6'; }
-
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Waiting…'; }
   try {
-    // Fetch current table state
-    const { data: table } = await supaClient
-      .from('friend_tables').select('*').eq('id', tableId).single();
-    if (!table) return;
-
-    // Add my vote to ready_votes array
-    const votes = table.ready_votes || [];
+    const { data: t } = await supaClient.from('friend_tables').select('*').eq('id', tableId).single();
+    if (!t) return;
+    const votes = Array.isArray(t.ready_votes) ? t.ready_votes : [];
     if (!votes.includes(supaUser.id)) votes.push(supaUser.id);
-
-    // Count seated humans
-    const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
-    const humanSeats = seats.filter(Boolean);
-    const allReady = humanSeats.every(uid => votes.includes(uid));
-
-    if (allReady) {
-      // All players ready — start game
-      await supaClient.from('friend_tables')
-        .update({ ready_votes: votes })
-        .eq('id', tableId);
-      await startTableNow(tableId);
+    const seats = [t.seat_1,t.seat_2,t.seat_3,t.seat_4].filter(Boolean);
+    await supaClient.from('friend_tables').update({ ready_votes: votes }).eq('id', tableId);
+    if (seats.every(uid => votes.includes(uid))) {
+      await startTableGame(tableId);
     } else {
-      // Save vote, wait for others
-      await supaClient.from('friend_tables')
-        .update({ ready_votes: votes })
-        .eq('id', tableId);
-      toast('Ready! Waiting for ' + (humanSeats.length - votes.length) + ' more player(s)…');
+      toast('Ready! Waiting for ' + (seats.length - votes.length) + ' more…');
     }
   } catch(e) { console.warn('voteReady:', e); }
 }
 
-// ── Timer forced start (host only, no vote needed) ─────────
 async function timerForceStart(tableId) {
-  if (!supaClient || !supaUser) return;
-  // Only the host (seat creator) triggers forced start
-  const { data: table } = await supaClient
-    .from('friend_tables').select('*').eq('id', tableId).single();
-  if (!table) return;
-  if (table.host_id === supaUser.id) {
-    await startTableNow(tableId);
-  }
-  // Non-host: watchMyTable will handle it when host starts
+  if (!supaClient || !supaUser || !_ftIsHost) return;
+  await startTableGame(tableId);
 }
 
-async function startTableNow(tableId) {
+// ── Start the game ────────────────────────────────────────
+async function startTableGame(tableId) {
   if (!supaClient || !supaUser) return;
   try {
-    const { data: table } = await supaClient
-      .from('friend_tables').select('*').eq('id', tableId).single();
-
-    // Determine if we're host BEFORE any async operations
-    const iAmHost = table.host_id === supaUser.id;
-
-    // Cancel watchMyTable BEFORE updating status to avoid double-launch
-    if (_myTableWatchSub) {
-      supaClient.removeChannel(_myTableWatchSub);
-      _myTableWatchSub = null;
-    }
-
     // Mark as playing
-    await supaClient.from('friend_tables').update({
-      status: 'playing', started_at: new Date().toISOString()
-    }).eq('id', tableId);
-
-    stopTableTimer();
-    closeFriendRoom();
-
-    // Only host launches from startTableNow — non-host gets triggered by watchMyTable
-    if (iAmHost) {
-      launchFriendTableGame(table);
-    }
-    // Non-host: watchMyTable was already cancelled above, re-subscribe
-    // so they can still receive the status change if it hasn't fired yet
-    else {
-      // Brief delay then re-check if game launched
-      setTimeout(async () => {
-        if (!gameActive) {
-          const { data: current } = await supaClient
-            .from('friend_tables').select('*').eq('id', tableId).single();
-          if (current?.status === 'playing') launchFriendTableGame(current);
-        }
-      }, 300);
-    }
-  } catch(e) { console.warn('startTableNow:', e); }
+    await supaClient.from('friend_tables')
+      .update({ status: 'playing', started_at: new Date().toISOString() })
+      .eq('id', tableId);
+    // watchMyTable will trigger launchFriendTableGame for all players
+  } catch(e) { console.warn('startTableGame:', e); }
 }
 
-// ── Launch the game from friend table ────────────────────
+// ── Watch my table for status changes ────────────────────
+function watchMyTable(tableId) {
+  if (_myTableWatchSub) { supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null; }
+  console.log('Watching table:', tableId);
+  _myTableWatchSub = supaClient
+    .channel('watch_table_' + tableId)
+    .on('postgres_changes', {
+      event: 'UPDATE', schema: 'public', table: 'friend_tables',
+      filter: 'id=eq.' + tableId
+    }, async (payload) => {
+      const row = payload.new;
+      if (!row) return;
+
+      // Game starting
+      if (row.status === 'playing' && !gameActive) {
+        console.log('Table status → playing, launching game');
+        stopTableTimer();
+        supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null;
+        closeFriendRoom();
+        await launchFriendTableGame(row);
+        return;
+      }
+
+      // Host processes pending move during game
+      if (gameActive && _ftIsHost && row.pending_move) {
+        const pm = row.pending_move;
+        if (!pm.ts || Date.now() - pm.ts > 10000) return;
+        // Convert submitter's global seat to local index (local 0 = me/host = global _myGlobalSeat)
+        const globalSeat = pm.from_global_seat;
+        const localIdx = (globalSeat - _myGlobalSeat + 4) % 4;
+        console.log('Host processing move from global seat', globalSeat, '→ local', localIdx, 'currentPlayer:', currentPlayer);
+        if (localIdx !== 0 && currentPlayer === localIdx) {
+          // Clear pending move first
+          await supaClient.from('friend_tables').update({ pending_move: null }).eq('id', tableId);
+          if (pm.type === 'play') {
+            executePlay(localIdx, pm.cards, { type: pm.playType, subtype: pm.subtype||null });
+          } else if (pm.type === 'pass') {
+            doPass(localIdx);
+          }
+        } else {
+          console.log('Move ignored: wrong turn. localIdx='+localIdx+' currentPlayer='+currentPlayer);
+        }
+        return;
+      }
+
+      // Guest receives new game state
+      if (gameActive && !_ftIsHost && row.payload?.gameActive) {
+        const snap = row.payload;
+        const snapKey = snap.currentPlayer + '|' + (snap.hands||[]).map(h=>h.length).join(',');
+        if (snapKey === _lastSnapKey) return;
+        _lastSnapKey = snapKey;
+        applyFriendTableSnapshot(snap);
+      }
+    })
+    .subscribe(status => console.log('watchMyTable status:', status));
+}
+let _lastSnapKey = null;
+
+// ── Launch game for all players ───────────────────────────
 async function launchFriendTableGame(table) {
   const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
-  const mySeatIdx = seats.indexOf(supaUser.id); // 0-based
+  _ftSeats = seats;
+  _myGlobalSeat = seats.indexOf(supaUser.id); // 0-3
+  _ftIsHost = table.host_id === supaUser.id;
 
-  // Load player usernames from profiles
+  // Load usernames
   const humanIds = seats.filter(Boolean);
   let nameMap = {};
   if (humanIds.length > 0) {
-    const { data: profiles } = await supaClient
-      .from('profiles').select('id, username').in('id', humanIds);
+    const { data: profiles } = await supaClient.from('profiles').select('id,username').in('id', humanIds);
     (profiles||[]).forEach(p => { nameMap[p.id] = p.username; });
   }
 
+  // Build seat names in global order
+  const seatNames = seats.map((uid, i) => uid ? (nameMap[uid] || 'Player '+(i+1)) : 'NPC '+(i+1));
+  const npcSlots = seats.map(uid => !uid); // global: true = NPC
+
   selectedMode = table.table_group;
+  mpGameMode = 'vs_human';
+  mpMySeat = _myGlobalSeat;
 
-  // Build mpSeats in host-global order
-  mpSeats = seats.map((uid, i) => ({
-    name: uid ? (nameMap[uid] || 'Player '+(i+1)) : 'NPC '+(i+1),
-    conn: null
-  }));
-
-  // NPC slots: seats with no user
-  mpNpcSlots = seats.map(uid => !uid);
-
-  mpMySeat    = mySeatIdx;
-  mpIsHost    = table.host_id === supaUser.id;
-  mpGameMode  = 'vs_human';
-  mpTurnToken = 0;
-
-  toast('🏓 Friend Table game starting!');
-
-  // Set up game screen for all players
-  document.getElementById('splash').style.display    = 'none';
-  document.getElementById('game').style.display      = 'block';
+  // Show game screen
+  document.getElementById('splash').style.display = 'none';
+  document.getElementById('game').style.display = 'block';
   const ff = document.getElementById('btn-forfeit');
   if (ff) ff.style.display = 'none';
-  const zb = document.getElementById('btn-hand-zoom');
-  if (zb) zb.style.top = '12px';
 
-  // Set player name label
+  // Set my name label
   const lbl = document.getElementById('player-name-label');
-  if (lbl) lbl.textContent = playerCustomName;
+  if (lbl) lbl.textContent = seatNames[_myGlobalSeat];
 
-  // Set up NPC zone labels — works for both host and non-host
+  // Set opponent zone labels (local indices 1,2,3 → global seats relative to me)
   const zoneMap = [
     {zoneId:'npc-right', nameId:'name-p2', localIdx:1},
     {zoneId:'npc-top',   nameId:'name-p3', localIdx:2},
     {zoneId:'npc-left',  nameId:'name-p4', localIdx:3},
   ];
-  // mpSeats is in global order at this point — use global seat lookup
-  zoneMap.forEach(({zoneId,nameId,localIdx}) => {
-    const globalSeat = (mySeatIdx + localIdx) % 4;
-    const isNpc = !seats[globalSeat];
-    const seatName = isNpc
-      ? ('NPC ' + (globalSeat+1))
-      : (nameMap[seats[globalSeat]] || 'Player '+(globalSeat+1));
+  zoneMap.forEach(({nameId, localIdx}) => {
+    const globalIdx = (_myGlobalSeat + localIdx) % 4;
+    const isNpc = npcSlots[globalIdx];
     const ne = document.getElementById(nameId);
-    if (ne) ne.textContent = (isNpc ? '🤖 ' : '👤 ') + seatName;
-    const ze = document.getElementById(zoneId);
-    if (ze) ze.classList.toggle('mp-human', !isNpc);
+    if (ne) ne.textContent = (isNpc ? '🤖 ' : '👤 ') + seatNames[globalIdx];
     const scoreEl = document.getElementById('score-p' + nameId.replace('name-p',''));
     if (scoreEl) scoreEl.style.display = isNpc ? 'none' : 'block';
-    // Show card count placeholder for NPC zones so they appear immediately
-    if (isNpc) {
-      const cardsEl = document.getElementById('cards-p' + nameId.replace('name-p',''));
-      if (cardsEl) cardsEl.textContent = '13';
-    }
   });
 
-  if (mpIsHost) {
+  if (_ftIsHost) {
+    // Host deals, rotates state so host is local index 0, then broadcasts
+    // Set up mpNpcSlots in local order for host
+    mpNpcSlots = [0,1,2,3].map(li => npcSlots[(_myGlobalSeat+li)%4]);
+    mpSeats = [0,1,2,3].map(li => ({ name: seatNames[(_myGlobalSeat+li)%4], conn: null }));
+    mpIsHost = true;
+
     // Deal cards
     startGame();
-    // Rotate so host's own seat is always at local index 0
-    if (mpMySeat !== 0) {
-      const r = mpMySeat;
-      _friendTableHostRotation = r;
-      hands         = [0,1,2,3].map(li => hands[(r+li)%4]);
-      currentPlayer = (currentPlayer - r + 4) % 4;
-      openingPlayer = (openingPlayer - r + 4) % 4;
-      mpNpcSlots    = [0,1,2,3].map(li => mpNpcSlots[(r+li)%4]);
-      mpSeats       = [0,1,2,3].map(li => mpSeats[(r+li)%4]);
-    } else {
-      _friendTableHostRotation = 0;
-    }
-    renderAll();
-    updateTurnIndicator();
-    setPlayerControls(isMyTurn());
-    // Broadcast full state to non-host players
-    setTimeout(() => broadcastFriendTableState(table.id), 500);
-    setTimeout(() => broadcastFriendTableState(table.id), 1500);
+
+    // Broadcast initial state to all players
+    setTimeout(() => broadcastFTState(table.id), 600);
+    setTimeout(() => broadcastFTState(table.id), 1500);
   } else {
-    // Non-host: subscribe first, then fetch current state
-    subscribeFriendTableGame(table.id, async () => {
-      // Callback after subscription is ready — fetch current payload
-      const { data: current } = await supaClient
-        .from('friend_tables').select('payload, status').eq('id', table.id).single();
-      if (current?.payload?.gameActive) {
-        applyFriendTableSnapshot(current.payload, table.id);
-      } else {
-        // Game not started yet — show waiting screen
-        setPlayerControls(false);
-        updateTurnIndicator();
-        renderAll();
-        toast('Seated! Waiting for host to start…');
-      }
-    });
+    // Non-host: set up local state from global seat order
+    // mpNpcSlots and mpSeats will be set by applyFriendTableSnapshot
+    mpIsHost = false;
+    mpNpcSlots = [0,1,2,3].map(li => npcSlots[(_myGlobalSeat+li)%4]);
+    mpSeats = [0,1,2,3].map(li => ({ name: seatNames[(_myGlobalSeat+li)%4], conn: null }));
+
+    setPlayerControls(false);
+    // Render placeholder zones
+    hands = [[],[],[],[]];
+    renderAll();
+    toast('Waiting for host to deal cards…');
+
+    // Re-subscribe to watch for game state updates
+    watchMyTable(table.id);
   }
 }
 
-// ── Subscribe to game state as non-host ──
-let _friendTableGameSub = null;
-let _friendTableHostRotation = 0; // how much host rotated hands
-
-
-// ── Friend table: non-host submits a move via Supabase ──────
-async function submitFriendTableMove(move) {
-  if (!supaClient || !supaUser || !_myTableId) return;
+// ── Host broadcasts game state ────────────────────────────
+// State is ALWAYS in host-local order (local 0 = host)
+// Guests rotate from host-local to their local perspective
+async function broadcastFTState(tableId) {
+  if (!supaClient || !supaUser || !_ftIsHost) return;
   try {
-    // Write pending move to friend_tables.pending_move
-    await supaClient.from('friend_tables')
-      .update({ pending_move: { ...move, from_seat: mpMySeat, ts: Date.now() } })
-      .eq('id', _myTableId);
-    toast('Move submitted…');
-  } catch(e) { console.warn('submitFriendTableMove:', e); }
-}
-
-// ── Broadcast game state to friend table players via Supabase ──
-async function broadcastFriendTableState(tableId) {
-  if (!supaClient || !supaUser || !mpIsHost) return;
-  try {
-    // Un-rotate back to host-global order for broadcast
-    const r = _friendTableHostRotation;
-    const globalHands = r === 0 ? hands : [0,1,2,3].map(li => hands[(4-r+li)%4]);
-    const globalCP    = r === 0 ? currentPlayer   : (currentPlayer + r) % 4;
-    const globalOP    = r === 0 ? openingPlayer   : (openingPlayer + r) % 4;
-    const globalNpc   = r === 0 ? mpNpcSlots      : [0,1,2,3].map(li => mpNpcSlots[(4-r+li)%4]);
-    const globalRound = r === 0 ? currentRoundPlays : currentRoundPlays.map(p => ({...p, playerIdx:(p.playerIdx+r)%4}));
-    const globalLP    = lastPlay ? {...lastPlay, playerIdx:(lastPlay.playerIdx+r)%4} : null;
-
     const snapshot = {
-      hands: globalHands,
-      currentPlayer: globalCP,
-      openingPlayer: globalOP,
-      lastPlay: globalLP,
-      passCount, firstTurn,
-      currentRoundPlays: globalRound,
+      hands,               // host-local order: [0=host, 1=right, 2=top, 3=left]
+      currentPlayer,       // host-local index
+      openingPlayer,       // host-local index
+      lastPlay,
+      passCount,
+      firstTurn,
+      currentRoundPlays,
       globalDiscardedCards: [...globalDiscardedCards],
       gameActive,
-      mpNpcSlots: globalNpc,
-      seatNames: mpSeats.map((s,i) => s?.name || ('Player '+(i+1))) // host-local order
+      mpNpcSlots,          // host-local order
+      seatNames: mpSeats.map(s => s?.name||''),  // host-local order
+      hostGlobalSeat: _myGlobalSeat  // tells guests how to rotate
     };
-    await supaClient.from('friend_tables')
-      .update({ payload: snapshot })
-      .eq('id', tableId);
-  } catch(e) { console.warn('broadcastFriendTableState:', e); }
-}
-function subscribeFriendTableGame(tableId, onReady) {
-  if (_friendTableGameSub) supaClient.removeChannel(_friendTableGameSub);
-  let _lastPayloadCP = null; // track last applied currentPlayer to avoid re-applying same state
-  _friendTableGameSub = supaClient
-    .channel('ftable_game_' + tableId)
-    .on('postgres_changes', {
-      event: 'UPDATE', schema: 'public', table: 'friend_tables',
-      filter: 'id=eq.' + tableId
-    }, (payload) => {
-      const snap = payload.new?.payload;
-      if (!snap || !snap.gameActive) return;
-      // Only apply if the game state actually changed (currentPlayer or hands changed)
-      const snapKey = snap.currentPlayer + '|' + (snap.hands||[]).map(h=>h.length).join(',');
-      if (snapKey === _lastPayloadCP) {
-        console.log('Snapshot unchanged, skipping (pending_move update)');
-        return;
-      }
-      _lastPayloadCP = snapKey;
-      console.log('Friend table snapshot received, CP:', snap.currentPlayer);
-      applyFriendTableSnapshot(snap, tableId);
-    })
-    .subscribe((status) => {
-      console.log('Friend table game sub status:', status);
-      if (status === 'SUBSCRIBED' && onReady) onReady();
-    });
+    await supaClient.from('friend_tables').update({ payload: snapshot }).eq('id', tableId);
+    console.log('Broadcasted state, CP:', currentPlayer, 'hands:', hands.map(h=>h.length));
+  } catch(e) { console.warn('broadcastFTState:', e); }
 }
 
-function applyFriendTableSnapshot(snap, tableId) {
+// ── Guest applies snapshot ────────────────────────────────
+function applyFriendTableSnapshot(snap) {
   if (!snap || !snap.hands) return;
-  console.log('Applying friend table snapshot, my seat:', mpMySeat, 'host currentPlayer:', snap.currentPlayer);
+  const hostGlobalSeat = snap.hostGlobalSeat ?? 0;
+  // Rotation: how many steps to shift so MY seat is at local index 0
+  // host is at hostGlobalSeat, I am at _myGlobalSeat
+  // host-local index of my seat = (_myGlobalSeat - hostGlobalSeat + 4) % 4
+  // I need to rotate by that amount to put myself at local 0
+  const myHostLocal = (_myGlobalSeat - hostGlobalSeat + 4) % 4;
 
-  // Rotate from host-global to my local perspective
-  const rotation = mpMySeat;
-  const rotated = (idx) => (idx - rotation + 4) % 4;
+  console.log('Applying snapshot: hostGlobal=', hostGlobalSeat, 'myGlobal=', _myGlobalSeat, 'myHostLocal=', myHostLocal, 'snap.CP=', snap.currentPlayer);
 
-  hands               = [0,1,2,3].map(li => snap.hands[(rotation+li)%4] || []);
-  currentPlayer       = rotated(snap.currentPlayer);
-  openingPlayer       = rotated(snap.openingPlayer || 0);
-  passCount           = snap.passCount || 0;
-  firstTurn           = snap.firstTurn !== undefined ? snap.firstTurn : true;
-  lastPlay            = snap.lastPlay ? {...snap.lastPlay, playerIdx:rotated(snap.lastPlay.playerIdx)} : null;
-  currentRoundPlays   = (snap.currentRoundPlays||[]).map(p=>({...p, playerIdx:rotated(p.playerIdx)}));
-  globalDiscardedCards= new Set(snap.globalDiscardedCards||[]);
-  gameActive          = snap.gameActive;
+  // Rotate all arrays by myHostLocal so my seat is at index 0
+  const rot = myHostLocal;
+  hands             = [0,1,2,3].map(li => snap.hands[(rot+li)%4] || []);
+  currentPlayer     = (snap.currentPlayer - rot + 4) % 4;
+  openingPlayer     = ((snap.openingPlayer||0) - rot + 4) % 4;
+  passCount         = snap.passCount || 0;
+  firstTurn         = snap.firstTurn !== undefined ? snap.firstTurn : false;
+  lastPlay          = snap.lastPlay ? {...snap.lastPlay, playerIdx: (snap.lastPlay.playerIdx - rot + 4)%4} : null;
+  currentRoundPlays = (snap.currentRoundPlays||[]).map(p => ({...p, playerIdx:(p.playerIdx-rot+4)%4}));
+  globalDiscardedCards = new Set(snap.globalDiscardedCards||[]);
+  gameActive        = snap.gameActive;
+  mpNpcSlots        = [0,1,2,3].map(li => snap.mpNpcSlots[(rot+li)%4]);
+  // Update zone names with rotated seatNames
+  const localNames  = [0,1,2,3].map(li => snap.seatNames[(rot+li)%4] || ('Seat '+(li+1)));
+  mpSeats           = localNames.map(n => ({name:n, conn:null}));
 
-  // Rotate NPC slots to my perspective
-  if (snap.mpNpcSlots) {
-    mpNpcSlots = [0,1,2,3].map(li => snap.mpNpcSlots[(rotation+li)%4]);
-  }
-
-  // Update zone labels from snapshot — rotate seatNames to guest-local order
-  if (snap.seatNames) {
-    // snap.seatNames is in host-local order; rotate to our local order
-    const localSeatNames = [0,1,2,3].map(li => {
-      // our local li = host-local (li + mpMySeat) % 4  (un-rotate from our perspective)
-      // host-local index for our local li:
-      const hostLocal = (li + rotation) % 4;
-      return snap.seatNames[hostLocal] || ('Player '+(li+1));
-    });
-    const zoneMap2 = [
-      {nameId:'name-p2', localIdx:1},
-      {nameId:'name-p3', localIdx:2},
-      {nameId:'name-p4', localIdx:3},
-    ];
-    zoneMap2.forEach(({nameId, localIdx}) => {
-      const seatName = localSeatNames[localIdx];
-      const isNpc2 = mpNpcSlots[localIdx] === true;
-      const ne2 = document.getElementById(nameId);
-      if (ne2) ne2.textContent = (isNpc2 ? '🤖 ' : '👤 ') + seatName;
-      const scoreEl2 = document.getElementById('score-p' + nameId.replace('name-p',''));
-      if (scoreEl2) scoreEl2.style.display = isNpc2 ? 'none' : 'block';
-    });
-  }
+  // Update zone labels
+  [{nameId:'name-p2',li:1},{nameId:'name-p3',li:2},{nameId:'name-p4',li:3}].forEach(({nameId,li}) => {
+    const ne = document.getElementById(nameId);
+    if (ne) ne.textContent = (mpNpcSlots[li] ? '🤖 ' : '👤 ') + localNames[li];
+    const scoreEl = document.getElementById('score-p' + nameId.replace('name-p',''));
+    if (scoreEl) scoreEl.style.display = mpNpcSlots[li] ? 'none' : 'block';
+  });
 
   selectedCards = [];
   renderAll();
   updateScoreboard();
-  setPlayerControls(isMyTurn() && gameActive);
+  const myTurn = currentPlayer === 0 && gameActive;
+  setPlayerControls(myTurn);
   updateTurnIndicator();
 
-  // Check for game end
-  if (snap.hands) {
-    const winnerHost = snap.hands.findIndex(h => h.length === 0);
-    if (winnerHost >= 0 && !gameActive) {
-      const winnerLocal = rotated(winnerHost);
-      const names = [0,1,2,3].map(li => mpSeats[(rotation+li)%4]?.name||'Player');
-      showWinCelebration(winnerLocal, names, () => {
-        // Simple end banner for friend table non-host
-        document.getElementById('winner-banner').style.display = 'flex';
-        document.getElementById('winner-title').textContent = winnerLocal===0?'🏆 You Win!':'🃏 '+names[winnerLocal]+' Wins!';
-        if (_friendTableGameSub) { supaClient.removeChannel(_friendTableGameSub); _friendTableGameSub=null; }
-      });
-    }
-  }
+  console.log('Applied: localCP=', currentPlayer, 'isMyTurn=', myTurn, 'hands=', hands.map(h=>h.length));
+}
+
+// ── Guest submits move via Supabase ──────────────────────
+async function submitFriendTableMove(move) {
+  if (!supaClient || !supaUser || !_myTableId) return;
+  console.log('Submitting move:', move.type, 'from global seat', _myGlobalSeat);
+  try {
+    await supaClient.from('friend_tables').update({
+      pending_move: { ...move, from_global_seat: _myGlobalSeat, ts: Date.now() }
+    }).eq('id', _myTableId);
+  } catch(e) { console.warn('submitFriendTableMove:', e); toast('Error submitting move.'); }
+}
+
+// ── playerPlay / playerPass for friend table guests ──────
+// Called from playerPlay() and playerPass() in existing code
+function ftGuestPlay(cards, play) {
+  submitFriendTableMove({
+    type: 'play',
+    cards,
+    playType: play.type,
+    subtype: play.subtype || null
+  });
+  selectedCards = [];
+  setPlayerControls(false);
+  renderHand();
+}
+
+function ftGuestPass() {
+  submitFriendTableMove({ type: 'pass' });
+  setPlayerControls(false);
 }
 
 // ── Timer ─────────────────────────────────────────────────
-let _timerSeconds = 60;
-
 function startTableTimer(table) {
   stopTableTimer();
   const created = new Date(table.created_at).getTime();
-  const elapsed = Math.floor((Date.now() - created) / 1000);
-  _timerSeconds = Math.max(0, 60 - elapsed);
-
-  _tableTimerInterval = setInterval(() => {
-    _timerSeconds--;
-    const timerEl = document.getElementById('table-timer-' + table.id);
-    if (timerEl) timerEl.textContent = '⏱ Starting in ' + _timerSeconds + 's';
-    if (_timerSeconds <= 0) {
+  let secs = Math.max(0, 60 - Math.floor((Date.now() - created) / 1000));
+  _tableTimerInterval = setInterval(async () => {
+    secs--;
+    const el = document.getElementById('table-timer-' + table.id);
+    if (el) el.textContent = '⏱ ' + secs + 's · tap Ready to start';
+    if (secs <= 0) {
       stopTableTimer();
-      if (_myTableId === table.id) timerForceStart(table.id);
+      if (_ftIsHost) await timerForceStart(table.id);
     }
   }, 1000);
 }
@@ -6940,245 +6846,166 @@ function stopTableTimer() {
 async function notifyFriendsTableStarted(tableId) {
   if (!supaClient || !supaUser) return;
   try {
-    // Get friend IDs
-    const { data: fs } = await supaClient
-      .from('friendships').select('user_id, friend_id')
-      .eq('status', 'accepted')
+    const { data: fs } = await supaClient.from('friendships')
+      .select('user_id,friend_id').eq('status','accepted')
       .or('user_id.eq.'+supaUser.id+',friend_id.eq.'+supaUser.id);
-    const friendIds = (fs||[]).map(f => f.user_id === supaUser.id ? f.friend_id : f.user_id);
+    const friendIds = (fs||[]).map(f => f.user_id===supaUser.id?f.friend_id:f.user_id);
     if (!friendIds.length) return;
 
-    // Find friends already seated at ANY active table — don't notify them
-    const { data: activeTables } = await supaClient
-      .from('friend_tables')
-      .select('seat_1, seat_2, seat_3, seat_4')
-      .eq('status', 'waiting');
-    const seatedUsers = new Set();
-    (activeTables||[]).forEach(t => {
-      [t.seat_1, t.seat_2, t.seat_3, t.seat_4].forEach(uid => { if (uid) seatedUsers.add(uid); });
-    });
+    const { data: activeTables } = await supaClient.from('friend_tables')
+      .select('seat_1,seat_2,seat_3,seat_4').eq('status','waiting');
+    const seated = new Set();
+    (activeTables||[]).forEach(t => [t.seat_1,t.seat_2,t.seat_3,t.seat_4].forEach(u=>u&&seated.add(u)));
 
-    // Only notify friends who are NOT already at a table (and not yourself)
-    const toNotify = friendIds.filter(fid => !seatedUsers.has(fid));
+    const toNotify = friendIds.filter(fid => !seated.has(fid));
     if (!toNotify.length) return;
 
     const myName = playerCustomName || supaUser.user_metadata?.username || 'A friend';
-    const notifs = toNotify.map(fid => ({
-      sender_id:    supaUser.id,
-      recipient_id: fid,
-      type:         'table_started',
-      payload:      { table_id: tableId, group: _currentTableGroup, host_name: myName }
-    }));
-    const { error } = await supaClient.from('friend_notifications').insert(notifs);
-    if (error) console.warn('notifyFriends insert error:', error);
-    else console.log('Notified', notifs.length, 'friends (excluded', friendIds.length - toNotify.length, 'already seated)');
+    const { error } = await supaClient.from('friend_notifications').insert(
+      toNotify.map(fid => ({
+        sender_id: supaUser.id, recipient_id: fid, type: 'table_started',
+        payload: { table_id: tableId, group: _currentTableGroup, host_name: myName }
+      }))
+    );
+    if (error) console.warn('notify error:', error);
+    else console.log('Notified', toNotify.length, 'friends');
   } catch(e) { console.warn('notifyFriends:', e); }
 }
 
-// ── Realtime subscription for tables ─────────────────────
+// ── Table subscriptions ───────────────────────────────────
 function subscribeToTables() {
   if (!supaClient || _tableRealtimeSub) return;
   _tableRealtimeSub = supaClient
-    .channel('friend_tables_changes')
+    .channel('friend_tables_lobby')
     .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table:  'friend_tables',
+      event: '*', schema: 'public', table: 'friend_tables',
       filter: 'table_group=eq.' + _currentTableGroup
-    }, (payload) => {
-      const row = payload.new;
-      // If MY table just changed to 'playing' and I'm not the host → launch game
-      if (row && row.id === _myTableId && row.status === 'playing' && !mpIsHost) {
-        console.log('Table started by host, launching game for non-host');
-        stopTableTimer();
-        closeFriendRoom();
-        launchFriendTableGame(row);
-        return;
-      }
-      loadTables();
-    })
-    .subscribe((status) => {
-      console.log('Tables subscription status:', status);
-    });
-}
-
-// ── Persistent my-table watcher (survives Friend Room close) ──
-let _myTableWatchSub = null;
-
-function watchMyTable(tableId) {
-  if (_myTableWatchSub) supaClient.removeChannel(_myTableWatchSub);
-  if (!tableId || !supaClient) return;
-  console.log('Watching my table for game start:', tableId);
-  _myTableWatchSub = supaClient
-    .channel('my_table_watch_' + tableId)
-    .on('postgres_changes', {
-      event: 'UPDATE',
-      schema: 'public',
-      table:  'friend_tables',
-      filter: 'id=eq.' + tableId
-    }, (payload) => {
-      const row = payload.new;
-      console.log('My table updated:', row?.status, 'mpIsHost:', mpIsHost, 'gameActive:', gameActive);
-      // Host: ignore updates triggered by own broadcastFriendTableState
-      // (payload changes are from host's own writes — don't re-apply)
-      if (mpIsHost && gameActive && !row?.pending_move) return;
-      if (row && row.status === 'playing' && !mpIsHost) {
-        // Only launch if not already in a game
-        if (gameActive) return;
-        console.log('Game started! Launching for non-host player');
-        stopTableTimer();
-        closeFriendRoom();
-        if (_myTableWatchSub) { supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null; }
-        launchFriendTableGame(row);
-      }
-      // Host: check if all players voted ready
-      if (!gameActive && row && row.ready_votes) {
-        (async () => {
-          const { data: freshTable } = await supaClient
-            .from('friend_tables').select('*').eq('id', _myTableId).single();
-          if (freshTable) {
-            const seats = [freshTable.seat_1,freshTable.seat_2,freshTable.seat_3,freshTable.seat_4].filter(Boolean);
-            const votes = freshTable.ready_votes || [];
-            if (seats.length > 0 && seats.every(uid => votes.includes(uid)) && freshTable.status === 'waiting') {
-              await startTableNow(_myTableId);
-            }
-          }
-        })();
-      }
-      // Host processes pending move from a guest
-      if (mpIsHost && row && row.pending_move && gameActive) {
-        const pm = row.pending_move;
-        if (pm.ts && Date.now() - pm.ts < 10000) {
-          // Guest's global seat → host local index
-          // Host rotated by _friendTableHostRotation, so:
-          // hostLocal = (globalSeat - _friendTableHostRotation + 4) % 4
-          const guestGlobalSeat = pm.from_seat;
-          const guestLocal = (guestGlobalSeat - _friendTableHostRotation + 4) % 4;
-          console.log('Pending move from global seat', guestGlobalSeat, '→ host local', guestLocal, 'currentPlayer:', currentPlayer);
-          if (guestLocal !== 0 && currentPlayer === guestLocal) {
-            // Clear pending move first
-            supaClient.from('friend_tables').update({ pending_move: null }).eq('id', _myTableId).then(()=>{});
-            if (pm.type === 'play') {
-              const reconstructedPlay = { type: pm.playType, subtype: pm.subtype||null };
-              executePlay(guestLocal, pm.cards, reconstructedPlay);
-            } else if (pm.type === 'pass') {
-              doPass(guestLocal);
-            }
-          } else {
-            console.log('Move ignored: guestLocal='+guestLocal+' currentPlayer='+currentPlayer);
-          }
-        }
-      }
-    })
-    .subscribe((status) => console.log('My table watch status:', status));
+    }, () => { loadTables(); })
+    .subscribe(s => console.log('Tables lobby sub:', s));
 }
 
 function unsubscribeFromTables() {
-  if (_tableRealtimeSub) {
-    supaClient.removeChannel(_tableRealtimeSub);
-    _tableRealtimeSub = null;
-  }
+  if (_tableRealtimeSub) { supaClient.removeChannel(_tableRealtimeSub); _tableRealtimeSub = null; }
 }
 
-// ── Poll for friend notifications (table invites) ─────────
+// ── Toast notification for table invites ──────────────────
 async function pollFriendNotifications() {
   if (!supaClient || !supaUser) return;
   try {
-    const { data } = await supaClient
-      .from('friend_notifications')
-      .select('*')
-      .eq('recipient_id', supaUser.id)
-      .eq('read', false)
-      .order('created_at', { ascending: false })
-      .limit(5);
-
-    if (!data || data.length === 0) return;
-
-    // Show badge on Friend Room button
+    const { data } = await supaClient.from('friend_notifications')
+      .select('*').eq('recipient_id', supaUser.id).eq('read', false)
+      .order('created_at', { ascending: false }).limit(5);
+    if (!data || !data.length) return;
     const badge = document.getElementById('friend-notif-badge');
-    if (badge) { badge.style.display = 'inline'; badge.textContent = data.length; }
-
-    // Show toast for table_started notifications (only if not already at a table)
     const tableNotifs = data.filter(n => n.type === 'table_started' && !_myTableId);
     if (tableNotifs.length > 0) {
-      // Verify tables still exist and are waiting
       const tableIds = [...new Set(tableNotifs.map(n => n.payload?.table_id).filter(Boolean))];
-      const { data: activeTables } = await supaClient
-        .from('friend_tables').select('id, status').in('id', tableIds);
-      const validTableIds = new Set((activeTables||[])
-        .filter(t => t.status === 'waiting').map(t => t.id));
-
-      const staleNotifIds = [];
+      const { data: active } = await supaClient.from('friend_tables')
+        .select('id,status').in('id', tableIds);
+      const validIds = new Set((active||[]).filter(t=>t.status==='waiting').map(t=>t.id));
+      const stale = [];
       tableNotifs.forEach(n => {
-        const tableId = n.payload?.table_id;
-        if (!tableId || !validTableIds.has(tableId)) {
-          // Table gone or already playing — mark read silently
-          staleNotifIds.push(n.id);
-          return;
-        }
-        const name = n.payload?.host_name || 'A friend';
-        const grp  = n.payload?.group || 'beginner';
-        showTableInviteToast(name, grp, tableId, n.id);
+        if (!validIds.has(n.payload?.table_id)) { stale.push(n.id); return; }
+        showTableInviteToast(n.payload?.host_name||'A friend', n.payload?.group||'beginner', n.payload?.table_id, n.id);
       });
-      // Silently mark stale notifications as read
-      if (staleNotifIds.length > 0) {
-        supaClient.from('friend_notifications')
-          .update({ read: true }).in('id', staleNotifIds).then(()=>{});
-      }
+      if (stale.length) supaClient.from('friend_notifications').update({read:true}).in('id',stale).then(()=>{});
     }
+    const reqNotifs = data.filter(n => n.type === 'friend_request');
+    if (reqNotifs.length > 0) {
+      if (badge) { badge.style.display='inline'; badge.textContent=reqNotifs.length; }
+    }
+  } catch(e) { console.warn('pollFriendNotifications:', e); }
+}
 
-    // Don't mark as read here — mark when user dismisses the toast
-  } catch(e) { console.warn('pollFriendNotifications error:', e); }
+async function markNotifRead(notifId) {
+  if (!supaClient || !supaUser || !notifId) return;
+  try { await supaClient.from('friend_notifications').update({read:true}).eq('id',notifId); } catch(e) {}
 }
 
 async function joinTableFromToast(tableId, notifId, btn) {
   if (!supaClient) return;
-  if (btn) { btn.textContent = 'Checking…'; btn.disabled = true; }
+  if (btn) { btn.textContent='Checking…'; btn.disabled=true; }
   try {
-    const { data: t } = await supaClient
-      .from('friend_tables').select('id, status').eq('id', tableId).single();
+    const { data: t } = await supaClient.from('friend_tables').select('id,status').eq('id',tableId).single();
     if (!t || t.status !== 'waiting') {
-      if (btn) { btn.textContent = 'Table ended'; btn.style.color='rgba(255,150,150,0.8)'; }
+      if (btn) { btn.textContent='Table ended'; btn.style.color='rgba(255,150,150,0.8)'; }
       markNotifRead(notifId);
-      setTimeout(() => btn?.closest('[id]')?.remove(), 1500);
+      setTimeout(()=>btn?.closest('[id]')?.remove(), 1500);
       return;
     }
     markNotifRead(notifId);
     btn?.closest('[id]')?.remove();
     openFriendRoom();
     friendSwitchTab('tables');
-  } catch(e) {
-    if (btn) { btn.textContent = 'Error'; btn.disabled = false; }
-  }
-}
-
-async function markNotifRead(notifId) {
-  if (!supaClient || !supaUser || !notifId) return;
-  try {
-    await supaClient.from('friend_notifications')
-      .update({ read: true }).eq('id', notifId);
-    // Hide badge if no more unread
-    pollFriendNotifications();
-  } catch(e) {}
+  } catch(e) { if(btn){btn.textContent='Error';btn.disabled=false;} }
 }
 
 function showTableInviteToast(fromName, group, tableId, notifId) {
   const existing = document.getElementById('table-invite-toast-'+notifId);
-  if (existing) return; // already shown
-
+  if (existing) return;
   const div = document.createElement('div');
   div.id = 'table-invite-toast-' + notifId;
   div.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(20,50,30,0.97);border:1px solid rgba(45,138,80,0.6);border-radius:12px;padding:10px 14px;z-index:500;font-family:Crimson Pro,serif;font-size:0.85rem;color:#7fffaa;max-width:300px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.6);';
   div.innerHTML = `<div style="font-weight:700;margin-bottom:4px">🏓 ${fromName} started a ${group} table!</div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button onclick="joinTableFromToast('${tableId}','${notifId}',this)"
-        style="flex:1;background:rgba(45,138,80,0.4);border:1px solid rgba(45,138,80,0.6);border-radius:6px;color:#7fffaa;padding:5px;cursor:pointer;font-family:Crimson Pro,serif;font-size:0.82rem;">Join Table</button>
+        style="flex:1;background:rgba(45,138,80,0.4);border:1px solid rgba(45,138,80,0.6);border-radius:6px;color:#7fffaa;padding:5px;cursor:pointer;font-size:0.82rem;">Join Table</button>
       <button onclick="markNotifRead('${notifId}');this.closest('[id]').remove();"
         style="background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:rgba(255,255,255,0.4);padding:5px 10px;cursor:pointer;font-size:0.82rem;">✕</button>
     </div>`;
   document.body.appendChild(div);
-  setTimeout(() => { if (div.parentNode) div.remove(); }, 15000);
+  setTimeout(()=>{ if(div.parentNode) div.remove(); }, 15000);
 }
+
+// ── Realtime: instant notification delivery ───────────────
+// _notifRealtimeSub declared earlier
+
+function subscribeToNotifications() {
+  if (!supaClient || !supaUser || _notifRealtimeSub) return;
+  _notifRealtimeSub = supaClient
+    .channel('friend_notifs_' + supaUser.id)
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'friend_notifications',
+      filter: 'recipient_id=eq.' + supaUser.id
+    }, (payload) => {
+      const n = payload.new;
+      if (!n || n.read) return;
+      if (n.type === 'table_started' && !_myTableId) {
+        supaClient.from('friend_tables').select('id,status').eq('id',n.payload?.table_id).single()
+          .then(({data:t}) => {
+            if (!t || t.status !== 'waiting') { markNotifRead(n.id); return; }
+            showTableInviteToast(n.payload?.host_name||'A friend', n.payload?.group||'beginner', n.payload?.table_id, n.id);
+            const badge = document.getElementById('friend-notif-badge');
+            if (badge) { badge.style.display='inline'; badge.textContent='!'; }
+          });
+      } else if (n.type === 'friend_request') {
+        toast('📬 New friend request!');
+      }
+    })
+    .subscribe(s => console.log('Notif sub:', s));
+}
+
+// ── Heartbeat ─────────────────────────────────────────────
+setInterval(async () => {
+  if (supaUser && supaClient) {
+    try { await supaClient.from('profiles').update({last_active:new Date().toISOString(),is_online:true}).eq('id',supaUser.id); } catch(e) {}
+  }
+}, 2*60*1000);
+
+async function pingOnline() {
+  if (!supaUser || !supaClient) return;
+  try { await supaClient.from('profiles').update({last_active:new Date().toISOString(),is_online:true}).eq('id',supaUser.id); } catch(e) {}
+}
+
+window.addEventListener('beforeunload', () => {
+  if (supaUser && supaClient) {
+    try { navigator.sendBeacon('https://snelikvzlwamwbnwceff.supabase.co/rest/v1/profiles?id=eq.'+supaUser.id, new Blob([JSON.stringify({is_online:false})],{type:'application/json'})); } catch(e) {}
+  }
+});
+
+// ── Poll every 10s ────────────────────────────────────────
+setInterval(() => { if (supaUser && supaClient) pollFriendNotifications(); }, 10000);
+setTimeout(() => { if (supaUser && supaClient) pollFriendNotifications(); }, 3000);
 
 // ════════════════════════════════════════
 //  INIT
