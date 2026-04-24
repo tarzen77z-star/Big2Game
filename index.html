@@ -6520,10 +6520,24 @@ async function launchFriendTableGame(table) {
   });
 
   if (mpIsHost) {
-    // Host deals cards and broadcasts via Supabase realtime
+    // Deal cards
     startGame();
-    // Broadcast initial game state to all players via friend_notifications
-    // Broadcast multiple times to ensure non-host gets it
+    // Rotate so host's own seat is always at local index 0
+    if (mpMySeat !== 0) {
+      const r = mpMySeat;
+      _friendTableHostRotation = r;
+      hands         = [0,1,2,3].map(li => hands[(r+li)%4]);
+      currentPlayer = (currentPlayer - r + 4) % 4;
+      openingPlayer = (openingPlayer - r + 4) % 4;
+      mpNpcSlots    = [0,1,2,3].map(li => mpNpcSlots[(r+li)%4]);
+      mpSeats       = [0,1,2,3].map(li => mpSeats[(r+li)%4]);
+    } else {
+      _friendTableHostRotation = 0;
+    }
+    renderAll();
+    updateTurnIndicator();
+    setPlayerControls(isMyTurn());
+    // Broadcast full state to non-host players
     setTimeout(() => broadcastFriendTableState(table.id), 500);
     setTimeout(() => broadcastFriendTableState(table.id), 1500);
   } else {
@@ -6545,26 +6559,40 @@ async function launchFriendTableGame(table) {
   }
 }
 
+// ── Subscribe to game state as non-host ──
+let _friendTableGameSub = null;
+let _friendTableHostRotation = 0; // how much host rotated hands
+
 // ── Broadcast game state to friend table players via Supabase ──
 async function broadcastFriendTableState(tableId) {
   if (!supaClient || !supaUser || !mpIsHost) return;
-  // Store game state in the friend_tables payload column
   try {
+    // Un-rotate back to host-global order for broadcast
+    const r = _friendTableHostRotation;
+    const globalHands = r === 0 ? hands : [0,1,2,3].map(li => hands[(4-r+li)%4]);
+    const globalCP    = r === 0 ? currentPlayer   : (currentPlayer + r) % 4;
+    const globalOP    = r === 0 ? openingPlayer   : (openingPlayer + r) % 4;
+    const globalNpc   = r === 0 ? mpNpcSlots      : [0,1,2,3].map(li => mpNpcSlots[(4-r+li)%4]);
+    const globalRound = r === 0 ? currentRoundPlays : currentRoundPlays.map(p => ({...p, playerIdx:(p.playerIdx+r)%4}));
+    const globalLP    = lastPlay ? {...lastPlay, playerIdx:(lastPlay.playerIdx+r)%4} : null;
+
     const snapshot = {
-      hands, currentPlayer, lastPlay, passCount, firstTurn,
-      openingPlayer, currentRoundPlays,
+      hands: globalHands,
+      currentPlayer: globalCP,
+      openingPlayer: globalOP,
+      lastPlay: globalLP,
+      passCount, firstTurn,
+      currentRoundPlays: globalRound,
       globalDiscardedCards: [...globalDiscardedCards],
-      gameActive, mpNpcSlots,
-      seatNames: mpSeats.map(s=>s.name)
+      gameActive,
+      mpNpcSlots: globalNpc,
+      seatNames: [0,1,2,3].map(li => mpSeats[(4-r+li)%4]?.name || ('Player '+(li+1)))
     };
     await supaClient.from('friend_tables')
       .update({ payload: snapshot })
       .eq('id', tableId);
   } catch(e) { console.warn('broadcastFriendTableState:', e); }
 }
-
-// ── Subscribe to game state as non-host ──
-let _friendTableGameSub = null;
 function subscribeFriendTableGame(tableId, onReady) {
   if (_friendTableGameSub) supaClient.removeChannel(_friendTableGameSub);
   _friendTableGameSub = supaClient
