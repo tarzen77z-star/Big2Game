@@ -3922,13 +3922,11 @@ function executePlay(playerIdx, cards, play) {
     return;
   }
 
-  saveGameState();
-  renderAll();
-  if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-  // (friend table moves published via publishFTMove, not broadcast)
-
   if (powerPlay) {
-    // After a short delay, clear the pile and let player play again
+    // Render the played card on the pile first, then clear after a visible delay
+    saveGameState();
+    renderAll();
+    if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
     setTimeout(() => {
       lastPlay = null;
       passCount = 0;
@@ -3948,21 +3946,28 @@ function executePlay(playerIdx, cards, play) {
     return;
   }
 
+  // Normal play: render, sync once, then schedule NPC or enable controls
   saveGameState();
   renderAll();
-  if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-  // (friend table moves published via publishFTMove, not broadcast)
   if (!isMyTurn()) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
       if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
         const token = ++mpTurnToken;
-        setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 1000 + Math.random()*600);
+        setTimeout(() => {
+          if (mpTurnToken === token) {
+            npcTurn();
+          }
+        }, 1000 + Math.random()*600);
+      } else {
+        // Next player is a human guest — broadcast now so they know it's their turn
+        if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
       }
     }
   } else {
     setPlayerControls(true);
     updateTurnIndicator();
+    if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
   }
 }
 
@@ -3984,19 +3989,21 @@ function doPass(playerIdx) {
 
   saveGameState();
   renderAll();
-  if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-  // (friend table moves published via publishFTMove, not broadcast)
   if (!isMyTurn()) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
       if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
         const token = ++mpTurnToken;
         setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 900 + Math.random()*500);
+      } else {
+        // Next player is a human guest — broadcast so they know it's their turn
+        if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
       }
     }
   } else {
     setPlayerControls(true);
     updateTurnIndicator();
+    if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
   }
 }
 
@@ -4033,6 +4040,9 @@ function npcTurn() {
 
   const idx = currentPlayer;
   const hand = hands[idx];
+
+  // In MP, broadcast before NPC thinks so guests see the "thinking..." indicator
+  if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
 
   const play = findBestNpcPlay(hand, lastPlay, firstTurn && idx === openingPlayer);
 
@@ -7715,7 +7725,12 @@ function mpGuestApplySync(snap){
   }
   if(snap.mpSeatNames){
     mpSessionNames=[...snap.mpSeatNames];
+    // mpSeatNames is already rotated to guest-local order by the host,
+    // so li=0 is the guest's own name, li=1 is the player to their right, etc.
+    // mpSeats is stored in global order, so we need to convert li → global seat.
     snap.mpSeatNames.forEach((name,li)=>{
+      // guest-local li → global seat: (mpMySeat + li) % 4
+      // BUT mpSeatNames from host is already guest-local (rotated by host), so li IS guest-local
       const globalSeat=(mpMySeat+li)%4;
       if(mpSeats[globalSeat]) mpSeats[globalSeat].name=name;
     });
