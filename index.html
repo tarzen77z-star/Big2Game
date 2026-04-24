@@ -6623,7 +6623,8 @@ async function timerForceStart(tableId) {
 // ════════════════════════════════════════════════════════════
 
 let _ftSeed        = 0;      // shared random seed for dealing
-let _ftMovesSub    = null;   // realtime subscription for moves
+let _ftMovesSub    = null;   // realtime subscription / broadcast channel for state
+let _ftStateChannel = null;  // shortcut ref to the broadcast channel once subscribed
 let _ftLastMoveTs  = 0;      // last processed move timestamp
 let _ftMoveQueue   = [];     // queue of moves to process in order
 let _ftActedThisRound = new Set(); // local indices that acted since last round clear
@@ -6777,28 +6778,27 @@ async function launchFriendTableGame(table) {
 }
 
 // ── State-broadcast sync ─────────────────────────────────
-// Instead of syncing move-by-move (which drifts due to random NPC timers),
-// the active player runs the full NPC chain locally, then broadcasts the
-// complete game state. The other player receives it and applies wholesale.
+// Uses Supabase Realtime Broadcast (not postgres_changes) so we don't
+// depend on REPLICA IDENTITY FULL being set on the table.
 
 function subscribeFTState(tableId) {
   if (_ftMovesSub) { supaClient.removeChannel(_ftMovesSub); _ftMovesSub = null; }
-  _ftMovesSub = supaClient
-    .channel('watch_state_' + tableId)
-    .on('postgres_changes', {
-      event: 'UPDATE', schema: 'public', table: 'friend_tables',
-      filter: 'id=eq.' + tableId
-    }, (payload) => {
-      const row = payload.new;
-      if (!row) return;
-      const snap = row.payload;
-      // Only apply state updates (not the initial seed write)
-      if (!snap || !snap.ft_state) return;
-      // Ignore updates we wrote ourselves
-      if (snap.ft_state_author === _myGlobalSeat) return;
-      applyFTState(snap.ft_state);
+  _ftStateChannel = null;
+  const ch = supaClient
+    .channel('ft_state_' + tableId, { config: { broadcast: { self: false } } })
+    .on('broadcast', { event: 'game_state' }, ({ payload }) => {
+      if (!payload || !payload.ft_state) return;
+      if (payload.author === _myGlobalSeat) return; // ignore own broadcasts
+      console.log('FT: received state from seat', payload.author, 'CP_global=', payload.ft_state.currentPlayer_global);
+      applyFTState(payload.ft_state);
     })
-    .subscribe(s => console.log('FT state sub:', s));
+    .subscribe((status) => {
+      console.log('FT state channel:', status);
+      if (status === 'SUBSCRIBED') {
+        _ftStateChannel = ch;
+        _ftMovesSub = ch;
+      }
+    });
 }
 
 function applyFTState(state) {
@@ -6840,22 +6840,23 @@ function applyFTState(state) {
 }
 
 let _ftBroadcastTimer = null;
+let _ftStateChannel   = null; // the broadcast channel for game state
 
 function broadcastFTState() {
-  // Debounce: if called multiple times rapidly (e.g. NPC chain), only send the final state
+  // Debounce: if called multiple times rapidly (NPC chain), only send the final state
   if (_ftBroadcastTimer) clearTimeout(_ftBroadcastTimer);
-  _ftBroadcastTimer = setTimeout(_dobroadcastFTState, 50);
+  _ftBroadcastTimer = setTimeout(_dobroadcastFTState, 80);
 }
 
-async function _dobroadcastFTState() {
+function _dobroadcastFTState() {
   _ftBroadcastTimer = null;
-  if (!supaClient || !supaUser || !_myTableId) return;
+  if (!_ftStateChannel || !_myTableId) return;
 
   // Build state in GLOBAL seat order so all players can apply it correctly
-  const r = _myGlobalSeat; // rotation: local 0 = global r
-  const hands_global = [0,1,2,3].map(gi => hands[(gi - r + 4) % 4]);
-  const currentPlayer_global  = (currentPlayer  + r) % 4;
-  const openingPlayer_global  = (openingPlayer  + r) % 4;
+  const r = _myGlobalSeat;
+  const hands_global             = [0,1,2,3].map(gi => hands[(gi - r + 4) % 4]);
+  const currentPlayer_global     = (currentPlayer  + r) % 4;
+  const openingPlayer_global     = (openingPlayer  + r) % 4;
   const currentRoundPlays_global = currentRoundPlays.map(p => ({
     ...p,
     playerIdx_global: (p.playerIdx + r) % 4
@@ -6874,18 +6875,12 @@ async function _dobroadcastFTState() {
     gameActive
   };
 
-  try {
-    await supaClient.from('friend_tables').update({
-      payload: {
-        seed: _ftSeed,
-        started: true,
-        ft_state: state,
-        ft_state_author: _myGlobalSeat,
-        ft_state_ts: Date.now()
-      }
-    }).eq('id', _myTableId);
-    console.log('Broadcast FT state, CP_global=', currentPlayer_global);
-  } catch(e) { console.warn('broadcastFTState:', e); toast('Sync error'); }
+  _ftStateChannel.send({
+    type: 'broadcast',
+    event: 'game_state',
+    payload: { ft_state: state, author: _myGlobalSeat, ts: Date.now() }
+  });
+  console.log('Broadcast FT state via channel, CP_global=', currentPlayer_global);
 }
 
 // ── Player plays or passes in Friend Table mode ───────────
