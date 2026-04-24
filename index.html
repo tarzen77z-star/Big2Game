@@ -6697,21 +6697,30 @@ async function launchFriendTableGame(table) {
   const lbl = document.getElementById('player-name-label');
   if (lbl) lbl.textContent = playerCustomName;
 
-  // Set up NPC zone labels
+  // Set up NPC zone labels — works for both host and non-host
   const zoneMap = [
     {zoneId:'npc-right', nameId:'name-p2', localIdx:1},
     {zoneId:'npc-top',   nameId:'name-p3', localIdx:2},
     {zoneId:'npc-left',  nameId:'name-p4', localIdx:3},
   ];
+  // mpSeats is in global order at this point — use global seat lookup
   zoneMap.forEach(({zoneId,nameId,localIdx}) => {
     const globalSeat = (mySeatIdx + localIdx) % 4;
     const isNpc = !seats[globalSeat];
+    const seatName = isNpc
+      ? ('NPC ' + (globalSeat+1))
+      : (nameMap[seats[globalSeat]] || 'Player '+(globalSeat+1));
     const ne = document.getElementById(nameId);
-    if (ne) ne.textContent = (isNpc ? '🤖 ' : '👤 ') + mpSeats[globalSeat].name;
+    if (ne) ne.textContent = (isNpc ? '🤖 ' : '👤 ') + seatName;
     const ze = document.getElementById(zoneId);
     if (ze) ze.classList.toggle('mp-human', !isNpc);
     const scoreEl = document.getElementById('score-p' + nameId.replace('name-p',''));
     if (scoreEl) scoreEl.style.display = isNpc ? 'none' : 'block';
+    // Show card count placeholder for NPC zones so they appear immediately
+    if (isNpc) {
+      const cardsEl = document.getElementById('cards-p' + nameId.replace('name-p',''));
+      if (cardsEl) cardsEl.textContent = '13';
+    }
   });
 
   if (mpIsHost) {
@@ -6849,6 +6858,23 @@ function applyFriendTableSnapshot(snap, tableId) {
   // Rotate NPC slots to my perspective
   if (snap.mpNpcSlots) {
     mpNpcSlots = [0,1,2,3].map(li => snap.mpNpcSlots[(rotation+li)%4]);
+  }
+
+  // Update zone labels from snapshot (seatNames in local order)
+  if (snap.seatNames) {
+    const zoneMap2 = [
+      {nameId:'name-p2', localIdx:1},
+      {nameId:'name-p3', localIdx:2},
+      {nameId:'name-p4', localIdx:3},
+    ];
+    zoneMap2.forEach(({nameId, localIdx}) => {
+      const seatName = snap.seatNames[localIdx] || ('Player '+(localIdx+1));
+      const isNpc2 = mpNpcSlots[localIdx] === true;
+      const ne2 = document.getElementById(nameId);
+      if (ne2) ne2.textContent = (isNpc2 ? '🤖 ' : '👤 ') + seatName;
+      const scoreEl2 = document.getElementById('score-p' + nameId.replace('name-p',''));
+      if (scoreEl2) scoreEl2.style.display = isNpc2 ? 'none' : 'block';
+    });
   }
 
   selectedCards = [];
