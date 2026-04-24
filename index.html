@@ -3909,7 +3909,7 @@ function executePlay(playerIdx, cards, play) {
     gameActive = false; // stop any further moves
     setPlayerControls(false);
     renderAll(); // show empty hand before result
-    if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+    if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync();
     // Local winner index for celebration
     const winnerLocalForCel = mpGameMode === 'vs_human'
       ? (playerIdx - (mpMySeat||0) + 4) % 4
@@ -3926,7 +3926,7 @@ function executePlay(playerIdx, cards, play) {
     // Render the played card on the pile first, then clear after a visible delay
     saveGameState();
     renderAll();
-    if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+    if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync();
     setTimeout(() => {
       lastPlay = null;
       passCount = 0;
@@ -3934,7 +3934,7 @@ function executePlay(playerIdx, cards, play) {
       currentPlayer = playerIdx;
       renderDiscardPile();
       document.getElementById('last-play-info').textContent = 'New round – play anything!';
-      if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+      if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync();
       if (isMyTurn()) {
         setPlayerControls(true);
         updateTurnIndicator();
@@ -3957,17 +3957,23 @@ function executePlay(playerIdx, cards, play) {
         setTimeout(() => {
           if (mpTurnToken === token) {
             npcTurn();
+            // After NPC plays, drain any queued human moves (Friend Table)
+            if (_myTableId) drainFTMoveQueue();
           }
         }, 1000 + Math.random()*600);
       } else {
-        // Next player is a human guest — broadcast now so they know it's their turn
-        if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+        // Next player is a human — in PeerJS mode broadcast; in FT mode drain queue
+        if (_myTableId) {
+          drainFTMoveQueue();
+        } else if (mpGameMode === 'vs_human' && mpIsHost) {
+          mpBroadcastSync();
+        }
       }
     }
   } else {
     setPlayerControls(true);
     updateTurnIndicator();
-    if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+    if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync();
   }
 }
 
@@ -3994,16 +4000,24 @@ function doPass(playerIdx) {
     if (mpGameMode !== 'vs_human' || mpIsHost) {
       if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
         const token = ++mpTurnToken;
-        setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 900 + Math.random()*500);
+        setTimeout(() => {
+          if (mpTurnToken === token) {
+            npcTurn();
+            if (_myTableId) drainFTMoveQueue();
+          }
+        }, 900 + Math.random()*500);
       } else {
-        // Next player is a human guest — broadcast so they know it's their turn
-        if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+        if (_myTableId) {
+          drainFTMoveQueue();
+        } else if (mpGameMode === 'vs_human' && mpIsHost) {
+          mpBroadcastSync();
+        }
       }
     }
   } else {
     setPlayerControls(true);
     updateTurnIndicator();
-    if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+    if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync();
   }
 }
 
@@ -4041,8 +4055,8 @@ function npcTurn() {
   const idx = currentPlayer;
   const hand = hands[idx];
 
-  // In MP, broadcast before NPC thinks so guests see the "thinking..." indicator
-  if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+  // In PeerJS MP (not FT), broadcast before NPC so guests see "thinking..." indicator
+  if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync();
 
   const play = findBestNpcPlay(hand, lastPlay, firstTurn && idx === openingPlayer);
 
@@ -6713,6 +6727,9 @@ async function launchFriendTableGame(table) {
   globalDiscardedCards = new Set();
   selectedCards = [];
   gameActive    = true;
+  _ftMoveQueue.length = 0;  // clear any queued moves from previous game
+  _ftAppliedMoveIds.clear();
+  _ftMoveNumber = 0;
 
   // ── Rotate: put MY seat at index 0 ──
   // This means hands[0] = my hand, hands[1] = right, etc.
@@ -6790,21 +6807,44 @@ async function fetchMissedMoves(tableId) {
   } catch(e) { console.warn('fetchMissedMoves:', e); }
 }
 
-// ── Apply a move from another player ─────────────────────
+// ── Applied move IDs — avoid double-applying the same move ──
+const _ftAppliedMoveIds = new Set();
+
+// ── Apply a move from another player (queued) ─────────────
 function applyFTMove(move) {
   if (!gameActive) return;
-  // Convert global seat to local index
-  const localIdx = (move.player_global_seat - _myGlobalSeat + 4) % 4;
-  if (currentPlayer !== localIdx) {
-    console.warn('Move out of order: expected CP='+currentPlayer+' got localIdx='+localIdx);
-    return;
-  }
-  console.log('Applying move from localIdx='+localIdx+':', move.type);
-  if (move.type === 'play') {
-    const play = { type: move.play_type, subtype: move.subtype || null };
-    executePlay(localIdx, move.cards, play);
-  } else if (move.type === 'pass') {
-    doPass(localIdx);
+  // Deduplicate: skip moves we already applied (realtime + fetchMissed overlap)
+  const moveId = move.id || (move.player_global_seat + '_' + move.move_number);
+  if (_ftAppliedMoveIds.has(moveId)) return;
+  // Queue and drain in order
+  _ftMoveQueue.push(move);
+  drainFTMoveQueue();
+}
+
+function drainFTMoveQueue() {
+  if (!gameActive) return;
+  let progress = true;
+  while (progress && _ftMoveQueue.length > 0) {
+    progress = false;
+    for (let i = 0; i < _ftMoveQueue.length; i++) {
+      const move = _ftMoveQueue[i];
+      const localIdx = (move.player_global_seat - _myGlobalSeat + 4) % 4;
+      if (currentPlayer !== localIdx) continue; // not this player's turn yet
+      // Dequeue and apply
+      _ftMoveQueue.splice(i, 1);
+      const moveId = move.id || (move.player_global_seat + '_' + move.move_number);
+      _ftAppliedMoveIds.add(moveId);
+      console.log('Applying FT move from localIdx='+localIdx+':', move.type);
+      if (move.type === 'play') {
+        const cards = (move.cards||[]).map(c=>({rank:String(c.rank),suit:String(c.suit)}));
+        const play = { type: move.play_type, subtype: move.subtype || null };
+        executePlay(localIdx, cards, play);
+      } else if (move.type === 'pass') {
+        doPass(localIdx);
+      }
+      progress = true;
+      break;
+    }
   }
 }
 
