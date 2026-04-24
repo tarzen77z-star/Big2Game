@@ -3712,20 +3712,21 @@ function playerPlay() {
     }
   }
 
-  if (mpGameMode === 'vs_human' && !mpIsHost) {
-    if (_myTableId) {
-      console.log('Guest playing:', play, 'cards:', selectedCards.length, 'myTurn:', isMyTurn(), 'CP:', currentPlayer);
-      ftGuestPlay([...selectedCards], play);
-    } else {
-      const msg = {type:'play', seat:mpMySeat, cards:[...selectedCards], playType:play.type, subtype:play.subtype};
-      if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
-      selectedCards = [];
-      setPlayerControls(false);
-      renderHand();
-    }
+  // Friend table: all players publish then execute locally
+  if (mpGameMode === 'vs_human' && _myTableId) {
+    ftGuestPlay([...selectedCards], play);
     return;
   }
-  // Single-player or host: execute locally
+  // PeerJS guest
+  if (mpGameMode === 'vs_human' && !mpIsHost) {
+    const msg = {type:'play', seat:mpMySeat, cards:[...selectedCards], playType:play.type, subtype:play.subtype};
+    if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
+    selectedCards = [];
+    setPlayerControls(false);
+    renderHand();
+    return;
+  }
+  // Single-player or PeerJS host: execute locally
   executePlay(0, selectedCards, play);
 }
 
@@ -3808,14 +3809,16 @@ function forfeitMainMenu() {
 function playerPass() {
   if (firstTurn) { toast('Cannot pass on first turn'); return; }
   if (!lastPlay) { toast('Cannot pass – you control the pile'); return; }
+  // Friend table: all players publish then execute locally
+  if (mpGameMode === 'vs_human' && _myTableId) {
+    ftGuestPass();
+    return;
+  }
+  // PeerJS guest
   if (mpGameMode === 'vs_human' && !mpIsHost) {
-    if (_myTableId) {
-      ftGuestPass();
-    } else {
-      const msg = {type:'pass', seat:mpMySeat};
-      if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
-      setPlayerControls(false);
-    }
+    const msg = {type:'pass', seat:mpMySeat};
+    if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
+    setPlayerControls(false);
     return;
   }
   doPass(0);
@@ -3914,7 +3917,7 @@ function executePlay(playerIdx, cards, play) {
   saveGameState();
   renderAll();
   if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFTState(_myTableId);
+  // (friend table moves published via publishFTMove, not broadcast)
 
   if (powerPlay) {
     // After a short delay, clear the pile and let player play again
@@ -3940,7 +3943,7 @@ function executePlay(playerIdx, cards, play) {
   saveGameState();
   renderAll();
   if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFTState(_myTableId);
+  // (friend table moves published via publishFTMove, not broadcast)
   if (!isMyTurn()) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
@@ -3974,7 +3977,7 @@ function doPass(playerIdx) {
   saveGameState();
   renderAll();
   if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFTState(_myTableId);
+  // (friend table moves published via publishFTMove, not broadcast)
   if (!isMyTurn()) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
@@ -6574,305 +6577,257 @@ async function timerForceStart(tableId) {
 }
 
 // ── Start the game ────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+//  FRIEND TABLE GAME — Seed-based independent execution
+//  All players deal same cards from shared seed.
+//  Moves broadcast to Supabase; all players apply locally.
+//  No host/guest distinction for game logic.
+// ════════════════════════════════════════════════════════════
+
+let _ftSeed        = 0;      // shared random seed for dealing
+let _ftMovesSub    = null;   // realtime subscription for moves
+let _ftLastMoveTs  = 0;      // last processed move timestamp
+let _ftMoveQueue   = [];     // queue of moves to process in order
+
+// ── Seeded random ─────────────────────────────────────────
+function seededRandom(seed) {
+  // Simple LCG random number generator
+  let s = seed;
+  return function() {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+}
+
+function seededShuffle(arr, seed) {
+  const rand = seededRandom(seed);
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ── Start the game (write seed to Supabase) ───────────────
 async function startTableGame(tableId) {
   if (!supaClient || !supaUser) return;
   try {
-    // Mark as playing
-    await supaClient.from('friend_tables')
-      .update({ status: 'playing', started_at: new Date().toISOString() })
-      .eq('id', tableId);
-    // watchMyTable will trigger launchFriendTableGame for all players
+    // Generate a shared seed and write to table
+    const seed = Math.floor(Math.random() * 0x7fffffff);
+    await supaClient.from('friend_tables').update({
+      status: 'playing',
+      started_at: new Date().toISOString(),
+      payload: { seed, started: true }  // seed shared with all players
+    }).eq('id', tableId);
+    // watchMyTable fires for all players → launchFriendTableGame
   } catch(e) { console.warn('startTableGame:', e); }
 }
 
-// ── Watch my table for status changes ────────────────────
+// ── watchMyTable ─────────────────────────────────────────
 function watchMyTable(tableId) {
   if (_myTableWatchSub) { supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null; }
-  console.log('Watching table:', tableId);
+  console.log('watchMyTable:', tableId);
   _myTableWatchSub = supaClient
-    .channel('watch_table_' + tableId)
+    .channel('watch_' + tableId)
     .on('postgres_changes', {
       event: 'UPDATE', schema: 'public', table: 'friend_tables',
       filter: 'id=eq.' + tableId
     }, async (payload) => {
       const row = payload.new;
       if (!row) return;
-
-      // Game starting — only launch if not already in game
-      if (row.status === 'playing' && !gameActive && !_ftIsHost) {
-        console.log('Table status → playing, launching game as non-host');
-        stopTableTimer();
+      // Game just started — all players launch independently
+      if (row.status === 'playing' && !gameActive && row.payload?.seed) {
+        console.log('Game starting with seed:', row.payload.seed);
         supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null;
         closeFriendRoom();
         await launchFriendTableGame(row);
-        return;
-      }
-
-      // Host: game just started (status changed to playing) — launch host game
-      if (row.status === 'playing' && !gameActive && _ftIsHost) {
-        console.log('Table status → playing, launching game as host');
-        stopTableTimer();
-        supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null;
-        closeFriendRoom();
-        await launchFriendTableGame(row);
-        return;
-      }
-
-      // Host: already in game, process pending move
-      if (gameActive && _ftIsHost && row.pending_move) {
-        const pm = row.pending_move;
-        if (!pm.ts || Date.now() - pm.ts > 10000) return;
-        // Convert submitter's global seat to local index (local 0 = me/host = global _myGlobalSeat)
-        const globalSeat = pm.from_global_seat;
-        const localIdx = (globalSeat - _myGlobalSeat + 4) % 4;
-        console.log('Host processing move from global seat', globalSeat, '→ local', localIdx, 'currentPlayer:', currentPlayer);
-        if (localIdx !== 0 && currentPlayer === localIdx) {
-          // Clear pending move first
-          await supaClient.from('friend_tables').update({ pending_move: null }).eq('id', tableId);
-          if (pm.type === 'play') {
-            executePlay(localIdx, pm.cards, { type: pm.playType, subtype: pm.subtype||null });
-          } else if (pm.type === 'pass') {
-            doPass(localIdx);
-          }
-        } else {
-          console.log('Move ignored: wrong turn. localIdx='+localIdx+' currentPlayer='+currentPlayer);
-        }
-        return;
-      }
-
-      // Guest receives new game state
-      if (gameActive && !_ftIsHost && row.payload?.gameActive) {
-        const snap = row.payload;
-        const snapKey = snap.currentPlayer + '|' + (snap.hands||[]).map(h=>h.length).join(',');
-        if (snapKey === _lastSnapKey) return;
-        _lastSnapKey = snapKey;
-        applyFriendTableSnapshot(snap);
       }
     })
-    .subscribe(status => console.log('watchMyTable status:', status));
+    .subscribe(s => console.log('watchMyTable sub:', s));
 }
-let _lastSnapKey = null;
 
-// ── Launch game for all players ───────────────────────────
+// ── Launch game — same for ALL players ───────────────────
 async function launchFriendTableGame(table) {
   const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
-  _ftSeats = seats;
+  _ftSeats    = seats;
   _myGlobalSeat = seats.indexOf(supaUser.id); // 0-3
-  _ftIsHost = table.host_id === supaUser.id;
+  _ftSeed     = table.payload.seed;
 
   // Load usernames
   const humanIds = seats.filter(Boolean);
   let nameMap = {};
   if (humanIds.length > 0) {
-    const { data: profiles } = await supaClient.from('profiles').select('id,username').in('id', humanIds);
-    (profiles||[]).forEach(p => { nameMap[p.id] = p.username; });
+    const { data: p } = await supaClient.from('profiles').select('id,username').in('id', humanIds);
+    (p||[]).forEach(x => nameMap[x.id] = x.username);
   }
 
-  // Build seat names in global order
   const seatNames = seats.map((uid, i) => uid ? (nameMap[uid] || 'Player '+(i+1)) : 'NPC '+(i+1));
-  const npcSlots = seats.map(uid => !uid); // global: true = NPC
+  const npcSlots  = seats.map(uid => !uid);
 
+  // ── Set up game mode ──
   selectedMode = table.table_group;
-  mpGameMode = 'vs_human';
-  mpMySeat = _myGlobalSeat;
+  mpGameMode   = 'vs_human';
+  mpIsHost     = true;  // everyone is their own "host" — all run game locally
+  mpMySeat     = _myGlobalSeat;
+  mpNpcSlots   = npcSlots;
+  mpSeats      = seats.map((uid, i) => ({ name: seatNames[i], conn: null }));
 
-  // Show game screen
+  // ── Show game screen ──
   document.getElementById('splash').style.display = 'none';
-  document.getElementById('game').style.display = 'block';
+  document.getElementById('game').style.display   = 'block';
   const ff = document.getElementById('btn-forfeit');
   if (ff) ff.style.display = 'none';
 
-  // Set my name label
+  // ── Deal cards using shared seed (same on all devices) ──
+  const deck = seededShuffle(buildDeck(), _ftSeed);
+  hands = [[],[],[],[]];
+  for (let i = 0; i < 52; i++) hands[i % 4].push(deck[i]);
+  hands.forEach(h => h.sort(compareCards));
+
+  // ── Find who has 3♦ ──
+  openingPlayer = hands.findIndex(h => h.some(c => c.rank==='3' && c.suit==='♦'));
+  currentPlayer = openingPlayer;
+  passCount     = 0;
+  firstTurn     = true;
+  lastPlay      = null;
+  currentRoundPlays = [];
+  globalDiscardedCards = new Set();
+  selectedCards = [];
+  gameActive    = true;
+
+  // ── Rotate: put MY seat at index 0 ──
+  // This means hands[0] = my hand, hands[1] = right, etc.
+  if (_myGlobalSeat !== 0) {
+    const r = _myGlobalSeat;
+    hands         = [0,1,2,3].map(li => hands[(r+li)%4]);
+    currentPlayer = (currentPlayer - r + 4) % 4;
+    openingPlayer = (openingPlayer - r + 4) % 4;
+    mpNpcSlots    = [0,1,2,3].map(li => npcSlots[(r+li)%4]);
+    mpSeats       = [0,1,2,3].map(li => ({ name: seatNames[(r+li)%4], conn: null }));
+  }
+
+  // ── Set player name label ──
   const lbl = document.getElementById('player-name-label');
   if (lbl) lbl.textContent = seatNames[_myGlobalSeat];
 
-  // Set opponent zone labels (local indices 1,2,3 → global seats relative to me)
-  const zoneMap = [
-    {zoneId:'npc-right', nameId:'name-p2', localIdx:1},
-    {zoneId:'npc-top',   nameId:'name-p3', localIdx:2},
-    {zoneId:'npc-left',  nameId:'name-p4', localIdx:3},
-  ];
-  zoneMap.forEach(({nameId, localIdx}) => {
-    const globalIdx = (_myGlobalSeat + localIdx) % 4;
-    const isNpc = npcSlots[globalIdx];
-    const ne = document.getElementById(nameId);
-    if (ne) ne.textContent = (isNpc ? '🤖 ' : '👤 ') + seatNames[globalIdx];
-    const scoreEl = document.getElementById('score-p' + nameId.replace('name-p',''));
-    if (scoreEl) scoreEl.style.display = isNpc ? 'none' : 'block';
-  });
-
-  if (_ftIsHost) {
-    // Host deals, rotates state so host is local index 0, then broadcasts
-    // Set up mpNpcSlots in local order for host
-    mpNpcSlots = [0,1,2,3].map(li => npcSlots[(_myGlobalSeat+li)%4]);
-    mpSeats = [0,1,2,3].map(li => ({ name: seatNames[(_myGlobalSeat+li)%4], conn: null }));
-    mpIsHost = true;
-
-    // Deal cards
-    startGame();
-
-    // Rotate hands so host (_myGlobalSeat) is at local index 0
-    if (_myGlobalSeat !== 0) {
-      const r = _myGlobalSeat;
-      hands         = [0,1,2,3].map(li => hands[(r+li)%4]);
-      currentPlayer = (currentPlayer - r + 4) % 4;
-      openingPlayer = (openingPlayer - r + 4) % 4;
-      renderAll();
-      updateTurnIndicator();
-      setPlayerControls(isMyTurn());
-      if (!isMyTurn()) setTimeout(npcTurn, 1200);
-    }
-
-    // Broadcast initial state to all players
-    setTimeout(() => broadcastFTState(table.id), 600);
-    setTimeout(() => broadcastFTState(table.id), 1500);
-  } else {
-    // Non-host: mark game active to prevent double-launch from watchMyTable
-    mpIsHost = false;
-    gameActive = true; // prevent watchMyTable from re-launching
-    mpNpcSlots = [0,1,2,3].map(li => npcSlots[(_myGlobalSeat+li)%4]);
-    mpSeats = [0,1,2,3].map(li => ({ name: seatNames[(_myGlobalSeat+li)%4], conn: null }));
-
-    setPlayerControls(false);
-    hands = [[],[],[],[]];
-    renderAll();
-    toast('Waiting for host to deal cards…');
-
-    // Re-subscribe — watchMyTable will now route to applyFriendTableSnapshot path
-    watchMyTable(table.id);
-
-    // Immediately fetch current payload — host may have already broadcast
-    try {
-      const { data: current } = await supaClient
-        .from('friend_tables').select('payload').eq('id', table.id).single();
-      if (current?.payload?.gameActive && current.payload.hands?.some(h => h.length > 0)) {
-        console.log('Applying existing payload immediately');
-        _lastSnapKey = null; // force apply
-        applyFriendTableSnapshot(current.payload);
-      } else {
-        // Also try after a delay in case host broadcasts slightly late
-        setTimeout(async () => {
-          const { data: c2 } = await supaClient
-            .from('friend_tables').select('payload').eq('id', table.id).single();
-          if (c2?.payload?.gameActive && c2.payload.hands?.some(h => h.length > 0)) {
-            console.log('Applying payload after delay');
-            _lastSnapKey = null;
-            applyFriendTableSnapshot(c2.payload);
-          }
-        }, 1500);
-      }
-    } catch(e) { console.warn('fetchInitialPayload:', e); }
-  }
-}
-
-// ── Host broadcasts game state ────────────────────────────
-// State is ALWAYS in host-local order (local 0 = host)
-// Guests rotate from host-local to their local perspective
-async function broadcastFTState(tableId) {
-  if (!supaClient || !supaUser || !_ftIsHost) return;
-  try {
-    const snapshot = {
-      hands,               // host-local order: [0=host, 1=right, 2=top, 3=left]
-      currentPlayer,       // host-local index
-      openingPlayer,       // host-local index
-      lastPlay,
-      passCount,
-      firstTurn,
-      currentRoundPlays,
-      globalDiscardedCards: [...globalDiscardedCards],
-      gameActive,
-      mpNpcSlots,          // host-local order
-      seatNames: mpSeats.map(s => s?.name||''),  // host-local order
-      hostGlobalSeat: _myGlobalSeat  // tells guests how to rotate
-    };
-    await supaClient.from('friend_tables').update({ payload: snapshot }).eq('id', tableId);
-    console.log('Broadcasted state, CP:', currentPlayer, 'hands:', hands.map(h=>h.length));
-  } catch(e) { console.warn('broadcastFTState:', e); }
-}
-
-// ── Guest applies snapshot ────────────────────────────────
-function applyFriendTableSnapshot(snap) {
-  if (!snap || !snap.hands) return;
-  const hostGlobalSeat = snap.hostGlobalSeat ?? 0;
-  // Rotation: how many steps to shift so MY seat is at local index 0
-  // host is at hostGlobalSeat, I am at _myGlobalSeat
-  // host-local index of my seat = (_myGlobalSeat - hostGlobalSeat + 4) % 4
-  // I need to rotate by that amount to put myself at local 0
-  const myHostLocal = (_myGlobalSeat - hostGlobalSeat + 4) % 4;
-
-  console.log('Applying snapshot: hostGlobal=', hostGlobalSeat, 'myGlobal=', _myGlobalSeat, 'myHostLocal=', myHostLocal, 'snap.CP=', snap.currentPlayer);
-
-  // Rotate all arrays by myHostLocal so my seat is at index 0
-  const rot = myHostLocal;
-  hands             = [0,1,2,3].map(li => snap.hands[(rot+li)%4] || []);
-  currentPlayer     = (snap.currentPlayer - rot + 4) % 4;
-  openingPlayer     = ((snap.openingPlayer||0) - rot + 4) % 4;
-  passCount         = snap.passCount || 0;
-  firstTurn         = snap.firstTurn !== undefined ? snap.firstTurn : false;
-  lastPlay          = snap.lastPlay ? {...snap.lastPlay, playerIdx: (snap.lastPlay.playerIdx - rot + 4)%4} : null;
-  currentRoundPlays = (snap.currentRoundPlays||[]).map(p => ({...p, playerIdx:(p.playerIdx-rot+4)%4}));
-  globalDiscardedCards = new Set(snap.globalDiscardedCards||[]);
-  gameActive        = snap.gameActive;
-  mpNpcSlots        = [0,1,2,3].map(li => snap.mpNpcSlots[(rot+li)%4]);
-  // Update zone names with rotated seatNames
-  const localNames  = [0,1,2,3].map(li => snap.seatNames[(rot+li)%4] || ('Seat '+(li+1)));
-  mpSeats           = localNames.map(n => ({name:n, conn:null}));
-
-  // Update zone labels
+  // ── Set opponent zone labels ──
   [{nameId:'name-p2',li:1},{nameId:'name-p3',li:2},{nameId:'name-p4',li:3}].forEach(({nameId,li}) => {
+    const isNpc = mpNpcSlots[li];
     const ne = document.getElementById(nameId);
-    if (ne) ne.textContent = (mpNpcSlots[li] ? '🤖 ' : '👤 ') + localNames[li];
-    const scoreEl = document.getElementById('score-p' + nameId.replace('name-p',''));
-    if (scoreEl) scoreEl.style.display = mpNpcSlots[li] ? 'none' : 'block';
+    if (ne) ne.textContent = (isNpc ? '🤖 ' : '👤 ') + mpSeats[li].name;
+    const se = document.getElementById('score-p' + nameId.replace('name-p',''));
+    if (se) se.style.display = isNpc ? 'none' : 'block';
   });
 
-  selectedCards = [];
+  // ── Render initial state ──
   renderAll();
-  updateScoreboard();
-  const myTurn = currentPlayer === 0 && gameActive;
-  setPlayerControls(myTurn);
+  setPlayerControls(isMyTurn());
   updateTurnIndicator();
 
-  // Extra safety: if it's my turn, force-enable the play button
-  if (myTurn) {
-    const btnPlay = document.getElementById('btn-play');
-    const btnPass = document.getElementById('btn-pass');
-    if (btnPlay) btnPlay.disabled = false;
-    if (btnPass && lastPlay) btnPass.disabled = false;
+  // ── Subscribe to moves from other players ──
+  subscribeFTMoves(table.id);
+
+  // ── Start NPC turn if needed ──
+  if (!isMyTurn() && mpNpcSlots[currentPlayer]) {
+    setTimeout(npcTurn, 1200);
   }
 
-  console.log('Applied: localCP=', currentPlayer, 'isMyTurn=', myTurn, 'gameActive=', gameActive, 'hands=', hands.map(h=>h.length));
+  console.log('Game launched! mySeat=', _myGlobalSeat, 'CP=', currentPlayer, 'isMyTurn=', isMyTurn(), 'hand=', hands[0].length);
+  toast('🏓 Friend Table game started!');
 }
 
-// ── Guest submits move via Supabase ──────────────────────
-async function submitFriendTableMove(move) {
-  if (!supaClient || !supaUser || !_myTableId) return;
-  console.log('Submitting move:', move.type, 'from global seat', _myGlobalSeat);
+// ── Subscribe to moves ────────────────────────────────────
+function subscribeFTMoves(tableId) {
+  if (_ftMovesSub) { supaClient.removeChannel(_ftMovesSub); _ftMovesSub = null; }
+  _ftMovesSub = supaClient
+    .channel('ft_moves_' + tableId)
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'friend_table_moves',
+      filter: 'table_id=eq.' + tableId
+    }, (payload) => {
+      const move = payload.new;
+      if (!move) return;
+      // Ignore our own moves (we already applied them locally)
+      if (move.player_global_seat === _myGlobalSeat) return;
+      console.log('Received move from seat', move.player_global_seat, ':', move.type);
+      applyFTMove(move);
+    })
+    .subscribe(s => console.log('FT moves sub:', s));
+
+  // Also fetch any moves we missed since game started
+  fetchMissedMoves(tableId);
+}
+
+async function fetchMissedMoves(tableId) {
   try {
-    await supaClient.from('friend_tables').update({
-      pending_move: { ...move, from_global_seat: _myGlobalSeat, ts: Date.now() }
-    }).eq('id', _myTableId);
-  } catch(e) { console.warn('submitFriendTableMove:', e); toast('Error submitting move.'); }
+    const { data: moves } = await supaClient
+      .from('friend_table_moves')
+      .select('*')
+      .eq('table_id', tableId)
+      .order('move_number', { ascending: true });
+    (moves||[]).forEach(m => {
+      if (m.player_global_seat !== _myGlobalSeat) applyFTMove(m);
+    });
+  } catch(e) { console.warn('fetchMissedMoves:', e); }
 }
 
-// ── playerPlay / playerPass for friend table guests ──────
-// Called from playerPlay() and playerPass() in existing code
+// ── Apply a move from another player ─────────────────────
+function applyFTMove(move) {
+  if (!gameActive) return;
+  // Convert global seat to local index
+  const localIdx = (move.player_global_seat - _myGlobalSeat + 4) % 4;
+  if (currentPlayer !== localIdx) {
+    console.warn('Move out of order: expected CP='+currentPlayer+' got localIdx='+localIdx);
+    return;
+  }
+  console.log('Applying move from localIdx='+localIdx+':', move.type);
+  if (move.type === 'play') {
+    const play = { type: move.play_type, subtype: move.subtype || null };
+    executePlay(localIdx, move.cards, play);
+  } else if (move.type === 'pass') {
+    doPass(localIdx);
+  }
+}
+
+// ── Publish my move to Supabase ───────────────────────────
+let _ftMoveNumber = 0;
+
+async function publishFTMove(move) {
+  if (!supaClient || !supaUser || !_myTableId) return;
+  _ftMoveNumber++;
+  try {
+    await supaClient.from('friend_table_moves').insert({
+      table_id:           _myTableId,
+      player_global_seat: _myGlobalSeat,
+      move_number:        _ftMoveNumber,
+      type:               move.type,
+      cards:              move.cards || null,
+      play_type:          move.playType || null,
+      subtype:            move.subtype || null,
+      ts:                 Date.now()
+    });
+    console.log('Published move:', move.type, 'moveNum:', _ftMoveNumber);
+  } catch(e) { console.warn('publishFTMove:', e); toast('Move sync error — try again'); }
+}
+
+// ── Player plays (local + publish) ───────────────────────
 function ftGuestPlay(cards, play) {
-  submitFriendTableMove({
-    type: 'play',
-    cards,
-    playType: play.type,
-    subtype: play.subtype || null
-  });
-  selectedCards = [];
-  setPlayerControls(false);
-  renderHand();
+  // Execute locally immediately
+  executePlay(0, cards, play);
+  // Publish to other players
+  publishFTMove({ type:'play', cards, playType: play.type, subtype: play.subtype||null });
 }
 
 function ftGuestPass() {
-  submitFriendTableMove({ type: 'pass' });
-  setPlayerControls(false);
+  // Execute locally immediately
+  doPass(0);
+  // Publish to other players
+  publishFTMove({ type:'pass' });
 }
+
+// ── Override playerPlay/playerPass for friend table ───────
+// All players (not just guests) publish moves in friend table mode
 
 // ── Timer ─────────────────────────────────────────────────
 function startTableTimer(table) {
