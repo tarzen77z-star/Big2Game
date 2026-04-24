@@ -3457,7 +3457,15 @@ function renderDiscardPile() {
     return;
   }
 
-  const shortNames = ['You', 'P2', 'P3', 'P4'];
+  // In MP Friend Room, use real player names; otherwise use defaults
+  const shortNames = [0,1,2,3].map(i => {
+    if (i === 0) return 'You';
+    if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
+      const globalSeat = (mpMySeat + i) % 4;
+      return mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('P' + (i + 1));
+    }
+    return ['You','Ace','Rex','Ivy'][i];
+  });
   const isSingleRound = currentRoundPlays.every(p => p.type === 'single');
 
   if (isSingleRound) {
