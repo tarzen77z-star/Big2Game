@@ -3707,16 +3707,20 @@ function playerPlay() {
   }
 
   if (mpGameMode === 'vs_human' && !mpIsHost) {
-    // Guest: send to host and wait for sync — don't execute locally
-    const msg = {type:'play', seat:mpMySeat, cards:[...selectedCards], playType:play.type, subtype:play.subtype};
-    if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
+    if (_myTableId) {
+      // Friend table guest: submit move via Supabase
+      submitFriendTableMove({ type:'play', cards:[...selectedCards], playType:play.type, subtype:play.subtype||null });
+    } else {
+      // PeerJS guest: send to host
+      const msg = {type:'play', seat:mpMySeat, cards:[...selectedCards], playType:play.type, subtype:play.subtype};
+      if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
+    }
     selectedCards = [];
-    setPlayerControls(false); // disable while waiting for host sync
-    renderHand();             // clear card selection visual
-    toast('Waiting for host…');
+    setPlayerControls(false);
+    renderHand();
     return;
   }
-  // Single-player or host: execute locally (sync happens inside executePlay)
+  // Single-player or host: execute locally
   executePlay(0, selectedCards, play);
 }
 
@@ -6605,6 +6609,19 @@ async function launchFriendTableGame(table) {
 let _friendTableGameSub = null;
 let _friendTableHostRotation = 0; // how much host rotated hands
 
+
+// ── Friend table: non-host submits a move via Supabase ──────
+async function submitFriendTableMove(move) {
+  if (!supaClient || !supaUser || !_myTableId) return;
+  try {
+    // Write pending move to friend_tables.pending_move
+    await supaClient.from('friend_tables')
+      .update({ pending_move: { ...move, from_seat: mpMySeat, ts: Date.now() } })
+      .eq('id', _myTableId);
+    toast('Move submitted…');
+  } catch(e) { console.warn('submitFriendTableMove:', e); }
+}
+
 // ── Broadcast game state to friend table players via Supabase ──
 async function broadcastFriendTableState(tableId) {
   if (!supaClient || !supaUser || !mpIsHost) return;
@@ -6812,6 +6829,31 @@ function watchMyTable(tableId) {
         closeFriendRoom();
         if (_myTableWatchSub) { supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null; }
         launchFriendTableGame(row);
+      }
+      // Host processes pending move from a guest
+      if (mpIsHost && row && row.pending_move && gameActive) {
+        const pm = row.pending_move;
+        // Check it's recent (within 10 seconds) and from correct player
+        if (pm.ts && Date.now() - pm.ts < 10000) {
+          // Convert global seat to local index
+          const localIdx = (pm.from_seat - mpMySeat + 4) % 4; // wait — guest local is mpMySeat rotation
+          // Guest submitted from their local 0 → their global seat
+          const guestGlobalSeat = pm.from_seat;
+          const hostLocalIdx = (guestGlobalSeat - (mpMySeat - _friendTableHostRotation + 4) % 4 + 4) % 4;
+          // Simpler: guest is always the non-zero human seat in local space
+          // Find which local seat corresponds to the guest
+          const guestLocal = [0,1,2,3].find(li => li!==0 && !mpNpcSlots[li] && (mpMySeat+li)%4===pm.from_seat);
+          if (guestLocal !== undefined && currentPlayer === guestLocal) {
+            // Clear pending move first to avoid re-processing
+            supaClient.from('friend_tables').update({ pending_move: null }).eq('id', _myTableId).then(()=>{});
+            if (pm.type === 'play') {
+              const reconstructedPlay = { type: pm.playType, subtype: pm.subtype };
+              executePlay(guestLocal, pm.cards, reconstructedPlay);
+            } else if (pm.type === 'pass') {
+              doPass(guestLocal);
+            }
+          }
+        }
       }
     })
     .subscribe((status) => console.log('My table watch status:', status));
