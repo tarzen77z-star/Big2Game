@@ -3907,7 +3907,6 @@ function executePlay(playerIdx, cards, play) {
   saveGameState();
   renderAll(); // show the card on the pile first
   if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFriendTableState(_myTableId);
 
   if (powerPlay) {
     // After a short delay, clear the pile and let player play again
@@ -3967,6 +3966,7 @@ function doPass(playerIdx) {
   saveGameState();
   renderAll();
   if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+  if (mpGameMode === 'vs_human' && mpIsHost && _myTableId) broadcastFriendTableState(_myTableId);
   if (!isMyTurn()) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
