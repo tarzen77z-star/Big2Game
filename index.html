@@ -6493,6 +6493,15 @@ async function startTableNow(tableId) {
     const { data: table } = await supaClient
       .from('friend_tables').select('*').eq('id', tableId).single();
 
+    // Determine if we're host BEFORE any async operations
+    const iAmHost = table.host_id === supaUser.id;
+
+    // Cancel watchMyTable BEFORE updating status to avoid double-launch
+    if (_myTableWatchSub) {
+      supaClient.removeChannel(_myTableWatchSub);
+      _myTableWatchSub = null;
+    }
+
     // Mark as playing
     await supaClient.from('friend_tables').update({
       status: 'playing', started_at: new Date().toISOString()
@@ -6500,7 +6509,23 @@ async function startTableNow(tableId) {
 
     stopTableTimer();
     closeFriendRoom();
-    launchFriendTableGame(table);
+
+    // Only host launches from startTableNow — non-host gets triggered by watchMyTable
+    if (iAmHost) {
+      launchFriendTableGame(table);
+    }
+    // Non-host: watchMyTable was already cancelled above, re-subscribe
+    // so they can still receive the status change if it hasn't fired yet
+    else {
+      // Brief delay then re-check if game launched
+      setTimeout(async () => {
+        if (!gameActive) {
+          const { data: current } = await supaClient
+            .from('friend_tables').select('*').eq('id', tableId).single();
+          if (current?.status === 'playing') launchFriendTableGame(current);
+        }
+      }, 300);
+    }
   } catch(e) { console.warn('startTableNow:', e); }
 }
 
@@ -6824,6 +6849,8 @@ function watchMyTable(tableId) {
       const row = payload.new;
       console.log('My table updated:', row?.status, 'mpIsHost:', mpIsHost);
       if (row && row.status === 'playing' && !mpIsHost) {
+        // Only launch if not already in a game
+        if (gameActive) return;
         console.log('Game started! Launching for non-host player');
         stopTableTimer();
         closeFriendRoom();
