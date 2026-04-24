@@ -3714,6 +3714,7 @@ function playerPlay() {
 
   if (mpGameMode === 'vs_human' && !mpIsHost) {
     if (_myTableId) {
+      console.log('Guest playing:', play, 'cards:', selectedCards.length, 'myTurn:', isMyTurn(), 'CP:', currentPlayer);
       ftGuestPlay([...selectedCards], play);
     } else {
       const msg = {type:'play', seat:mpMySeat, cards:[...selectedCards], playType:play.type, subtype:play.subtype};
@@ -6832,7 +6833,15 @@ function applyFriendTableSnapshot(snap) {
   setPlayerControls(myTurn);
   updateTurnIndicator();
 
-  console.log('Applied: localCP=', currentPlayer, 'isMyTurn=', myTurn, 'hands=', hands.map(h=>h.length));
+  // Extra safety: if it's my turn, force-enable the play button
+  if (myTurn) {
+    const btnPlay = document.getElementById('btn-play');
+    const btnPass = document.getElementById('btn-pass');
+    if (btnPlay) btnPlay.disabled = false;
+    if (btnPass && lastPlay) btnPass.disabled = false;
+  }
+
+  console.log('Applied: localCP=', currentPlayer, 'isMyTurn=', myTurn, 'gameActive=', gameActive, 'hands=', hands.map(h=>h.length));
 }
 
 // ── Guest submits move via Supabase ──────────────────────
