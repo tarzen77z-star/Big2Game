@@ -6700,6 +6700,18 @@ async function launchFriendTableGame(table) {
     // Deal cards
     startGame();
 
+    // Rotate hands so host (_myGlobalSeat) is at local index 0
+    if (_myGlobalSeat !== 0) {
+      const r = _myGlobalSeat;
+      hands         = [0,1,2,3].map(li => hands[(r+li)%4]);
+      currentPlayer = (currentPlayer - r + 4) % 4;
+      openingPlayer = (openingPlayer - r + 4) % 4;
+      renderAll();
+      updateTurnIndicator();
+      setPlayerControls(isMyTurn());
+      if (!isMyTurn()) setTimeout(npcTurn, 1200);
+    }
+
     // Broadcast initial state to all players
     setTimeout(() => broadcastFTState(table.id), 600);
     setTimeout(() => broadcastFTState(table.id), 1500);
