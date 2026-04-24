@@ -6739,6 +6739,28 @@ async function launchFriendTableGame(table) {
 
     // Re-subscribe — watchMyTable will now route to applyFriendTableSnapshot path
     watchMyTable(table.id);
+
+    // Immediately fetch current payload — host may have already broadcast
+    try {
+      const { data: current } = await supaClient
+        .from('friend_tables').select('payload').eq('id', table.id).single();
+      if (current?.payload?.gameActive && current.payload.hands?.some(h => h.length > 0)) {
+        console.log('Applying existing payload immediately');
+        _lastSnapKey = null; // force apply
+        applyFriendTableSnapshot(current.payload);
+      } else {
+        // Also try after a delay in case host broadcasts slightly late
+        setTimeout(async () => {
+          const { data: c2 } = await supaClient
+            .from('friend_tables').select('payload').eq('id', table.id).single();
+          if (c2?.payload?.gameActive && c2.payload.hands?.some(h => h.length > 0)) {
+            console.log('Applying payload after delay');
+            _lastSnapKey = null;
+            applyFriendTableSnapshot(c2.payload);
+          }
+        }, 1500);
+      }
+    } catch(e) { console.warn('fetchInitialPayload:', e); }
   }
 }
 
