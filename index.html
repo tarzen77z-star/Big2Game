@@ -3994,20 +3994,18 @@ function advanceTurn(fromPlayer) {
 // ════════════════════════════════════════
 // Is it the local human player's turn?
 function isMyTurn() {
-  // In friend table: host might not be seat 0
-  if (mpGameMode === 'vs_human') return currentPlayer === mpMySeat;
-  return currentPlayer === 0; // isMyTurn handles MP
+  // After rotation, local index 0 is ALWAYS the local player
+  return currentPlayer === 0;
 }
+
 
 function npcTurn() {
   if (!gameActive) return;
   // In MP: guests never run NPC AI — host is authoritative
   if (mpGameMode === 'vs_human' && !mpIsHost) return;
-  // Determine whose turn it is — in friend table, host may not be seat 0
-  const hostLocalPlayer = mpGameMode === 'vs_human' ? mpMySeat : 0;
-  // Skip if it's the host's own turn (they play manually)
-  if (currentPlayer === hostLocalPlayer) return;
-  // In MP host: skip remote human slots (non-NPC)
+  // After rotation, local index 0 is always the human player — skip if their turn
+  if (currentPlayer === 0) return;
+  // Skip remote human slots (non-NPC) in MP
   if (mpGameMode === 'vs_human' && mpIsHost && !mpNpcSlots[currentPlayer]) return;
 
   const idx = currentPlayer;
@@ -5922,17 +5920,41 @@ async function loadFriendsList() {
     // Get the other user IDs
     const friendIds = fs.map(f => f.user_id === supaUser.id ? f.friend_id : f.user_id);
 
-    // Load profiles + scores
+    // Load profiles + scores + table status
     const { data: profiles } = await supaClient
       .from('profiles')
       .select('id, username, is_online, last_active')
       .in('id', friendIds);
 
-    // Load rank scores (mode bests) from player_scores
+    // Load rank scores
     const { data: scores } = await supaClient
       .from('player_scores')
       .select('user_id, mode, mode_best')
       .in('user_id', friendIds);
+
+    // Load active tables to show which friends are seated
+    const { data: activeTables } = await supaClient
+      .from('friend_tables')
+      .select('id, table_group, seat_1, seat_2, seat_3, seat_4, status')
+      .in('status', ['waiting','playing']);
+    // Build map: userId → { tableGroup, tableNum, status }
+    const friendTableMap = {};
+    (activeTables||[]).forEach(t => {
+      const seats = [t.seat_1, t.seat_2, t.seat_3, t.seat_4];
+      const humanCount = seats.filter(Boolean).length;
+      seats.forEach((uid, i) => {
+        if (uid && friendIds.includes(uid)) {
+          friendTableMap[uid] = {
+            group: t.table_group,
+            seat: i+1,
+            status: t.status,
+            tableId: t.id,
+            humanCount,
+            npcCount: seats.filter(s=>!s).length
+          };
+        }
+      });
+    });
 
     const rsMap = buildRsMap(scores);
 
@@ -5949,11 +5971,29 @@ async function loadFriendsList() {
 
     el.innerHTML = profiles.map(p => {
       const rs = rsMap[p.id] || 0;
+      const tableInfo = friendTableMap[p.id];
       const onlineStr = p.is_online
         ? '<span class="friend-online">● Online</span>'
         : '<span class="friend-offline">Last seen ' + timeAgo(p.last_active) + '</span>';
-      const btn = `<button class="friend-action-btn danger" onclick="removeFriend('${p.id}','${p.username}')">Remove</button>`;
-      return renderFriendRow(p, rs, btn, onlineStr);
+
+      // Table status label
+      let tableStr = '';
+      if (tableInfo) {
+        const grpLabel = {beginner:'🌱',intermediate:'🥉',hard:'🥈',pro:'🥇'}[tableInfo.group]||'🏓';
+        const statusLabel = tableInfo.status==='playing' ? '🎮 Playing' : '⏳ Waiting';
+        const npcLabel = tableInfo.npcCount > 0 ? ` · ${tableInfo.npcCount} NPC slot${tableInfo.npcCount>1?'s':''}` : '';
+        tableStr = `<span style="color:rgba(100,220,120,0.9);font-size:0.7rem;margin-left:4px">${grpLabel} ${statusLabel}${npcLabel}</span>`;
+      }
+
+      const statusHtml = onlineStr + tableStr;
+      const joinBtn = (tableInfo && tableInfo.status==='waiting' && tableInfo.npcCount>0 && !_myTableId)
+        ? `<button class="friend-action-btn accept" onclick="openFriendRoom();friendSwitchTab('tables');" style="white-space:nowrap;font-size:0.7rem;">Join Table</button>`
+        : '';
+      const removeBtn = `<button class="friend-action-btn danger" onclick="removeFriend('${p.id}','${p.username}')">Remove</button>`;
+      const btn = joinBtn
+        ? `<div style="display:flex;gap:4px;flex-shrink:0">${joinBtn}${removeBtn}</div>`
+        : removeBtn;
+      return renderFriendRow(p, rs, btn, statusHtml);
     }).join('');
   } catch(e) {
     el.innerHTML = '<div class="friend-status-msg">Error loading friends.</div>';
@@ -6157,7 +6197,9 @@ function subscribeToNotifications() {
     }, (payload) => {
       const n = payload.new;
       if (!n || n.read) return;
+      // Don't show table notification if already seated at a table
       if (n.type === 'table_started') {
+        if (_myTableId) return; // already at a table — ignore
         const name = n.payload?.host_name || 'A friend';
         const grp  = n.payload?.group || 'beginner';
         showTableInviteToast(name, grp, n.payload?.table_id, n.id);
@@ -6691,20 +6733,32 @@ async function notifyFriendsTableStarted(tableId) {
       .eq('status', 'accepted')
       .or('user_id.eq.'+supaUser.id+',friend_id.eq.'+supaUser.id);
     const friendIds = (fs||[]).map(f => f.user_id === supaUser.id ? f.friend_id : f.user_id);
+    if (!friendIds.length) return;
 
-    // Insert notification for each friend
+    // Find friends already seated at ANY active table — don't notify them
+    const { data: activeTables } = await supaClient
+      .from('friend_tables')
+      .select('seat_1, seat_2, seat_3, seat_4')
+      .eq('status', 'waiting');
+    const seatedUsers = new Set();
+    (activeTables||[]).forEach(t => {
+      [t.seat_1, t.seat_2, t.seat_3, t.seat_4].forEach(uid => { if (uid) seatedUsers.add(uid); });
+    });
+
+    // Only notify friends who are NOT already at a table (and not yourself)
+    const toNotify = friendIds.filter(fid => !seatedUsers.has(fid));
+    if (!toNotify.length) return;
+
     const myName = playerCustomName || supaUser.user_metadata?.username || 'A friend';
-    const notifs = friendIds.map(fid => ({
+    const notifs = toNotify.map(fid => ({
       sender_id:    supaUser.id,
       recipient_id: fid,
       type:         'table_started',
       payload:      { table_id: tableId, group: _currentTableGroup, host_name: myName }
     }));
-    if (notifs.length > 0) {
-      const { error } = await supaClient.from('friend_notifications').insert(notifs);
-      if (error) console.warn('notifyFriends insert error:', error);
-      else console.log('Notified', notifs.length, 'friends');
-    }
+    const { error } = await supaClient.from('friend_notifications').insert(notifs);
+    if (error) console.warn('notifyFriends insert error:', error);
+    else console.log('Notified', notifs.length, 'friends (excluded', friendIds.length - toNotify.length, 'already seated)');
   } catch(e) { console.warn('notifyFriends:', e); }
 }
 
@@ -6788,8 +6842,8 @@ async function pollFriendNotifications() {
     const badge = document.getElementById('friend-notif-badge');
     if (badge) { badge.style.display = 'inline'; badge.textContent = data.length; }
 
-    // Show toast for table_started notifications
-    data.filter(n => n.type === 'table_started').forEach(n => {
+    // Show toast for table_started notifications (only if not already at a table)
+    data.filter(n => n.type === 'table_started' && !_myTableId).forEach(n => {
       const name = n.payload?.host_name || 'A friend';
       const grp  = n.payload?.group || 'beginner';
       showTableInviteToast(name, grp, n.payload?.table_id, n.id);
