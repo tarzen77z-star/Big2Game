@@ -6829,25 +6829,26 @@ function applyFTState(state) {
 
   if (!gameActive) return; // game ended
 
+  // The broadcaster always runs the full NPC chain before broadcasting,
+  // so currentPlayer here is always a human (us or the other player).
   if (isMyTurn()) {
     setPlayerControls(true);
-    updateTurnIndicator();
-  } else if (mpNpcSlots[currentPlayer]) {
-    // NPC turn — run locally and we will broadcast after
-    setPlayerControls(false);
-    updateTurnIndicator();
-    const token = ++mpTurnToken;
-    setTimeout(() => {
-      if (mpTurnToken === token) npcTurn();
-    }, 1000 + Math.random() * 600);
   } else {
-    // Another human player's turn — wait for their broadcast
     setPlayerControls(false);
-    updateTurnIndicator();
   }
+  updateTurnIndicator();
 }
 
-async function broadcastFTState() {
+let _ftBroadcastTimer = null;
+
+function broadcastFTState() {
+  // Debounce: if called multiple times rapidly (e.g. NPC chain), only send the final state
+  if (_ftBroadcastTimer) clearTimeout(_ftBroadcastTimer);
+  _ftBroadcastTimer = setTimeout(_dobroadcastFTState, 50);
+}
+
+async function _dobroadcastFTState() {
+  _ftBroadcastTimer = null;
   if (!supaClient || !supaUser || !_myTableId) return;
 
   // Build state in GLOBAL seat order so all players can apply it correctly
