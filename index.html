@@ -6597,9 +6597,9 @@ function watchMyTable(tableId) {
       const row = payload.new;
       if (!row) return;
 
-      // Game starting
-      if (row.status === 'playing' && !gameActive) {
-        console.log('Table status → playing, launching game');
+      // Game starting — only launch if not already in game
+      if (row.status === 'playing' && !gameActive && !_ftIsHost) {
+        console.log('Table status → playing, launching game as non-host');
         stopTableTimer();
         supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null;
         closeFriendRoom();
@@ -6607,7 +6607,17 @@ function watchMyTable(tableId) {
         return;
       }
 
-      // Host processes pending move during game
+      // Host: game just started (status changed to playing) — launch host game
+      if (row.status === 'playing' && !gameActive && _ftIsHost) {
+        console.log('Table status → playing, launching game as host');
+        stopTableTimer();
+        supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null;
+        closeFriendRoom();
+        await launchFriendTableGame(row);
+        return;
+      }
+
+      // Host: already in game, process pending move
       if (gameActive && _ftIsHost && row.pending_move) {
         const pm = row.pending_move;
         if (!pm.ts || Date.now() - pm.ts > 10000) return;
@@ -6716,19 +6726,18 @@ async function launchFriendTableGame(table) {
     setTimeout(() => broadcastFTState(table.id), 600);
     setTimeout(() => broadcastFTState(table.id), 1500);
   } else {
-    // Non-host: set up local state from global seat order
-    // mpNpcSlots and mpSeats will be set by applyFriendTableSnapshot
+    // Non-host: mark game active to prevent double-launch from watchMyTable
     mpIsHost = false;
+    gameActive = true; // prevent watchMyTable from re-launching
     mpNpcSlots = [0,1,2,3].map(li => npcSlots[(_myGlobalSeat+li)%4]);
     mpSeats = [0,1,2,3].map(li => ({ name: seatNames[(_myGlobalSeat+li)%4], conn: null }));
 
     setPlayerControls(false);
-    // Render placeholder zones
     hands = [[],[],[],[]];
     renderAll();
     toast('Waiting for host to deal cards…');
 
-    // Re-subscribe to watch for game state updates
+    // Re-subscribe — watchMyTable will now route to applyFriendTableSnapshot path
     watchMyTable(table.id);
   }
 }
