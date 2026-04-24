@@ -3181,6 +3181,7 @@ function startGame() {
   clearGameState();
   discardPile = [];
   currentRoundPlays = [];
+  _ftActedThisRound.clear();
   globalDiscardedCards = new Set();
   lastPlay = null;
   passCount = 0;
@@ -3873,6 +3874,7 @@ function executePlay(playerIdx, cards, play) {
   discardPile.push([...cards]);
   if (discardPile.length > 20) discardPile.shift();
   currentRoundPlays.push({ cards:[...cards], playerIdx, type: play.type, subtype: play.subtype });
+  if (_myTableId) _ftActedThisRound.add(playerIdx);
   // Track all discarded cards for NPC card counting
   cards.forEach(c => globalDiscardedCards.add(cardKey(c)));
   // Track rounds (each new pile is a round for clean sweep)
@@ -3931,6 +3933,7 @@ function executePlay(playerIdx, cards, play) {
       lastPlay = null;
       passCount = 0;
       currentRoundPlays = [];
+  _ftActedThisRound.clear();
       currentPlayer = playerIdx;
       renderDiscardPile();
       document.getElementById('last-play-info').textContent = 'New round – play anything!';
@@ -3974,12 +3977,15 @@ function executePlay(playerIdx, cards, play) {
     setPlayerControls(true);
     updateTurnIndicator();
     if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync();
+    // In FT mode, drain queue in case any moves arrived while we were processing NPCs
+    if (_myTableId) drainFTMoveQueue();
   }
 }
 
 function doPass(playerIdx) {
   passCount++;
   toast(playerName(playerIdx) + ' passes');
+  if (_myTableId) _ftActedThisRound.add(playerIdx);
   advanceTurn(playerIdx);
 
   const activePlayers = hands.filter(h=>h.length>0).length;
@@ -3989,6 +3995,7 @@ function doPass(playerIdx) {
     lastPlay = null;
     passCount = 0;
     currentRoundPlays = [];
+  _ftActedThisRound.clear();
     toast(playerName(currentPlayer) + ' controls the pile!');
     document.getElementById('last-play-info').textContent = 'New round – play anything!';
   }
@@ -4018,6 +4025,8 @@ function doPass(playerIdx) {
     setPlayerControls(true);
     updateTurnIndicator();
     if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync();
+    // In FT mode, drain queue in case any moves arrived while we were processing NPCs
+    if (_myTableId) drainFTMoveQueue();
   }
 }
 
@@ -6620,6 +6629,7 @@ let _ftSeed        = 0;      // shared random seed for dealing
 let _ftMovesSub    = null;   // realtime subscription for moves
 let _ftLastMoveTs  = 0;      // last processed move timestamp
 let _ftMoveQueue   = [];     // queue of moves to process in order
+let _ftActedThisRound = new Set(); // local indices that acted since last round clear
 
 // ── Seeded random ─────────────────────────────────────────
 function seededRandom(seed) {
@@ -6724,11 +6734,13 @@ async function launchFriendTableGame(table) {
   firstTurn     = true;
   lastPlay      = null;
   currentRoundPlays = [];
+  _ftActedThisRound.clear();
   globalDiscardedCards = new Set();
   selectedCards = [];
   gameActive    = true;
   _ftMoveQueue.length = 0;  // clear any queued moves from previous game
   _ftAppliedMoveIds.clear();
+  _ftActedThisRound.clear();
   _ftMoveNumber = 0;
 
   // ── Rotate: put MY seat at index 0 ──
@@ -6823,6 +6835,31 @@ function applyFTMove(move) {
 
 function drainFTMoveQueue() {
   if (!gameActive) return;
+
+  // First, purge any moves whose sender's turn has already passed.
+  // This can happen when a move arrives late (after NPCs ran and advanced the turn).
+  // We track which players have already had their turn this round using passCount/lastPlay context.
+  // Simplest safe rule: if a queued move's localIdx is not currentPlayer AND
+  // currentPlayer has already advanced past it, drop it.
+  // We detect "passed" by checking: is there already a record of this player's action in
+  // currentRoundPlays or passCount? Instead, use a simpler heuristic:
+  // if the move's localIdx has already been superseded (currentPlayer has moved on
+  // and the move's sender is not currentPlayer and not upcoming), discard.
+  // Safest: drop moves older than the current round (their player already acted).
+  _ftMoveQueue = _ftMoveQueue.filter(move => {
+    const localIdx = (move.player_global_seat - _myGlobalSeat + 4) % 4;
+    // Keep if it's this player's turn now
+    if (localIdx === currentPlayer) return true;
+    // Drop if this player already acted this round (played or passed)
+    if (_ftActedThisRound.has(localIdx)) {
+      console.log('FT: dropping stale move from localIdx='+localIdx+' (already acted this round)');
+      const moveId = move.id || (move.player_global_seat + '_' + move.move_number);
+      _ftAppliedMoveIds.add(moveId);
+      return false;
+    }
+    return true; // keep — may be needed later (e.g. arrived before NPC chain finished)
+  });
+
   let progress = true;
   while (progress && _ftMoveQueue.length > 0) {
     progress = false;
