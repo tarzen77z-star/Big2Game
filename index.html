@@ -3520,12 +3520,18 @@ function buildPlayCard(card) {
 function updateTurnIndicator() {
   const extra = firstTurn ? ' – must include 3♦' : '';
   if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
-    const names = [0,1,2,3].map(i => {
-      const si = (mpMySeat + i) % 4;
-      const n = mpSeats[si] ? mpSeats[si].name : 'Player '+(i+1);
-      return i === 0 ? 'Your turn' : n + "'s turn";
+    // Build names in local order [0=me, 1=right, 2=top, 3=left]
+    // Use localSeatNames if available (set by applyFriendTableSnapshot), else derive from mpSeats
+    const localNames = [0,1,2,3].map(localIdx => {
+      if (localIdx === 0) return 'Your turn';
+      // For host: _friendTableHostRotation rotates mpSeats to local
+      // For guest: mpMySeat rotates host-local mpSeats to guest-local
+      const rotation = mpIsHost ? 0 : mpMySeat;
+      const hostLocalIdx = (localIdx + rotation) % 4;
+      const name = mpSeats[hostLocalIdx]?.name || ('Player '+(hostLocalIdx+1));
+      return name + "'s turn";
     });
-    document.getElementById('turn-indicator').textContent = names[currentPlayer] + extra;
+    document.getElementById('turn-indicator').textContent = localNames[currentPlayer] + extra;
     return;
   }
   const names = [playerCustomName+"'s turn",'Ace\'s turn','Rex\'s turn','Ivy\'s turn'];
@@ -6803,7 +6809,7 @@ async function broadcastFriendTableState(tableId) {
       globalDiscardedCards: [...globalDiscardedCards],
       gameActive,
       mpNpcSlots: globalNpc,
-      seatNames: [0,1,2,3].map(li => mpSeats[(4-r+li)%4]?.name || ('Player '+(li+1)))
+      seatNames: mpSeats.map((s,i) => s?.name || ('Player '+(i+1))) // host-local order
     };
     await supaClient.from('friend_tables')
       .update({ payload: snapshot })
@@ -6860,15 +6866,22 @@ function applyFriendTableSnapshot(snap, tableId) {
     mpNpcSlots = [0,1,2,3].map(li => snap.mpNpcSlots[(rotation+li)%4]);
   }
 
-  // Update zone labels from snapshot (seatNames in local order)
+  // Update zone labels from snapshot — rotate seatNames to guest-local order
   if (snap.seatNames) {
+    // snap.seatNames is in host-local order; rotate to our local order
+    const localSeatNames = [0,1,2,3].map(li => {
+      // our local li = host-local (li + mpMySeat) % 4  (un-rotate from our perspective)
+      // host-local index for our local li:
+      const hostLocal = (li + rotation) % 4;
+      return snap.seatNames[hostLocal] || ('Player '+(li+1));
+    });
     const zoneMap2 = [
       {nameId:'name-p2', localIdx:1},
       {nameId:'name-p3', localIdx:2},
       {nameId:'name-p4', localIdx:3},
     ];
     zoneMap2.forEach(({nameId, localIdx}) => {
-      const seatName = snap.seatNames[localIdx] || ('Player '+(localIdx+1));
+      const seatName = localSeatNames[localIdx];
       const isNpc2 = mpNpcSlots[localIdx] === true;
       const ne2 = document.getElementById(nameId);
       if (ne2) ne2.textContent = (isNpc2 ? '🤖 ' : '👤 ') + seatName;
