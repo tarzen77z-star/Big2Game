@@ -6365,8 +6365,9 @@ function renderTableCard(t, tableNum, seats, profileMap, isMyTable) {
   }).join('');
 
   const occupants = seats.filter(Boolean).length;
-  const startBtn = isMyTable && occupants >= 1
-    ? `<button class="btn-table-start" onclick="startTableNow('${t.id}')">▶ Start Now</button>`
+  // Show Ready button for all seated players (not just host)
+  const startBtn = isMyTable
+    ? `<button class="btn-table-start" id="ready-btn-${t.id}" onclick="voteReady('${t.id}')">✓ Ready</button>`
     : '';
 
   return `<div class="friend-table-card ${isMyTable ? 'my-table' : ''}">
@@ -6378,7 +6379,7 @@ function renderTableCard(t, tableNum, seats, profileMap, isMyTable) {
       <div class="table-circle">TABLE<br>${tableNum}</div>
       <div class="table-seats">${seatHtml}</div>
     </div>
-    ${isMyTable ? '<div class="table-timer" id="table-timer-'+t.id+'">⏱ Starting in 60s</div>' : ''}
+    ${isMyTable ? '<div class="table-timer" id="table-timer-'+t.id+'">⏱ Starting in 60s · tap Ready when set</div>' : ''}
     <div class="table-actions">${startBtn}</div>
   </div>`;
 }
@@ -6487,6 +6488,57 @@ async function leaveCurrentTable() {
 }
 
 // ── Start table now ───────────────────────────────────────
+
+// ── Ready voting system ───────────────────────────────────
+async function voteReady(tableId) {
+  if (!supaClient || !supaUser || !_myTableId) return;
+  const btn = document.getElementById('ready-btn-' + tableId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Waiting…'; btn.style.opacity='0.6'; }
+
+  try {
+    // Fetch current table state
+    const { data: table } = await supaClient
+      .from('friend_tables').select('*').eq('id', tableId).single();
+    if (!table) return;
+
+    // Add my vote to ready_votes array
+    const votes = table.ready_votes || [];
+    if (!votes.includes(supaUser.id)) votes.push(supaUser.id);
+
+    // Count seated humans
+    const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
+    const humanSeats = seats.filter(Boolean);
+    const allReady = humanSeats.every(uid => votes.includes(uid));
+
+    if (allReady) {
+      // All players ready — start game
+      await supaClient.from('friend_tables')
+        .update({ ready_votes: votes })
+        .eq('id', tableId);
+      await startTableNow(tableId);
+    } else {
+      // Save vote, wait for others
+      await supaClient.from('friend_tables')
+        .update({ ready_votes: votes })
+        .eq('id', tableId);
+      toast('Ready! Waiting for ' + (humanSeats.length - votes.length) + ' more player(s)…');
+    }
+  } catch(e) { console.warn('voteReady:', e); }
+}
+
+// ── Timer forced start (host only, no vote needed) ─────────
+async function timerForceStart(tableId) {
+  if (!supaClient || !supaUser) return;
+  // Only the host (seat creator) triggers forced start
+  const { data: table } = await supaClient
+    .from('friend_tables').select('*').eq('id', tableId).single();
+  if (!table) return;
+  if (table.host_id === supaUser.id) {
+    await startTableNow(tableId);
+  }
+  // Non-host: watchMyTable will handle it when host starts
+}
+
 async function startTableNow(tableId) {
   if (!supaClient || !supaUser) return;
   try {
@@ -6756,7 +6808,7 @@ function startTableTimer(table) {
     if (timerEl) timerEl.textContent = '⏱ Starting in ' + _timerSeconds + 's';
     if (_timerSeconds <= 0) {
       stopTableTimer();
-      if (_myTableId === table.id) startTableNow(table.id);
+      if (_myTableId === table.id) timerForceStart(table.id);
     }
   }, 1000);
 }
@@ -6856,6 +6908,20 @@ function watchMyTable(tableId) {
         closeFriendRoom();
         if (_myTableWatchSub) { supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null; }
         launchFriendTableGame(row);
+      }
+      // Host: check if all players voted ready
+      if (!gameActive && row && row.ready_votes) {
+        (async () => {
+          const { data: freshTable } = await supaClient
+            .from('friend_tables').select('*').eq('id', _myTableId).single();
+          if (freshTable) {
+            const seats = [freshTable.seat_1,freshTable.seat_2,freshTable.seat_3,freshTable.seat_4].filter(Boolean);
+            const votes = freshTable.ready_votes || [];
+            if (seats.length > 0 && seats.every(uid => votes.includes(uid)) && freshTable.status === 'waiting') {
+              await startTableNow(_myTableId);
+            }
+          }
+        })();
       }
       // Host processes pending move from a guest
       if (mpIsHost && row && row.pending_move && gameActive) {
