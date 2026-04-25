@@ -6698,10 +6698,19 @@ function watchMyTable(tableId) {
 
 // ── Launch game — same for ALL players ───────────────────
 async function launchFriendTableGame(table) {
+  // Always fetch fresh row — realtime payload.new may be missing columns
+  // if REPLICA IDENTITY is not FULL
+  try {
+    const { data: freshRow } = await supaClient
+      .from('friend_tables').select('*').eq('id', table.id).single();
+    if (freshRow) table = freshRow;
+  } catch(e) { console.warn('launchFriendTableGame: could not refresh row', e); }
+
   const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
   _ftSeats    = seats;
   _myGlobalSeat = seats.indexOf(supaUser.id); // 0-3
   _ftSeed     = table.payload.seed;
+  console.log('FT launch: myGlobalSeat=', _myGlobalSeat, 'seats=', seats, 'userId=', supaUser.id);
 
   // Load usernames
   const humanIds = seats.filter(Boolean);
