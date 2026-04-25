@@ -6807,15 +6807,32 @@ async function launchFriendTableGame(table) {
 // depend on REPLICA IDENTITY FULL being set on the table.
 
 function subscribeFTState(tableId) {
-  // Use polling — simple and reliable, no realtime channel complexity
-  if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
-  _ftStateChannel = true; // mark as ready immediately
-  _ftPollTimer = setInterval(() => pollFTState(tableId), 1000);
-  console.log('FT: polling started for table', tableId);
+  if (_ftMovesSub) { supaClient.removeChannel(_ftMovesSub); _ftMovesSub = null; }
+  _ftMovesSub = supaClient
+    .channel('ft_state_' + tableId)
+    .on('postgres_changes', {
+      event: 'UPDATE', schema: 'public', table: 'friend_tables',
+      filter: 'id=eq.' + tableId
+    }, (evt) => {
+      const row = evt.new;
+      if (!row || !row.pending_move) return;
+      const snap = row.pending_move;
+      if (!snap.ft_state) return;
+      if (snap.ft_state_author === _myGlobalSeat) return;
+      if (snap.ft_state_ts <= _ftLastStateTs) return;
+      _ftLastStateTs = snap.ft_state_ts;
+      console.log('FT realtime: got state from seat', snap.ft_state_author);
+      applyFTState(snap.ft_state);
+    })
+    .subscribe(s => console.log('FT state sub:', s));
+  // Also poll as fallback every 2s in case realtime misses anything
+  if (_ftPollTimer) clearInterval(_ftPollTimer);
+  _ftPollTimer = setInterval(() => pollFTState(tableId), 2000);
+  console.log('FT: subscribed + polling for table', tableId);
 }
 
 let _ftPollTimer    = null;
-let _ftLastStateTs  = 0; // timestamp of last state we applied
+let _ftLastStateTs  = 0;
 
 let _ftPollCount = 0;
 function _ftDebug(msg) {
