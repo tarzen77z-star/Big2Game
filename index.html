@@ -3951,35 +3951,35 @@ function executePlay(playerIdx, cards, play) {
   // Normal play: render then hand off or schedule NPC
   saveGameState();
   renderAll();
-  if (!isMyTurn()) {
-    setPlayerControls(false);
-    if (mpGameMode !== 'vs_human' || mpIsHost) {
-      if ((mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) && (!_myTableId || _ftIsNpcRunner)) {
-        // NPC turn — only the NPC runner schedules it
-        const token = ++mpTurnToken;
-        setTimeout(() => {
-          if (mpTurnToken === token) npcTurn();
-        }, 1000 + Math.random()*600);
-      } else if (mpNpcSlots[currentPlayer] && _myTableId && !_ftIsNpcRunner) {
-        // Non-runner: NPC turn — just wait for the runner to broadcast
-      } else {
-        // Next player is a human — broadcast (runner) or wait (non-runner)
-        if (_myTableId && _ftIsNpcRunner) {
-          broadcastFTState();
-        } else if (_myTableId && !_ftIsNpcRunner) {
-          // wait — the other human will play and broadcast
+
+  if (_myTableId) {
+    // ── Friend Table mode ──────────────────────────────────
+    // Always broadcast after any play so the other player is in sync.
+    // The NPC runner will receive and handle NPC chains.
+    setPlayerControls(isMyTurn());
+    updateTurnIndicator();
+    broadcastFTState();
+    // NPC runner: also kick off NPC chain locally if needed
+    if (_ftIsNpcRunner && !isMyTurn() && mpNpcSlots[currentPlayer]) {
+      const token = ++mpTurnToken;
+      setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 1000 + Math.random()*600);
+    }
+  } else {
+    // ── PeerJS / single-player mode ────────────────────────
+    if (!isMyTurn()) {
+      setPlayerControls(false);
+      if (mpGameMode !== 'vs_human' || mpIsHost) {
+        if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
+          const token = ++mpTurnToken;
+          setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 1000 + Math.random()*600);
         } else if (mpGameMode === 'vs_human' && mpIsHost) {
           mpBroadcastSync();
         }
       }
-    }
-  } else {
-    setPlayerControls(true);
-    updateTurnIndicator();
-    if (_myTableId) {
-      broadcastFTState();
-    } else if (mpGameMode === 'vs_human' && mpIsHost) {
-      mpBroadcastSync();
+    } else {
+      setPlayerControls(true);
+      updateTurnIndicator();
+      if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
     }
   }
 }
@@ -4002,33 +4002,32 @@ function doPass(playerIdx) {
 
   saveGameState();
   renderAll();
-  if (!isMyTurn()) {
-    setPlayerControls(false);
-    if (mpGameMode !== 'vs_human' || mpIsHost) {
-      if ((mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) && (!_myTableId || _ftIsNpcRunner)) {
-        const token = ++mpTurnToken;
-        setTimeout(() => {
-          if (mpTurnToken === token) npcTurn();
-        }, 900 + Math.random()*500);
-      } else if (mpNpcSlots[currentPlayer] && _myTableId && !_ftIsNpcRunner) {
-        // non-runner: wait for NPC runner to broadcast
-      } else {
-        if (_myTableId && _ftIsNpcRunner) {
-          broadcastFTState();
-        } else if (_myTableId && !_ftIsNpcRunner) {
-          // wait for other human to play and broadcast
+
+  if (_myTableId) {
+    // ── Friend Table mode ──────────────────────────────────
+    setPlayerControls(isMyTurn());
+    updateTurnIndicator();
+    broadcastFTState();
+    if (_ftIsNpcRunner && !isMyTurn() && mpNpcSlots[currentPlayer]) {
+      const token = ++mpTurnToken;
+      setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 900 + Math.random()*500);
+    }
+  } else {
+    // ── PeerJS / single-player mode ────────────────────────
+    if (!isMyTurn()) {
+      setPlayerControls(false);
+      if (mpGameMode !== 'vs_human' || mpIsHost) {
+        if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
+          const token = ++mpTurnToken;
+          setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 900 + Math.random()*500);
         } else if (mpGameMode === 'vs_human' && mpIsHost) {
           mpBroadcastSync();
         }
       }
-    }
-  } else {
-    setPlayerControls(true);
-    updateTurnIndicator();
-    if (_myTableId) {
-      broadcastFTState();
-    } else if (mpGameMode === 'vs_human' && mpIsHost) {
-      mpBroadcastSync();
+    } else {
+      setPlayerControls(true);
+      updateTurnIndicator();
+      if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
     }
   }
 }
@@ -6744,6 +6743,7 @@ async function launchFriendTableGame(table) {
   globalDiscardedCards = new Set();
   selectedCards = [];
   gameActive    = true;
+  mpSessionScores = [0,0,0,0];
 
   // ── Rotate: put MY seat at index 0 ──
   // This means hands[0] = my hand, hands[1] = right, etc.
@@ -6838,6 +6838,9 @@ function applyFTState(state) {
   }));
   globalDiscardedCards = new Set(state.globalDiscardedCards || []);
   gameActive    = state.gameActive !== undefined ? state.gameActive : true;
+  if (state.sessionScores_global) {
+    mpSessionScores = [0,1,2,3].map(li => state.sessionScores_global[(li + _myGlobalSeat) % 4] || 0);
+  }
 
   saveGameState();
   renderAll();
@@ -6889,6 +6892,9 @@ function _dobroadcastFTState() {
     playerIdx_global: (p.playerIdx + r) % 4
   }));
 
+  // Session scores in global order
+  const sessionScores_global = [0,1,2,3].map(gi => mpSessionScores[(gi - r + 4) % 4] || 0);
+
   const state = {
     hands_global,
     currentPlayer_global,
@@ -6899,7 +6905,8 @@ function _dobroadcastFTState() {
     passCount,
     firstTurn,
     globalDiscardedCards: [...globalDiscardedCards],
-    gameActive
+    gameActive,
+    sessionScores_global
   };
 
   _ftStateChannel.send({
