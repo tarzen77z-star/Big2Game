@@ -6822,26 +6822,28 @@ function _ftDebug(msg) {
 
 async function pollFTState(tableId) {
   _ftPollCount++;
-  _ftDebug('Poll #'+_ftPollCount+' gameActive='+gameActive+' seat='+_myGlobalSeat+' tableId='+tableId);
-  if (!gameActive || !supaClient) return;
+  if (!gameActive || !supaClient) {
+    _ftDebug('Poll #'+_ftPollCount+' SKIP gameActive='+gameActive);
+    return;
+  }
+  // Read the OTHER player's column
+  const theirCol = (_myGlobalSeat === 0) ? 'ready_votes' : 'pending_move';
   try {
     const { data, error } = await supaClient
       .from('friend_tables')
-      .select('payload')
+      .select(theirCol)
       .eq('id', tableId)
       .single();
     if (error) { _ftDebug('❌ Poll err: '+JSON.stringify(error).slice(0,80)); return; }
-    if (!data) { _ftDebug('❌ Poll: no row returned'); return; }
-    const snap = data.payload;
-    const keys = snap ? Object.keys(snap).join(',') : 'NULL';
-    _ftDebug('Poll #'+_ftPollCount+' payload keys=['+keys+'] author='+snap?.ft_state_author+' me='+_myGlobalSeat);
+    if (!data) { _ftDebug('❌ Poll: no row'); return; }
+    const snap = data[theirCol];
+    _ftDebug('Poll #'+_ftPollCount+' col='+theirCol+' hasState='+(!!snap?.ft_state)+' ts='+(snap?.ft_state_ts||0));
     if (!snap || !snap.ft_state) return;
-    if (snap.ft_state_author === _myGlobalSeat) return;
-    if (snap.ft_state_ts <= _ftLastStateTs) return;
+    if (snap.ft_state_ts <= _ftLastStateTs) return; // already applied
     _ftLastStateTs = snap.ft_state_ts;
-    _ftDebug('✅ Applying state from seat '+snap.ft_state_author+' CP='+snap.ft_state.currentPlayer_global);
+    _ftDebug('✅ Applying! CP_global='+snap.ft_state.currentPlayer_global);
     applyFTState(snap.ft_state);
-  } catch(e) { _ftDebug('❌ Poll exception: '+e.message); }
+  } catch(e) { _ftDebug('❌ Poll ex: '+e.message); }
 }
 
 function applyFTState(state) {
@@ -6874,7 +6876,10 @@ function applyFTState(state) {
   saveGameState();
   renderAll();
 
-  if (!gameActive) return; // game ended
+  if (!gameActive) {
+    if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
+    return;
+  }
 
   if (isMyTurn()) {
     // It's our turn — enable controls
@@ -6922,14 +6927,19 @@ async function _dobroadcastFTState() {
   };
 
   const ts = Date.now();
+  // Write to per-player column to avoid RLS conflicts on payload:
+  // seat 0 → pending_move, seat 1 → ready_votes (repurposed during game)
+  const myCol = (_myGlobalSeat === 0) ? 'pending_move' : 'ready_votes';
+  const statePacket = { ft_state, ft_state_author: _myGlobalSeat, ft_state_ts: ts };
   try {
-    await supaClient.from('friend_tables').update({
-      payload: { seed: _ftSeed, started: true, ft_state, ft_state_author: _myGlobalSeat, ft_state_ts: ts }
-    }).eq('id', _myTableId);
-    _ftLastStateTs = ts; // mark so we skip our own write when polling
-    console.log('FT: wrote state, CP_global=', currentPlayer_global);
-    toast('📤 Sent state CP=' + currentPlayer_global);
-  } catch(e) { console.warn('FT write error:', e); }
+    const { error } = await supaClient.from('friend_tables')
+      .update({ [myCol]: statePacket })
+      .eq('id', _myTableId);
+    if (error) throw error;
+    _ftLastStateTs = ts;
+    console.log('FT: wrote state to', myCol, 'CP_global=', currentPlayer_global);
+    toast('📤 Sent CP=' + currentPlayer_global + ' via ' + myCol);
+  } catch(e) { console.warn('FT write error:', e); toast('❌ Write:'+e.message.slice(0,40)); }
 }
 
 // ── Player plays or passes in Friend Table mode ───────────
