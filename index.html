@@ -6840,7 +6840,6 @@ function applyFTState(state) {
 }
 
 let _ftBroadcastTimer = null;
-let _ftStateChannel   = null; // the broadcast channel for game state
 
 function broadcastFTState() {
   // Debounce: if called multiple times rapidly (NPC chain), only send the final state
