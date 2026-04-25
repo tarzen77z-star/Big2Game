@@ -6591,6 +6591,7 @@ async function leaveCurrentTable() {
 
 function cleanupFriendTable() {
   _myTableId = null; _myTableSeat = null; _myGlobalSeat = null;
+  if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
   stopTableTimer();
   if (_myTableWatchSub) { supaClient?.removeChannel(_myTableWatchSub); _myTableWatchSub = null; }
   if (_friendTableGameSub) { supaClient?.removeChannel(_friendTableGameSub); _friendTableGameSub = null; }
@@ -6797,23 +6798,33 @@ async function launchFriendTableGame(table) {
 // depend on REPLICA IDENTITY FULL being set on the table.
 
 function subscribeFTState(tableId) {
-  if (_ftMovesSub) { supaClient.removeChannel(_ftMovesSub); _ftMovesSub = null; }
-  _ftStateChannel = null;
-  const ch = supaClient
-    .channel('ft_state_' + tableId, { config: { broadcast: { self: false } } })
-    .on('broadcast', { event: 'game_state' }, ({ payload }) => {
-      if (!payload || !payload.ft_state) return;
-      if (payload.author === _myGlobalSeat) return; // ignore own broadcasts
-      console.log('FT: received state from seat', payload.author, 'CP_global=', payload.ft_state.currentPlayer_global);
-      applyFTState(payload.ft_state);
-    })
-    .subscribe((status) => {
-      console.log('FT state channel:', status);
-      if (status === 'SUBSCRIBED') {
-        _ftStateChannel = ch;
-        _ftMovesSub = ch;
-      }
-    });
+  // Use polling — simple and reliable, no realtime channel complexity
+  if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
+  _ftStateChannel = true; // mark as ready immediately
+  _ftPollTimer = setInterval(() => pollFTState(tableId), 1000);
+  console.log('FT: polling started for table', tableId);
+}
+
+let _ftPollTimer    = null;
+let _ftLastStateTs  = 0; // timestamp of last state we applied
+
+async function pollFTState(tableId) {
+  if (!gameActive || !supaClient) return;
+  try {
+    const { data, error } = await supaClient
+      .from('friend_tables')
+      .select('payload')
+      .eq('id', tableId)
+      .single();
+    if (error || !data) return;
+    const snap = data.payload;
+    if (!snap || !snap.ft_state) return;
+    if (snap.ft_state_author === _myGlobalSeat) return; // our own write
+    if (snap.ft_state_ts <= _ftLastStateTs) return;     // already applied
+    _ftLastStateTs = snap.ft_state_ts;
+    console.log('FT poll: new state from seat', snap.ft_state_author, 'CP_global=', snap.ft_state.currentPlayer_global);
+    applyFTState(snap.ft_state);
+  } catch(e) { console.warn('pollFTState error:', e); }
 }
 
 function applyFTState(state) {
@@ -6872,49 +6883,34 @@ function broadcastFTState() {
   _ftBroadcastTimer = setTimeout(_dobroadcastFTState, 80);
 }
 
-function _dobroadcastFTState() {
+async function _dobroadcastFTState() {
   _ftBroadcastTimer = null;
-  if (!_myTableId) return;
-  if (!_ftStateChannel) {
-    // Channel not ready yet — retry in 300ms
-    console.warn('FT: channel not ready, retrying broadcast...');
-    _ftBroadcastTimer = setTimeout(_dobroadcastFTState, 300);
-    return;
-  }
+  if (!_myTableId || !supaClient) return;
 
-  // Build state in GLOBAL seat order so all players can apply it correctly
   const r = _myGlobalSeat;
   const hands_global             = [0,1,2,3].map(gi => hands[(gi - r + 4) % 4]);
   const currentPlayer_global     = (currentPlayer  + r) % 4;
   const openingPlayer_global     = (openingPlayer  + r) % 4;
   const currentRoundPlays_global = currentRoundPlays.map(p => ({
-    ...p,
-    playerIdx_global: (p.playerIdx + r) % 4
+    ...p, playerIdx_global: (p.playerIdx + r) % 4
   }));
-
-  // Session scores in global order
   const sessionScores_global = [0,1,2,3].map(gi => mpSessionScores[(gi - r + 4) % 4] || 0);
 
-  const state = {
-    hands_global,
-    currentPlayer_global,
-    openingPlayer_global,
-    currentRoundPlays_global,
-    discardPile,
-    lastPlay,
-    passCount,
-    firstTurn,
-    globalDiscardedCards: [...globalDiscardedCards],
-    gameActive,
-    sessionScores_global
+  const ft_state = {
+    hands_global, currentPlayer_global, openingPlayer_global,
+    currentRoundPlays_global, discardPile, lastPlay, passCount,
+    firstTurn, globalDiscardedCards: [...globalDiscardedCards],
+    gameActive, sessionScores_global
   };
 
-  _ftStateChannel.send({
-    type: 'broadcast',
-    event: 'game_state',
-    payload: { ft_state: state, author: _myGlobalSeat, ts: Date.now() }
-  });
-  console.log('Broadcast FT state via channel, CP_global=', currentPlayer_global);
+  const ts = Date.now();
+  try {
+    await supaClient.from('friend_tables').update({
+      payload: { seed: _ftSeed, started: true, ft_state, ft_state_author: _myGlobalSeat, ft_state_ts: ts }
+    }).eq('id', _myTableId);
+    _ftLastStateTs = ts; // mark so we skip our own write when polling
+    console.log('FT: wrote state, CP_global=', currentPlayer_global);
+  } catch(e) { console.warn('FT write error:', e); }
 }
 
 // ── Player plays or passes in Friend Table mode ───────────
