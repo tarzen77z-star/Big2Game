@@ -3954,17 +3954,20 @@ function executePlay(playerIdx, cards, play) {
   if (!isMyTurn()) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
-      if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
-        // NPC turn — schedule locally
+      if ((mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) && (!_myTableId || _ftIsNpcRunner)) {
+        // NPC turn — only the NPC runner schedules it
         const token = ++mpTurnToken;
         setTimeout(() => {
           if (mpTurnToken === token) npcTurn();
         }, 1000 + Math.random()*600);
+      } else if (mpNpcSlots[currentPlayer] && _myTableId && !_ftIsNpcRunner) {
+        // Non-runner: NPC turn — just wait for the runner to broadcast
       } else {
-        // Next player is a human
-        if (_myTableId) {
-          // FT mode: broadcast full state so the other player knows it's their turn
+        // Next player is a human — broadcast (runner) or wait (non-runner)
+        if (_myTableId && _ftIsNpcRunner) {
           broadcastFTState();
+        } else if (_myTableId && !_ftIsNpcRunner) {
+          // wait — the other human will play and broadcast
         } else if (mpGameMode === 'vs_human' && mpIsHost) {
           mpBroadcastSync();
         }
@@ -3974,7 +3977,6 @@ function executePlay(playerIdx, cards, play) {
     setPlayerControls(true);
     updateTurnIndicator();
     if (_myTableId) {
-      // FT mode: it's our own turn — broadcast so others see our new state
       broadcastFTState();
     } else if (mpGameMode === 'vs_human' && mpIsHost) {
       mpBroadcastSync();
@@ -4003,14 +4005,18 @@ function doPass(playerIdx) {
   if (!isMyTurn()) {
     setPlayerControls(false);
     if (mpGameMode !== 'vs_human' || mpIsHost) {
-      if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
+      if ((mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) && (!_myTableId || _ftIsNpcRunner)) {
         const token = ++mpTurnToken;
         setTimeout(() => {
           if (mpTurnToken === token) npcTurn();
         }, 900 + Math.random()*500);
+      } else if (mpNpcSlots[currentPlayer] && _myTableId && !_ftIsNpcRunner) {
+        // non-runner: wait for NPC runner to broadcast
       } else {
-        if (_myTableId) {
+        if (_myTableId && _ftIsNpcRunner) {
           broadcastFTState();
+        } else if (_myTableId && !_ftIsNpcRunner) {
+          // wait for other human to play and broadcast
         } else if (mpGameMode === 'vs_human' && mpIsHost) {
           mpBroadcastSync();
         }
@@ -4051,12 +4057,14 @@ function isMyTurn() {
 
 function npcTurn() {
   if (!gameActive) return;
-  // In MP: guests never run NPC AI — host is authoritative
-  if (mpGameMode === 'vs_human' && !mpIsHost) return;
-  // After rotation, local index 0 is always the human player — skip if their turn
+  // In Friend Table mode: only the designated NPC runner executes NPC turns
+  if (_myTableId && !_ftIsNpcRunner) return;
+  // In PeerJS MP: guests never run NPC AI
+  if (!_myTableId && mpGameMode === 'vs_human' && !mpIsHost) return;
+  // Skip if it's the local human player's turn
   if (currentPlayer === 0) return;
-  // Skip remote human slots (non-NPC) in MP
-  if (mpGameMode === 'vs_human' && mpIsHost && !mpNpcSlots[currentPlayer]) return;
+  // Skip remote human slots
+  if (mpGameMode === 'vs_human' && !mpNpcSlots[currentPlayer]) return;
 
   const idx = currentPlayer;
   const hand = hands[idx];
@@ -6625,6 +6633,7 @@ async function timerForceStart(tableId) {
 let _ftSeed        = 0;      // shared random seed for dealing
 let _ftMovesSub    = null;   // realtime subscription / broadcast channel for state
 let _ftStateChannel = null;  // shortcut ref to the broadcast channel once subscribed
+let _ftIsNpcRunner  = false; // true if this player is responsible for running NPCs
 let _ftLastMoveTs  = 0;      // last processed move timestamp
 let _ftMoveQueue   = [];     // queue of moves to process in order
 let _ftActedThisRound = new Set(); // local indices that acted since last round clear
@@ -6747,6 +6756,12 @@ async function launchFriendTableGame(table) {
     mpSeats       = [0,1,2,3].map(li => ({ name: seatNames[(r+li)%4], conn: null }));
   }
 
+  // ── Determine who runs NPCs (lowest-numbered human seat) ──
+  // Both players agree on this deterministically — no communication needed.
+  const firstHumanSeat = seats.findIndex(uid => !!uid);
+  _ftIsNpcRunner = (_myGlobalSeat === firstHumanSeat);
+  console.log('FT: _ftIsNpcRunner=', _ftIsNpcRunner, 'myGlobalSeat=', _myGlobalSeat);
+
   // ── Set player name label ──
   const lbl = document.getElementById('player-name-label');
   if (lbl) lbl.textContent = seatNames[_myGlobalSeat];
@@ -6768,8 +6783,8 @@ async function launchFriendTableGame(table) {
   // ── Subscribe to state broadcasts from other players ──
   subscribeFTState(table.id);
 
-  // ── Start NPC turn if needed ──
-  if (!isMyTurn() && mpNpcSlots[currentPlayer]) {
+  // ── Start NPC turn if needed (only the NPC runner does this) ──
+  if (!isMyTurn() && mpNpcSlots[currentPlayer] && _ftIsNpcRunner) {
     setTimeout(npcTurn, 1200);
   }
 
@@ -6829,14 +6844,21 @@ function applyFTState(state) {
 
   if (!gameActive) return; // game ended
 
-  // The broadcaster always runs the full NPC chain before broadcasting,
-  // so currentPlayer here is always a human (us or the other player).
   if (isMyTurn()) {
+    // It's our turn — enable controls
     setPlayerControls(true);
-  } else {
+    updateTurnIndicator();
+  } else if (mpNpcSlots[currentPlayer] && _ftIsNpcRunner) {
+    // NPC's turn and we are the runner — run the NPC chain then broadcast
     setPlayerControls(false);
+    updateTurnIndicator();
+    const token = ++mpTurnToken;
+    setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 1000 + Math.random()*600);
+  } else {
+    // Other human's turn — wait for their broadcast
+    setPlayerControls(false);
+    updateTurnIndicator();
   }
-  updateTurnIndicator();
 }
 
 let _ftBroadcastTimer = null;
@@ -6849,7 +6871,13 @@ function broadcastFTState() {
 
 function _dobroadcastFTState() {
   _ftBroadcastTimer = null;
-  if (!_ftStateChannel || !_myTableId) return;
+  if (!_myTableId) return;
+  if (!_ftStateChannel) {
+    // Channel not ready yet — retry in 300ms
+    console.warn('FT: channel not ready, retrying broadcast...');
+    _ftBroadcastTimer = setTimeout(_dobroadcastFTState, 300);
+    return;
+  }
 
   // Build state in GLOBAL seat order so all players can apply it correctly
   const r = _myGlobalSeat;
