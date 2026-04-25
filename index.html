@@ -6799,6 +6799,28 @@ async function launchFriendTableGame(table) {
   }
 
   console.log('Game launched! mySeat=', _myGlobalSeat, 'CP=', currentPlayer, 'isMyTurn=', isMyTurn(), 'hand=', hands[0].length);
+
+  // ── Write test: prove we can write to this row ──
+  (async () => {
+    const testId = _myTableId;
+    if (!testId) { toast('❌ No tableId at launch!'); return; }
+    const { data, error } = await supaClient
+      .from('friend_tables')
+      .update({ pending_move: { test: true, seat: _myGlobalSeat, ts: Date.now() } })
+      .eq('id', testId)
+      .select('id');
+    if (error) {
+      toast('❌ Write test FAILED: ' + JSON.stringify(error).slice(0,60));
+      console.error('Write test error:', error);
+    } else if (!data || data.length === 0) {
+      toast('❌ Write test: 0 rows matched. tableId=' + testId.slice(0,8));
+      console.warn('Write test matched 0 rows');
+    } else {
+      toast('✅ Write test OK seat=' + _myGlobalSeat + ' rows=' + data.length);
+      console.log('Write test succeeded:', data);
+    }
+  })();
+
   toast('🏓 Friend Table game started!');
 }
 
