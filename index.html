@@ -6816,15 +6816,17 @@ async function pollFTState(tableId) {
       .select('payload')
       .eq('id', tableId)
       .single();
-    if (error || !data) return;
+    if (error) { console.warn('FT poll error:', error); return; }
+    if (!data) { console.warn('FT poll: no data'); return; }
     const snap = data.payload;
-    if (!snap || !snap.ft_state) return;
+    if (!snap || !snap.ft_state) { console.log('FT poll: no ft_state yet'); return; }
     if (snap.ft_state_author === _myGlobalSeat) return; // our own write
     if (snap.ft_state_ts <= _ftLastStateTs) return;     // already applied
     _ftLastStateTs = snap.ft_state_ts;
-    console.log('FT poll: new state from seat', snap.ft_state_author, 'CP_global=', snap.ft_state.currentPlayer_global);
+    console.log('FT poll: applying state from seat', snap.ft_state_author, 'CP_global=', snap.ft_state.currentPlayer_global);
+    toast('📡 Got state from P' + (snap.ft_state_author+1));
     applyFTState(snap.ft_state);
-  } catch(e) { console.warn('pollFTState error:', e); }
+  } catch(e) { console.warn('pollFTState exception:', e); }
 }
 
 function applyFTState(state) {
@@ -6910,6 +6912,7 @@ async function _dobroadcastFTState() {
     }).eq('id', _myTableId);
     _ftLastStateTs = ts; // mark so we skip our own write when polling
     console.log('FT: wrote state, CP_global=', currentPlayer_global);
+    toast('📤 Sent state CP=' + currentPlayer_global);
   } catch(e) { console.warn('FT write error:', e); }
 }
 
