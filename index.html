@@ -6826,19 +6826,21 @@ async function pollFTState(tableId) {
     _ftDebug('Poll #'+_ftPollCount+' SKIP gameActive='+gameActive);
     return;
   }
-  // Read the OTHER player's column
-  const theirCol = (_myGlobalSeat === 0) ? 'ready_votes' : 'pending_move';
   try {
     const { data, error } = await supaClient
-      .from('friend_tables')
-      .select(theirCol)
-      .eq('id', tableId)
+      .from('friend_notifications')
+      .select('payload, sender_id')
+      .eq('recipient_id', supaUser.id)
+      .eq('type', 'ft_game_state')
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single();
-    if (error) { _ftDebug('❌ Poll err: '+JSON.stringify(error).slice(0,80)); return; }
-    if (!data) { _ftDebug('❌ Poll: no row'); return; }
-    const snap = data[theirCol];
-    _ftDebug('Poll #'+_ftPollCount+' col='+theirCol+' hasState='+(!!snap?.ft_state)+' ts='+(snap?.ft_state_ts||0));
+    if (error && error.code !== 'PGRST116') { _ftDebug('❌ Poll err: '+JSON.stringify(error).slice(0,80)); return; }
+    if (!data) { _ftDebug('Poll #'+_ftPollCount+' no notif yet'); return; }
+    const snap = data.payload;
+    _ftDebug('Poll #'+_ftPollCount+' hasState='+(!!snap?.ft_state)+' ts='+(snap?.ft_state_ts||0)+' lastTs='+_ftLastStateTs);
     if (!snap || !snap.ft_state) return;
+    if (snap.table_id !== tableId) return; // different game
     if (snap.ft_state_ts <= _ftLastStateTs) return; // already applied
     _ftLastStateTs = snap.ft_state_ts;
     _ftDebug('✅ Applying! CP_global='+snap.ft_state.currentPlayer_global);
@@ -6927,18 +6929,27 @@ async function _dobroadcastFTState() {
   };
 
   const ts = Date.now();
-  // Write to per-player column to avoid RLS conflicts on payload:
-  // seat 0 → pending_move, seat 1 → ready_votes (repurposed during game)
-  const myCol = (_myGlobalSeat === 0) ? 'pending_move' : 'ready_votes';
-  const statePacket = { ft_state, ft_state_author: _myGlobalSeat, ft_state_ts: ts };
+  // Find the other human player's user ID to send them the state
+  const otherGlobalSeat = _ftSeats.findIndex((uid, i) => uid && i !== _myGlobalSeat);
+  if (otherGlobalSeat < 0) { console.warn('FT: no other player found'); return; }
+  const recipientId = _ftSeats[otherGlobalSeat];
   try {
-    const { error } = await supaClient.from('friend_tables')
-      .update({ [myCol]: statePacket })
-      .eq('id', _myTableId);
+    // Delete old game_state notifications first to keep table clean
+    await supaClient.from('friend_notifications')
+      .delete()
+      .eq('sender_id', supaUser.id)
+      .eq('type', 'ft_game_state');
+    // Insert fresh state
+    const { error } = await supaClient.from('friend_notifications').insert({
+      sender_id:    supaUser.id,
+      recipient_id: recipientId,
+      type:         'ft_game_state',
+      payload:      { ft_state, ft_state_author: _myGlobalSeat, ft_state_ts: ts, table_id: _myTableId }
+    });
     if (error) throw error;
     _ftLastStateTs = ts;
-    console.log('FT: wrote state to', myCol, 'CP_global=', currentPlayer_global);
-    toast('📤 Sent CP=' + currentPlayer_global + ' via ' + myCol);
+    console.log('FT: sent state via notification, CP_global=', currentPlayer_global);
+    toast('📤 Sent CP=' + currentPlayer_global);
   } catch(e) { console.warn('FT write error:', e); toast('❌ Write:'+e.message.slice(0,40)); }
 }
 
