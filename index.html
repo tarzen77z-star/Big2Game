@@ -6808,7 +6808,21 @@ function subscribeFTState(tableId) {
 let _ftPollTimer    = null;
 let _ftLastStateTs  = 0; // timestamp of last state we applied
 
+let _ftPollCount = 0;
+function _ftDebug(msg) {
+  let el = document.getElementById('ft-debug-bar');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ft-debug-bar';
+    el.style = 'position:fixed;bottom:0;left:0;right:0;background:#000;color:#0f0;font:12px monospace;padding:4px;z-index:99999;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+}
+
 async function pollFTState(tableId) {
+  _ftPollCount++;
+  _ftDebug('Poll #'+_ftPollCount+' gameActive='+gameActive+' seat='+_myGlobalSeat+' tableId='+tableId);
   if (!gameActive || !supaClient) return;
   try {
     const { data, error } = await supaClient
@@ -6816,18 +6830,18 @@ async function pollFTState(tableId) {
       .select('payload')
       .eq('id', tableId)
       .single();
-    if (error) { console.warn('FT poll error:', error); return; }
-    if (!data) { console.warn('FT poll: no data'); return; }
+    if (error) { _ftDebug('❌ Poll err: '+JSON.stringify(error).slice(0,80)); return; }
+    if (!data) { _ftDebug('❌ Poll: no row returned'); return; }
     const snap = data.payload;
-    if (!snap || !snap.ft_state) { console.log('FT poll: no ft_state yet'); return; }
-    console.log('FT poll: author='+snap.ft_state_author+' me='+_myGlobalSeat+' ts='+snap.ft_state_ts+' lastTs='+_ftLastStateTs);
-    if (snap.ft_state_author === _myGlobalSeat) { console.log('FT poll: skipping own write'); return; }
-    if (snap.ft_state_ts <= _ftLastStateTs) { console.log('FT poll: already applied'); return; }
+    const keys = snap ? Object.keys(snap).join(',') : 'NULL';
+    _ftDebug('Poll #'+_ftPollCount+' payload keys=['+keys+'] author='+snap?.ft_state_author+' me='+_myGlobalSeat);
+    if (!snap || !snap.ft_state) return;
+    if (snap.ft_state_author === _myGlobalSeat) return;
+    if (snap.ft_state_ts <= _ftLastStateTs) return;
     _ftLastStateTs = snap.ft_state_ts;
-    console.log('FT poll: applying state from seat', snap.ft_state_author, 'CP_global=', snap.ft_state.currentPlayer_global);
-    toast('📡 Got state from P' + (snap.ft_state_author+1));
+    _ftDebug('✅ Applying state from seat '+snap.ft_state_author+' CP='+snap.ft_state.currentPlayer_global);
     applyFTState(snap.ft_state);
-  } catch(e) { console.warn('pollFTState exception:', e); }
+  } catch(e) { _ftDebug('❌ Poll exception: '+e.message); }
 }
 
 function applyFTState(state) {
