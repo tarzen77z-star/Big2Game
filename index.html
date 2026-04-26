@@ -6782,7 +6782,8 @@ async function launchFriendTableGame(table) {
 
 // ── State vars ────────────────────────────────────────
 let _ftPollTimer   = null;
-let _ftLastApplied = 0;   // ts of last state we applied from DB
+let _ftLastApplied = 0;   // seq of last state we applied from DB
+
 
 // ── Start polling for state from other players ────────
 function ftStartPolling(tableId) {
@@ -6804,9 +6805,10 @@ async function ftPoll(tableId) {
       .single();
     if (!data?.pending_move?.ts) return;
     const s = data.pending_move;
-    // Skip if it's our own write or already applied
+    // Skip if it's our own write
     if (s.author === _myGlobalSeat) return;
-    if (s.ts <= _ftLastApplied) return;
+    // Skip if we already applied this exact state
+    if (s.ts === _ftLastApplied) return;
     _ftLastApplied = s.ts;
     ftApplyState(s.state);
   } catch(e) {}
@@ -6816,7 +6818,7 @@ async function ftPoll(tableId) {
 async function ftPushState() {
   if (!supaClient || !_myTableId) return;
   const r = _myGlobalSeat;
-  const ts = Date.now();
+  const ts = Date.now() * 10 + _myGlobalSeat; // unique per player per ms
   const state = {
     // Store hands in global order so any player can reconstruct their view
     hands:   [0,1,2,3].map(g => hands[(g - r + 4) % 4]),
@@ -6868,12 +6870,12 @@ function ftApplyState(s) {
 
 // ── Called after any local play/pass/npc completes ───
 // Pushes state and updates UI
-function ftAfterMove() {
+async function ftAfterMove() {
   if (!_myTableId) return;
   setPlayerControls(isMyTurn());
   updateTurnIndicator();
-  ftPushState(); // fire and forget — async
-  // If NPC is next, run it
+  await ftPushState(); // wait for DB write before scheduling next NPC
+  // If NPC is next, run it after a delay
   if (!isMyTurn() && mpNpcSlots[currentPlayer]) {
     const tok = ++mpTurnToken;
     setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*600);
