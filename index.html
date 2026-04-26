@@ -5191,13 +5191,9 @@ function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  t.style.fontSize = '18px';
-  t.style.padding = '16px 20px';
-  t.style.maxWidth = '95vw';
-  t.style.textAlign = 'center';
-  t.style.zIndex = '99998';
+
   clearTimeout(t._timer);
-  t._timer = setTimeout(()=>t.classList.remove('show'), 8000);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 2200);
 }
 
 function updatePlayerName(val) {
@@ -6678,54 +6674,32 @@ async function startTableGame(tableId) {
   } catch(e) { console.warn('startTableGame:', e); }
 }
 
-// ── watchMyTable ─────────────────────────────────────────
+// ── watchMyTable — polls every second until game starts ──
 function watchMyTable(tableId) {
-  if (_myTableWatchSub) { supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null; }
-  console.log('watchMyTable:', tableId);
-  _myTableWatchSub = supaClient
-    .channel('watch_' + tableId)
-    .on('postgres_changes', {
-      event: 'UPDATE', schema: 'public', table: 'friend_tables',
-      filter: 'id=eq.' + tableId
-    }, async (payload) => {
-      _ftDebug('WATCH fired! gameActive='+gameActive+' newId='+JSON.stringify(payload.new).slice(0,30));
-      if (gameActive) { _ftDebug('WATCH: already in game, skip'); return; }
-      const rowId = payload.new?.id || _myTableId;
-      if (!rowId) { _ftDebug('WATCH: no rowId!'); return; }
-      try {
-        const { data: row } = await supaClient
-          .from('friend_tables').select('*').eq('id', rowId).single();
-        if (!row) { _ftDebug('WATCH: fetch returned no row'); return; }
-        _ftDebug('WATCH: status='+row.status+' seed='+row.payload?.seed);
-        if (row.status === 'playing' && row.payload?.seed) {
-          _ftDebug('LAUNCHING GAME!');
-          supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null;
-          closeFriendRoom();
-          await launchFriendTableGame(row);
-        }
-      } catch(e) { _ftDebug('WATCH ERR: '+e.message); }
-    })
-    .subscribe(s => {
-      console.log('watchMyTable sub:', s);
-      _ftDebug('WATCH:'+s+' tbl='+tableId.slice(0,8));
-    });
+  if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
+  _myTableWatchSub = setInterval(async () => {
+    if (gameActive) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; return; }
+    try {
+      const { data: row } = await supaClient
+        .from('friend_tables').select('*').eq('id', tableId).single();
+      if (!row) return;
+      if (row.status === 'playing' && row.payload?.seed) {
+        clearInterval(_myTableWatchSub); _myTableWatchSub = null;
+        closeFriendRoom();
+        await launchFriendTableGame(row);
+      }
+    } catch(e) { console.warn('watchMyTable poll:', e); }
+  }, 1000);
 }
 
 // ── Launch game — same for ALL players ───────────────────
 async function launchFriendTableGame(table) {
-  // Always fetch fresh row — realtime payload.new may be missing columns
-  // if REPLICA IDENTITY is not FULL
-  try {
-    const { data: freshRow } = await supaClient
-      .from('friend_tables').select('*').eq('id', table.id).single();
-    if (freshRow) table = freshRow;
-  } catch(e) { console.warn('launchFriendTableGame: could not refresh row', e); }
+  // table row already fresh from watchMyTable poll
 
   const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
   _ftSeats    = seats;
   _myGlobalSeat = seats.indexOf(supaUser.id); // 0-3
   _ftSeed     = table.payload.seed;
-  console.log('FT launch: myGlobalSeat=', _myGlobalSeat, 'seats=', seats, 'userId=', supaUser.id);
 
   // Load usernames
   const humanIds = seats.filter(Boolean);
@@ -6817,11 +6791,9 @@ async function launchFriendTableGame(table) {
 
   // ── Write test via green debug bar ──
   (async () => {
-    _ftDebug('TEST: tableId=' + (_myTableId||'NULL').slice(0,8) + ' seat=' + _myGlobalSeat);
     await new Promise(r => setTimeout(r, 500));
-    if (!_myTableId) { _ftDebug('TEST FAIL: no tableId!'); return; }
+    if (!_myTableId) return;
     const { data: { session } } = await supaClient.auth.getSession();
-    _ftDebug('TEST: auth=' + (session ? session.user.id.slice(0,8) : 'NO SESSION'));
     await new Promise(r => setTimeout(r, 500));
     const { data, error } = await supaClient
       .from('friend_tables')
@@ -6829,15 +6801,10 @@ async function launchFriendTableGame(table) {
       .eq('id', _myTableId)
       .select('id');
     if (error) {
-      _ftDebug('WRITE ERR: ' + (error.message||JSON.stringify(error)).slice(0,50));
     } else if (!data || data.length === 0) {
-      _ftDebug('WRITE: 0 rows! RLS blocked. id=' + _myTableId.slice(0,8));
     } else {
-      _ftDebug('WRITE OK! rows=' + data.length + ' seat=' + _myGlobalSeat);
     }
   })();
-
-  _ftDebug('LAUNCHED seat='+_myGlobalSeat+' CP='+currentPlayer+' myTurn='+isMyTurn());
   toast('🏓 Game started! seat=' + _myGlobalSeat);
 }
 
@@ -6873,26 +6840,10 @@ function subscribeFTState(tableId) {
 let _ftPollTimer    = null;
 let _ftLastStateTs  = 0;
 
-let _ftPollCount = 0;
-const _ftDebugLog = [];
-function _ftDebug(msg) {
-  const time = new Date().toLocaleTimeString();
-  _ftDebugLog.push('['+time+'] '+msg);
-  if (_ftDebugLog.length > 6) _ftDebugLog.shift();
-  let el = document.getElementById('ft-debug-bar');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'ft-debug-bar';
-    el.style = 'position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,0.95);color:#0f0;font:12px monospace;padding:6px 8px;z-index:99999;line-height:1.7;max-height:50vh;overflow-y:auto;';
-    document.body.appendChild(el);
-  }
-  el.innerHTML = _ftDebugLog.slice().reverse().map(m => '<div>' + m + '</div>').join('');
-}
+
 
 async function pollFTState(tableId) {
-  _ftPollCount++;
   if (!gameActive || !supaClient) {
-    _ftDebug('Poll #'+_ftPollCount+' SKIP gameActive='+gameActive);
     return;
   }
   try {
@@ -6901,17 +6852,15 @@ async function pollFTState(tableId) {
       .select('pending_move')
       .eq('id', tableId)
       .single();
-    if (error) { _ftDebug('❌ Poll err: '+JSON.stringify(error).slice(0,60)); return; }
-    if (!data) { _ftDebug('Poll #'+_ftPollCount+' no row'); return; }
+    if (error) { console.warn('poll err:',error); return; }
+    if (!data) return;
     const snap = data.pending_move;
-    _ftDebug('Poll #'+_ftPollCount+' hasMv='+(!!snap?.ft_state)+' auth='+(snap?.ft_state_author??'?')+' me='+_myGlobalSeat+' ts='+(snap?.ft_state_ts||0));
     if (!snap || !snap.ft_state) return;
     if (snap.ft_state_author === _myGlobalSeat) return; // own write
     if (snap.ft_state_ts <= _ftLastStateTs) return;     // already applied
     _ftLastStateTs = snap.ft_state_ts;
-    _ftDebug('✅ Applying CP='+snap.ft_state.currentPlayer_global);
     applyFTState(snap.ft_state);
-  } catch(e) { _ftDebug('❌ Poll ex: '+e.message); }
+  } catch(e) { console.warn('poll ex:',e); }
 }
 
 function applyFTState(state) {
