@@ -5016,7 +5016,12 @@ function buildMpRoomStanding() {
 
 function continueGame() {
   document.getElementById('winner-banner').style.display = 'none';
-  startGame();
+  if (_myTableId) {
+    // In Friend Table mode — restart within the same table
+    ftRestartGame();
+  } else {
+    startGame();
+  }
 }
 
 function endSession() {
@@ -5041,9 +5046,9 @@ function endSessionFinal() {
   document.getElementById('game').style.display = 'none';
   clearResumeButton();
   document.getElementById('splash').style.display = 'flex';
-  // Reset button text for next time
   const btn = document.getElementById('btn-end-session');
   if (btn) { btn.textContent = 'End Session'; btn.onclick = endSession; }
+  if (_myTableId) cleanupFriendTable();
   mpDestroy();
 }
 
@@ -6568,7 +6573,7 @@ async function leaveCurrentTable() {
 }
 
 function cleanupFriendTable() {
-  _myTableId = null; _myTableSeat = null; _myGlobalSeat = null;
+  _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; _ftSeats = [];
   if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
   stopTableTimer();
   if (_myTableWatchSub) { supaClient?.removeChannel(_myTableWatchSub); _myTableWatchSub = null; }
@@ -6609,10 +6614,6 @@ async function timerForceStart(tableId) {
 // ════════════════════════════════════════════════════════════
 
 let _ftSeed        = 0;      // shared random seed for dealing
-let _ftMovesSub    = null;   // realtime subscription / broadcast channel for state
-let _ftStateChannel = null;  // shortcut ref to the broadcast channel once subscribed
-let _ftLastMoveTs  = 0;      // last processed move timestamp
-let _ftMoveQueue   = [];     // queue of moves to process in order
 let _ftActedThisRound = new Set(); // local indices that acted since last round clear
 
 // ── Seeded random ─────────────────────────────────────────
@@ -6755,10 +6756,8 @@ async function launchFriendTableGame(table) {
   // ── Subscribe to state broadcasts from other players ──
   ftStartPolling(table.id);
 
-  // ── Start NPC turn if needed ──
-  // Only the lowest-seat human runs initial NPCs to avoid both players running them
-  const _ftLowestHuman = seats.findIndex(uid => !!uid);
-  if (!isMyTurn() && mpNpcSlots[currentPlayer] && _myGlobalSeat === _ftLowestHuman) {
+  // ── Start NPC turn if needed (only NPC runner) ──
+  if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
     setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 1200);
   }
@@ -6866,9 +6865,13 @@ function ftApplyState(s) {
 
   if (!gameActive) { ftStopPolling(); return; }
 
-  // Just update UI and wait — the active player handles NPCs and pushes next state
   setPlayerControls(isMyTurn());
   updateTurnIndicator();
+  // If NPC runner and it's an NPC's turn, run NPC chain now
+  if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
+    const tok = ++mpTurnToken;
+    setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*600);
+  }
 }
 
 // ── Called after any local play/pass/npc completes ───
@@ -6878,11 +6881,42 @@ async function ftAfterMove() {
   setPlayerControls(isMyTurn());
   updateTurnIndicator();
   await ftPushState(); // wait for DB write before scheduling next NPC
-  // If NPC is next, run it after a delay
-  if (!isMyTurn() && mpNpcSlots[currentPlayer]) {
+  // Only the designated NPC runner schedules NPC turns
+  // This prevents both players from running NPCs simultaneously
+  if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
     setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*600);
   }
+}
+
+// ── Restart game within same FT room ─────────────────
+async function ftRestartGame() {
+  if (!_myTableId || !supaClient) return;
+  // Clear pending_move so polling doesn't re-apply old state
+  try {
+    await supaClient.from('friend_tables')
+      .update({ pending_move: null, payload: { seed: _ftSeed, started: true } })
+      .eq('id', _myTableId);
+  } catch(e) {}
+  // Re-fetch table and relaunch
+  const { data: row } = await supaClient.from('friend_tables').select('*').eq('id', _myTableId).single();
+  if (row) {
+    // Generate new seed for new game
+    const newSeed = Math.floor(Math.random() * 2147483647);
+    await supaClient.from('friend_tables')
+      .update({ payload: { seed: newSeed, started: true }, pending_move: null })
+      .eq('id', _myTableId);
+    const fresh = {...row, payload: { seed: newSeed, started: true }};
+    await launchFriendTableGame(fresh);
+  }
+}
+
+// ── Determine if this player runs NPCs ──────────────
+// The lowest-seated human always runs NPCs to avoid both players running them
+function ftAmNpcRunner() {
+  const seats = _ftSeats || [];
+  const lowestHuman = seats.findIndex(uid => !!uid);
+  return _myGlobalSeat === lowestHuman;
 }
 
 // ── Player plays a card in FT mode ───────────────────
