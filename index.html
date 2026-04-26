@@ -5191,8 +5191,13 @@ function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
+  t.style.fontSize = '18px';
+  t.style.padding = '16px 20px';
+  t.style.maxWidth = '95vw';
+  t.style.textAlign = 'center';
+  t.style.zIndex = '99998';
   clearTimeout(t._timer);
-  t._timer = setTimeout(()=>t.classList.remove('show'), 5000);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 8000);
 }
 
 function updatePlayerName(val) {
@@ -6873,12 +6878,12 @@ let _ftPollCount = 0;
 const _ftDebugLog = [];
 function _ftDebug(msg) {
   _ftDebugLog.push(msg);
-  if (_ftDebugLog.length > 4) _ftDebugLog.shift();
+  if (_ftDebugLog.length > 2) _ftDebugLog.shift();
   let el = document.getElementById('ft-debug-bar');
   if (!el) {
     el = document.createElement('div');
     el.id = 'ft-debug-bar';
-    el.style = 'position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.92);color:#0f0;font:11px monospace;padding:6px 8px;z-index:99999;line-height:1.6;';
+    el.style = 'position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,0.92);color:#0f0;font:13px monospace;padding:8px;z-index:99999;line-height:1.8;';
     document.body.appendChild(el);
   }
   el.innerHTML = _ftDebugLog.map((m,i) => 
