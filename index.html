@@ -7498,6 +7498,7 @@ function mpSendRejoinSync(conn, guestSeat) {
     openingPlayer:guestOpeningPlayer,
     lastPlay:guestLastPlay,
     passCount, firstTurn, gameActive,
+    discardPile: discardPile,
     currentRoundPlays:guestRoundPlays,
     globalDiscardedCards:[...globalDiscardedCards],
     mpSessionScores:guestSessionScores,
@@ -7560,6 +7561,7 @@ function mpBroadcastSync(){
       openingPlayer:guestOpeningPlayer,
       lastPlay:guestLastPlay,
       passCount, firstTurn, gameActive,
+      discardPile: discardPile,           // ← the actual played-card history shown on table
       currentRoundPlays:guestRoundPlays,
       globalDiscardedCards:[...globalDiscardedCards],
       mpSessionScores:guestSessionScores,
@@ -7846,6 +7848,7 @@ function mpGuestApplySync(snap){
   passCount=snap.passCount;
   gameActive=snap.gameActive;
   globalDiscardedCards=new Set(snap.globalDiscardedCards||[]);
+  discardPile=snap.discardPile||[];      // ← restore full play history for rendering
   currentRoundPlays=snap.currentRoundPlays||[];
   lastPlay=snap.lastPlay;
   selectedCards=[];
