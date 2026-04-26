@@ -6804,19 +6804,24 @@ async function launchFriendTableGame(table) {
   (async () => {
     const testId = _myTableId;
     if (!testId) { toast('❌ No tableId at launch!'); return; }
+    // First check auth status
+    const { data: { session } } = await supaClient.auth.getSession();
+    if (!session) { toast('❌ No auth session! Not logged in.'); return; }
+    toast('🔑 Auth OK uid=' + session.user.id.slice(0,8) + ' seat=' + _myGlobalSeat);
+    await new Promise(r => setTimeout(r, 1500));
     const { data, error } = await supaClient
       .from('friend_tables')
       .update({ pending_move: { test: true, seat: _myGlobalSeat, ts: Date.now() } })
       .eq('id', testId)
       .select('id');
     if (error) {
-      toast('❌ Write test FAILED: ' + JSON.stringify(error).slice(0,60));
+      toast('❌ Write FAILED: ' + JSON.stringify(error).slice(0,80));
       console.error('Write test error:', error);
     } else if (!data || data.length === 0) {
-      toast('❌ Write test: 0 rows matched. tableId=' + testId.slice(0,8));
-      console.warn('Write test matched 0 rows');
+      toast('❌ Write: 0 rows! RLS blocking. tableId=' + testId.slice(0,8));
+      console.warn('Write test matched 0 rows. tableId=', testId, 'uid=', session.user.id);
     } else {
-      toast('✅ Write test OK seat=' + _myGlobalSeat + ' rows=' + data.length);
+      toast('✅ Write OK seat=' + _myGlobalSeat + ' rows=' + data.length);
       console.log('Write test succeeded:', data);
     }
   })();
