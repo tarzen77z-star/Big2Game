@@ -3725,13 +3725,13 @@ function playerPlay() {
     ftGuestPlay([...selectedCards], play);
     return;
   }
-  // PeerJS guest
+  // PeerJS guest — send move to host and immediately disable controls
   if (mpGameMode === 'vs_human' && !mpIsHost) {
     const msg = {type:'play', seat:mpMySeat, cards:[...selectedCards], playType:play.type, subtype:play.subtype};
     if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
     selectedCards = [];
-    setPlayerControls(false);
-    renderHand();
+    setPlayerControls(false); // disabled until host confirms turn via next sync
+    renderHand(); // clear selection visual
     return;
   }
   // Single-player or PeerJS host: execute locally
@@ -3822,11 +3822,11 @@ function playerPass() {
     ftGuestPass();
     return;
   }
-  // PeerJS guest
+  // PeerJS guest — send to host and disable controls immediately
   if (mpGameMode === 'vs_human' && !mpIsHost) {
     const msg = {type:'pass', seat:mpMySeat};
     if (mpHostConn) { try { mpHostConn.send(msg); } catch(e) {} }
-    setPlayerControls(false);
+    setPlayerControls(false); // wait for host's next sync
     return;
   }
   doPass(0);
@@ -3926,7 +3926,8 @@ function executePlay(playerIdx, cards, play) {
     // Render the played card on the pile first, then clear after a visible delay
     saveGameState();
     renderAll();
-    if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync(); // PeerJS only
+    // Broadcast "thinking" state to guests before delay
+    if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync();
     setTimeout(() => {
       lastPlay = null;
       passCount = 0;
@@ -3934,40 +3935,25 @@ function executePlay(playerIdx, cards, play) {
       currentPlayer = playerIdx;
       renderDiscardPile();
       document.getElementById('last-play-info').textContent = 'New round – play anything!';
-      if (_myTableId) { ftAfterMove(); } else if (mpGameMode === 'vs_human' && mpIsHost) { mpBroadcastSync(); }
-      if (isMyTurn()) {
-        setPlayerControls(true);
-        updateTurnIndicator();
+      saveGameState();
+      renderAll();
+      if (_myTableId) {
+        ftAfterMove();
       } else {
-        const token = ++mpTurnToken;
-        setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 800);
+        mpAfterMove();
       }
     }, 1200);
     return;
   }
 
-  // Normal play: render then hand off or schedule NPC
+  // Normal play: render then hand off
   saveGameState();
   renderAll();
 
   if (_myTableId) {
     ftAfterMove();
   } else {
-    if (!isMyTurn()) {
-      setPlayerControls(false);
-      if (mpGameMode !== 'vs_human' || mpIsHost) {
-        if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
-          const token = ++mpTurnToken;
-          setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 1000 + Math.random()*600);
-        } else if (mpGameMode === 'vs_human' && mpIsHost) {
-          mpBroadcastSync();
-        }
-      }
-    } else {
-      setPlayerControls(true);
-      updateTurnIndicator();
-      if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
-    }
+    mpAfterMove();
   }
 }
 
@@ -3993,22 +3979,88 @@ function doPass(playerIdx) {
   if (_myTableId) {
     ftAfterMove();
   } else {
-    if (!isMyTurn()) {
-      setPlayerControls(false);
-      if (mpGameMode !== 'vs_human' || mpIsHost) {
-        if (mpGameMode !== 'vs_human' || mpNpcSlots[currentPlayer]) {
-          const token = ++mpTurnToken;
-          setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 900 + Math.random()*500);
-        } else if (mpGameMode === 'vs_human' && mpIsHost) {
-          mpBroadcastSync();
-        }
-      }
-    } else {
+    mpAfterMove();
+  }
+}
+
+// ════════════════════════════════════════
+//  MP SYNC ENGINE — Host-authoritative, broadcast ONCE per settled state
+// ════════════════════════════════════════
+//
+// Called after EVERY move (human or NPC) in non-FT multiplayer.
+// Single-player: just handles controls.
+// Host: runs the NPC chain to completion, THEN broadcasts once.
+// Guest: should never call this (guests don't run game logic).
+
+function mpAfterMove() {
+  if (!gameActive) {
+    // Game ended — sync already handled in executePlay win branch
+    setPlayerControls(false);
+    return;
+  }
+
+  // Single-player mode: just hand off to NPC or enable controls
+  if (mpGameMode !== 'vs_human') {
+    if (isMyTurn()) {
       setPlayerControls(true);
       updateTurnIndicator();
-      if (mpGameMode === 'vs_human' && mpIsHost) mpBroadcastSync();
+    } else {
+      setPlayerControls(false);
+      const token = ++mpTurnToken;
+      setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 900 + Math.random()*500);
     }
+    return;
   }
+
+  // Multiplayer (PeerJS) — only HOST runs this path
+  if (!mpIsHost) return;
+
+  // If current player is an NPC, run the NPC chain (all consecutive NPCs)
+  // then broadcast once we land on a human's turn (or game ends).
+  if (mpNpcSlots[currentPlayer]) {
+    // Broadcast intermediate "thinking" state so guests see who's thinking
+    mpBroadcastSync();
+    mpRunNpcChain();
+  } else {
+    // Current player is a human — enable controls if it's host, broadcast to guests
+    if (isMyTurn()) {
+      setPlayerControls(true);
+    } else {
+      setPlayerControls(false);
+    }
+    updateTurnIndicator();
+    mpBroadcastSync();
+  }
+}
+
+// Run consecutive NPC turns with animation delays.
+// After each NPC move, if next player is also NPC: schedule another.
+// When we reach a human turn (or game over): broadcast final settled state.
+function mpRunNpcChain() {
+  if (!gameActive) { mpBroadcastSync(); return; }
+  if (!mpIsHost) return;
+
+  const token = ++mpTurnToken;
+  const delay = 900 + Math.random() * 500;
+
+  setTimeout(() => {
+    if (mpTurnToken !== token) return; // stale — a newer chain started
+    if (!gameActive) { mpBroadcastSync(); return; }
+
+    // Double-check it's still an NPC's turn
+    if (!mpNpcSlots[currentPlayer]) {
+      // Landed on a human turn — broadcast and enable controls
+      if (isMyTurn()) setPlayerControls(true);
+      else setPlayerControls(false);
+      updateTurnIndicator();
+      mpBroadcastSync();
+      return;
+    }
+
+    // Execute the NPC's move (executePlay / doPass will call mpAfterMove again,
+    // which will call mpRunNpcChain if still an NPC — chaining naturally)
+    npcTurn();
+  }, delay);
 }
 
 function advanceTurn(fromPlayer) {
@@ -4044,9 +4096,6 @@ function npcTurn() {
 
   const idx = currentPlayer;
   const hand = hands[idx];
-
-  // In PeerJS MP (not FT), broadcast before NPC so guests see "thinking..." indicator
-  if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync();
 
   const play = findBestNpcPlay(hand, lastPlay, firstTurn && idx === openingPlayer);
 
@@ -7359,15 +7408,17 @@ function mpHostOnData(conn,data){
   if(data.type==='play'){
     const guestSeat=mpSeats.findIndex(x=>x.conn===conn);
     if(guestSeat<0)return;
-    // Convert to host-local index and execute
+    // Convert global seat to host-local index
     const localIdx=(guestSeat-mpMySeat+4)%4;
+    // Strictly validate it's this player's turn and game is active
+    if(!gameActive||currentPlayer!==localIdx)return;
+    // This seat must be a human (not NPC)
+    if(mpNpcSlots[localIdx])return;
     const cards=data.cards.map(c=>({rank:String(c.rank),suit:String(c.suit)}));
     const play=classifyPlay(cards);
     if(!play)return;
-    // Validate it's actually this player's turn
-    if(currentPlayer!==localIdx)return;
     executePlay(localIdx,cards,play);
-    // executePlay will call mpBroadcastSync after rendering
+    // mpAfterMove() → mpRunNpcChain() / mpBroadcastSync() are called inside executePlay
     return;
   }
   // Guest passed
@@ -7375,8 +7426,10 @@ function mpHostOnData(conn,data){
     const guestSeat=mpSeats.findIndex(x=>x.conn===conn);
     if(guestSeat<0)return;
     const localIdx=(guestSeat-mpMySeat+4)%4;
-    if(currentPlayer!==localIdx)return;
+    if(!gameActive||currentPlayer!==localIdx)return;
+    if(mpNpcSlots[localIdx])return;
     doPass(localIdx);
+    // mpAfterMove() called inside doPass
     return;
   }
 }
@@ -7467,27 +7520,12 @@ function mpBroadcastLobby(){
 // ── Sync: host sends full game state to all guests ────────
 function mpBroadcastSync(){
   if(!mpIsHost||!mpConnections.length)return;
-  const snapshot={
-    type:'sync',
-    hands:hands,
-    hostRankScore: rankScore,
-    seatRankScores: [0,1,2,3].map(i=>i===0?rankScore:(mpSeatRankScores[i]||0)),
-    currentPlayer,
-    lastPlay,
-    passCount,
-    firstTurn,
-    openingPlayer,
-    currentRoundPlays,
-    globalDiscardedCards:[...globalDiscardedCards],
-    gameActive,
-    mpSessionScores: mpSessionScores.slice(),  // cumulative session scores (host-local)
-    mpSeatNames: mpSeats.map(s=>s.name),       // seat names (host-local)
-    npcSeats: Array.from({length:4},(_,i)=>i>=mpSeats.length) // which seats are NPCs (host-local)
-  };
-  mpConnections.forEach((conn,ci)=>{
-    // Rotate snapshot so that guest's own hand is at index 0
-    const guestSeat=ci+1; // global seat of this guest
+  mpConnections.forEach((conn)=>{
+    // Find this connection's global seat index in mpSeats
+    const guestSeat=mpSeats.findIndex(x=>x.conn===conn);
+    if(guestSeat<0)return; // stale connection, skip
     const guestLocalFromHost=(guestSeat-mpMySeat+4)%4; // host's local idx for this guest
+
     // Remap hands: guest sees their own hand at [0]
     const guestHands=[];
     for(let i=0;i<4;i++) guestHands.push(hands[(guestLocalFromHost+i)%4]);
@@ -7509,19 +7547,25 @@ function mpBroadcastSync(){
       const gi=(guestLocalFromHost+li)%4;
       return gi===0 ? rankScore : (mpSeatRankScores[gi]||0);
     });
-    const guestNpcSeats = [0,1,2,3].map(li => (guestLocalFromHost+li)%4 >= mpSeats.length);
+    const guestNpcSeats = [0,1,2,3].map(li => {
+      const gi=(guestLocalFromHost+li)%4;
+      return gi >= mpSeats.length || mpNpcSlots[gi];
+    });
     const guestSnapshot={
-      ...snapshot,
+      type:'sync',
       hands:guestHands,
+      hostRankScore:rankScore,
+      seatRankScores:guestSeatRankScores,
       currentPlayer:guestCurrentPlayer,
       openingPlayer:guestOpeningPlayer,
-      currentRoundPlays:guestRoundPlays,
       lastPlay:guestLastPlay,
+      passCount, firstTurn, gameActive,
+      currentRoundPlays:guestRoundPlays,
+      globalDiscardedCards:[...globalDiscardedCards],
+      mpSessionScores:guestSessionScores,
+      mpSeatNames:guestSeatNames,
+      npcSeats:guestNpcSeats,
       mySeatOnHost:guestLocalFromHost,
-      mpSessionScores: guestSessionScores,
-      mpSeatNames: guestSeatNames,
-      seatRankScores: guestSeatRankScores,
-      npcSeats: guestNpcSeats
     };
     try{conn.send(guestSnapshot);}catch(e){}
   });
@@ -7691,10 +7735,12 @@ function mpHostStartGame(data){
   setPlayerControls(currentPlayer===mpMySeat);
   updateTurnIndicator();
 
-  // Fire NPC if opening player is an NPC
+  // Broadcast initial state to all guests
+  mpBroadcastSync();
+
+  // Fire NPC chain if opening player is an NPC
   if(mpNpcSlots[currentPlayer]){
-    const tok=++mpTurnToken;
-    setTimeout(()=>{if(mpTurnToken===tok)npcTurn();},1200);
+    mpRunNpcChain();
   }
 }
 
@@ -7719,9 +7765,11 @@ function mpGuestStartGame(data){
 
   mpSetupGameScreen(data.seats);
   renderAll();
-  // Guest enables controls only if opening player is them
-  setPlayerControls(currentPlayer===0);
+  // Guest disables controls and waits for the host's first sync broadcast
+  setPlayerControls(false);
   updateTurnIndicator();
+  // Note: host will mpBroadcastSync() after mpHostStartGame, which will enable
+  // controls for whoever's turn it is (including this guest if it's their turn).
 }
 
 // Set up name labels and zone classes for MP game
@@ -7834,35 +7882,25 @@ function mpGuestApplySync(snap){
       el.style.display='none';
     }
   });
-  // Enable controls only if it's THIS guest's turn (local index 0)
-  setPlayerControls(currentPlayer===0&&gameActive);
+
+  // ── GUEST CONTROLS: enable ONLY when it is THIS guest's turn AND game is active ──
+  // currentPlayer===0 means it's local index 0 = this guest's turn (host already rotated it)
+  const isGuestTurn = (currentPlayer === 0) && gameActive;
+  setPlayerControls(isGuestTurn);
   updateTurnIndicator();
 
   if(!gameActive){
-    // Game ended — gameover message will show the banner
-    // Just ensure controls are disabled
     setPlayerControls(false);
   }
 }
 
 // ── Player sends move to host ─────────────────────────────
+// These are legacy helpers — actual send logic is now inline in playerPlay/playerPass
 function mpSendPlay(play){
-  const msg={type:'play',seat:mpMySeat,cards:play.cards,playType:play.type,subtype:play.subtype};
-  if(mpIsHost){
-    // Host's own play: already executed locally, just broadcast sync
-    mpBroadcastSync();
-  }else{
-    // Guest: send to host, DON'T execute locally (wait for sync)
-    if(mpHostConn){try{mpHostConn.send(msg);}catch(e){}}
-  }
+  // No-op: sending is handled directly in playerPlay()
 }
 function mpSendPass(){
-  const msg={type:'pass',seat:mpMySeat};
-  if(mpIsHost){
-    mpBroadcastSync();
-  }else{
-    if(mpHostConn){try{mpHostConn.send(msg);}catch(e){}}
-  }
+  // No-op: sending is handled directly in playerPass()
 }
 
 function mpRenderSeats(){
