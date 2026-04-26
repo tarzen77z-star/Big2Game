@@ -5192,7 +5192,7 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(t._timer);
-  t._timer = setTimeout(()=>t.classList.remove('show'), 2200);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 5000);
 }
 
 function updatePlayerName(val) {
@@ -6683,15 +6683,22 @@ function watchMyTable(tableId) {
       event: 'UPDATE', schema: 'public', table: 'friend_tables',
       filter: 'id=eq.' + tableId
     }, async (payload) => {
-      const row = payload.new;
-      if (!row) return;
-      // Game just started — all players launch independently
-      if (row.status === 'playing' && !gameActive && row.payload?.seed) {
-        console.log('Game starting with seed:', row.payload.seed);
-        supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null;
-        closeFriendRoom();
-        await launchFriendTableGame(row);
-      }
+      if (gameActive) return; // already in a game
+      // payload.new may be incomplete without REPLICA IDENTITY FULL
+      // so fetch the full row directly and check status there
+      const rowId = payload.new?.id || _myTableId;
+      if (!rowId) return;
+      try {
+        const { data: row } = await supaClient
+          .from('friend_tables').select('*').eq('id', rowId).single();
+        if (!row) return;
+        if (row.status === 'playing' && row.payload?.seed) {
+          console.log('Game starting! seed:', row.payload.seed);
+          supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null;
+          closeFriendRoom();
+          await launchFriendTableGame(row);
+        }
+      } catch(e) { console.warn('watchMyTable fetch error:', e); }
     })
     .subscribe(s => console.log('watchMyTable sub:', s));
 }
@@ -6826,7 +6833,8 @@ async function launchFriendTableGame(table) {
     }
   })();
 
-  toast('🏓 Friend Table game started!');
+  _ftDebug('LAUNCHED seat='+_myGlobalSeat+' CP='+currentPlayer+' myTurn='+isMyTurn());
+  toast('🏓 Game started! seat=' + _myGlobalSeat);
 }
 
 // ── State-broadcast sync ─────────────────────────────────
@@ -6862,15 +6870,20 @@ let _ftPollTimer    = null;
 let _ftLastStateTs  = 0;
 
 let _ftPollCount = 0;
+const _ftDebugLog = [];
 function _ftDebug(msg) {
+  _ftDebugLog.push(msg);
+  if (_ftDebugLog.length > 4) _ftDebugLog.shift();
   let el = document.getElementById('ft-debug-bar');
   if (!el) {
     el = document.createElement('div');
     el.id = 'ft-debug-bar';
-    el.style = 'position:fixed;bottom:0;left:0;right:0;background:#000;color:#0f0;font:12px monospace;padding:4px;z-index:99999;';
+    el.style = 'position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.92);color:#0f0;font:11px monospace;padding:6px 8px;z-index:99999;line-height:1.6;';
     document.body.appendChild(el);
   }
-  el.textContent = msg;
+  el.innerHTML = _ftDebugLog.map((m,i) => 
+    '<div style="opacity:'+(0.4+i*0.2)+'">' + m + '</div>'
+  ).join('');
 }
 
 async function pollFTState(tableId) {
