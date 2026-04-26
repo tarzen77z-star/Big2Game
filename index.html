@@ -5902,12 +5902,15 @@ function openFriendRoom() {
     content.style.display = 'none';
     return;
   }
+  // Clear stale table state if no game is active
+  if (!gameActive && _myTableId) {
+    cleanupFriendTable();
+  }
   warning.style.display = 'none';
   content.style.display = 'block';
   friendSwitchTab('friends');
   loadFriendsList();
   loadPendingRequests();
-  // Update online status
   if (supaClient && supaUser) {
     supaClient.from('profiles').update({ is_online: true, last_active: new Date().toISOString() })
       .eq('id', supaUser.id).then(()=>{});
@@ -6447,13 +6450,9 @@ function renderTableCard(t, num, seats, nameMap, isMyTable) {
         <span>${name}${isMe?' (you)':''}</span>
       </div>`;
     }
-    const canSit = !_myTableId;
-    return canSit
-      ? `<div class="table-seat empty" onclick="joinTable('${t.id}',${seatNum})">
+    return `<div class="table-seat empty" onclick="joinTable('${t.id}',${seatNum})">
           <div class="seat-avatar" style="background:rgba(100,160,255,0.2);color:rgba(100,160,255,0.6)">+</div>
-          <span>Click to sit</span></div>`
-      : `<div class="table-seat empty" style="cursor:default;opacity:0.4">
-          <div class="seat-avatar">·</div><span>Empty</span></div>`;
+          <span>Click to sit</span></div>`;
   }).join('');
 
   const readyBtn = isMyTable
@@ -6478,7 +6477,6 @@ function renderTableCard(t, num, seats, nameMap, isMyTable) {
 }
 
 function renderEmptyTableCard(num) {
-  const canSit = !_myTableId;
   return `<div class="friend-table-card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
       <span style="font-size:0.78rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600">Table ${num}</span>
@@ -6487,12 +6485,10 @@ function renderEmptyTableCard(num) {
     <div style="display:flex;gap:12px;align-items:flex-start">
       <div class="table-circle">TABLE<br>${num}</div>
       <div class="table-seats">
-        ${[1,2,3,4].map(i => canSit
-          ? `<div class="table-seat empty" onclick="createAndJoinTable(${i})">
+        ${[1,2,3,4].map(i =>
+          `<div class="table-seat empty" onclick="createAndJoinTable(${i})">
               <div class="seat-avatar" style="background:rgba(100,160,255,0.2);color:rgba(100,160,255,0.6)">+</div>
               <span>Click to sit</span></div>`
-          : `<div class="table-seat empty" style="cursor:default;opacity:0.4">
-              <div class="seat-avatar">·</div><span>Empty</span></div>`
         ).join('')}
       </div>
     </div>
