@@ -6501,7 +6501,9 @@ function renderEmptyTableCard(num) {
 
 // ── Sit down ─────────────────────────────────────────────
 async function createAndJoinTable(seatNum) {
-  if (!supaClient || !supaUser || _myTableId) return;
+  if (!supaClient || !supaUser) return;
+  // Clear any stale table state before sitting
+  if (_myTableId) { _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; }
   try {
     const seatCol = 'seat_' + seatNum;
     const { data, error } = await supaClient.from('friend_tables').insert({
@@ -6513,7 +6515,7 @@ async function createAndJoinTable(seatNum) {
       payload: {},
       pending_move: null
     }).select().single();
-    if (error) throw error;
+    if (error) { toast('❌ Could not create table: ' + error.message); console.warn('createAndJoinTable:', error); return; }
     _myTableId = data.id;
     _myTableSeat = seatNum;
     _myGlobalSeat = seatNum - 1;
@@ -6522,12 +6524,13 @@ async function createAndJoinTable(seatNum) {
     await notifyFriendsTableStarted(data.id);
     loadTables();
     startTableTimer(data);
-    toast('Seated at Table! Waiting for friends…');
-  } catch(e) { console.warn('createAndJoinTable:', e); toast('Error creating table.'); }
+    toast('Seated! Waiting for friends…');
+  } catch(e) { console.warn('createAndJoinTable:', e); toast('❌ Error: ' + e.message); }
 }
 
 async function joinTable(tableId, seatNum) {
-  if (!supaClient || !supaUser || _myTableId) return;
+  if (!supaClient || !supaUser) return;
+  if (_myTableId) { _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; }
   try {
     const seatCol = 'seat_' + seatNum;
     const { data: current } = await supaClient.from('friend_tables').select('*').eq('id', tableId).single();
@@ -6768,23 +6771,16 @@ async function launchFriendTableGame(table) {
 }
 
 // ════════════════════════════════════════════════════════
-// FRIEND TABLE SYNC — Clean rewrite
-//
-// HOW IT WORKS:
-// - All players share the same deck (seeded random)
-// - Turn order: seats go 0→1→2→3→0... NPCs run on whoever's turn it is
-// - After ANY human move (or NPC chain), the active player writes
-//   the full game state to friend_tables.pending_move
-// - All other players poll every 1.5s, read it, apply it
-// - No realtime channels — just simple reliable polling
+// FRIEND TABLE SYNC
+// Design: One player (lowest global seat = "runner") runs all NPCs.
+// After any move, runner pushes full state to pending_move.
+// All other players poll every 1.5s and apply received state.
+// State is stored in GLOBAL seat order. Each player rotates on apply.
 // ════════════════════════════════════════════════════════
 
-// ── State vars ────────────────────────────────────────
 let _ftPollTimer   = null;
-let _ftLastApplied = 0;   // seq of last state we applied from DB
+let _ftLastApplied = 0;
 
-
-// ── Start polling for state from other players ────────
 function ftStartPolling(tableId) {
   if (_ftPollTimer) clearInterval(_ftPollTimer);
   _ftPollTimer = setInterval(() => ftPoll(tableId), 1500);
@@ -6794,141 +6790,114 @@ function ftStopPolling() {
   if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
 }
 
+// Am I the NPC runner? (lowest-seated human, both players agree)
+function ftAmNpcRunner() {
+  const lowestHuman = _ftSeats.findIndex(uid => !!uid);
+  return _myGlobalSeat === lowestHuman;
+}
+
+// Poll DB for state from other player
 async function ftPoll(tableId) {
   if (!gameActive || !supaClient) return;
   try {
     const { data } = await supaClient
-      .from('friend_tables')
-      .select('pending_move')
-      .eq('id', tableId)
-      .single();
-    if (!data?.pending_move?.ts) return;
-    const s = data.pending_move;
-    // Skip if it's our own write
-    if (s.author === _myGlobalSeat) return;
-    // Skip if we already applied this exact state
-    if (s.ts === _ftLastApplied) return;
-    _ftLastApplied = s.ts;
-    ftApplyState(s.state);
+      .from('friend_tables').select('pending_move').eq('id', tableId).single();
+    if (!data?.pending_move) return;
+    const pm = data.pending_move;
+    if (!pm.state || pm.author === _myGlobalSeat) return; // our own write
+    if (pm.seq === _ftLastApplied) return; // already applied
+    _ftLastApplied = pm.seq;
+    ftApplyState(pm.state);
   } catch(e) {}
 }
 
-// ── Write state to DB after our move ─────────────────
+// Push state to DB — only called by the active player after their move
 async function ftPushState() {
   if (!supaClient || !_myTableId) return;
-  const r = _myGlobalSeat;
-  const ts = Date.now() * 10 + _myGlobalSeat; // unique per player per ms
+  // Build state in GLOBAL seat order
+  const r = _myGlobalSeat; // my rotation offset
+  const toGlobal = li => (li + r) % 4;       // local index → global seat
   const state = {
-    // Store hands in global order so any player can reconstruct their view
-    hands:   [0,1,2,3].map(g => hands[(g - r + 4) % 4]),
-    cp:      (currentPlayer + r) % 4,   // currentPlayer in global seats
-    op:      (openingPlayer + r) % 4,   // openingPlayer in global seats
-    lp:      lastPlay ? {...lastPlay, playerIdx: (lastPlay.playerIdx + r) % 4} : null,
-    dp:      discardPile,
-    crp:     currentRoundPlays.map(p => ({...p, pi: (p.playerIdx + r) % 4})),
-    pc:      passCount,
-    ft:      firstTurn,
-    ga:      gameActive,
-    ss:      [0,1,2,3].map(g => mpSessionScores[(g - r + 4) % 4] || 0),
-    gdc:     [...globalDiscardedCards],
+    h:  [0,1,2,3].map(g => hands[(g - r + 4) % 4]),           // hands[global]
+    cp: toGlobal(currentPlayer),                                 // currentPlayer global
+    op: toGlobal(openingPlayer),                                 // openingPlayer global
+    lp: lastPlay ? {...lastPlay, pi: toGlobal(lastPlay.playerIdx)} : null,
+    dp: discardPile,
+    crp: currentRoundPlays.map(p => ({...p, pi: toGlobal(p.playerIdx)})),
+    pc: passCount,
+    ft: firstTurn,
+    ga: gameActive,
+    ss: [0,1,2,3].map(g => mpSessionScores[(g - r + 4) % 4] || 0),
+    gdc: [...globalDiscardedCards],
   };
+  const seq = Date.now() * 10 + r; // unique per player
   try {
-    const { data: wr, error: we } = await supaClient.from('friend_tables')
-      .update({ pending_move: { state, author: r, ts } })
+    const { data: wr, error } = await supaClient.from('friend_tables')
+      .update({ pending_move: { state, author: r, seq } })
       .eq('id', _myTableId)
       .select('id');
-    if (we) { toast('❌ Sync error: ' + we.message.slice(0,40)); console.warn('ftPushState err:', we); return; }
-    if (!wr || wr.length === 0) { toast('❌ Write blocked - check Supabase RLS'); console.warn('ftPushState: 0 rows updated'); return; }
-    _ftLastApplied = ts;
+    if (error) { console.warn('ftPushState error:', error); return; }
+    if (!wr || !wr.length) { console.warn('ftPushState: 0 rows — RLS?'); return; }
+    _ftLastApplied = seq; // mark so we don't re-apply our own write
   } catch(e) { console.warn('ftPushState:', e); }
 }
 
-// ── Apply state received from another player ──────────
+// Apply state received from another player
 function ftApplyState(s) {
   if (!gameActive) return;
   const r = _myGlobalSeat;
-  hands             = [0,1,2,3].map(li => s.hands[(li + r) % 4]);
-  currentPlayer     = (s.cp - r + 4) % 4;
-  openingPlayer     = (s.op - r + 4) % 4;
-  // lastPlay.playerIdx is stored in global order, convert to local
-  lastPlay = s.lp ? {...s.lp, playerIdx: (s.lp.playerIdx - r + 4) % 4} : null;
+  const toLoc = g => (g - r + 4) % 4; // global seat → local index
+  // Reconstruct local state from global state
+  hands             = [0,1,2,3].map(li => s.h[(li + r) % 4]);
+  currentPlayer     = toLoc(s.cp);
+  openingPlayer     = toLoc(s.op);
+  lastPlay          = s.lp ? {...s.lp, playerIdx: toLoc(s.lp.pi)} : null;
   discardPile       = s.dp || [];
   passCount         = s.pc || 0;
-  firstTurn         = s.ft !== undefined ? s.ft : false;
-  gameActive        = s.ga !== undefined ? s.ga : true;
-  currentRoundPlays = (s.crp||[]).map(p => ({...p, playerIdx: (p.pi - r + 4) % 4}));
-  globalDiscardedCards = new Set(s.gdc||[]);
+  firstTurn         = !!s.ft;
+  gameActive        = s.ga !== false;
+  currentRoundPlays = (s.crp||[]).map(p => ({...p, playerIdx: toLoc(p.pi)}));
+  globalDiscardedCards = new Set(s.gdc || []);
   if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[(li + r) % 4] || 0);
 
   saveGameState();
   renderAll();
-
   if (!gameActive) { ftStopPolling(); return; }
-
   setPlayerControls(isMyTurn());
   updateTurnIndicator();
-  // If NPC runner and it's an NPC's turn, run NPC chain now
+  // If I'm the runner and NPCs need to play, run them
   if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
-    setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*600);
+    setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*500);
   }
 }
 
-// ── Called after any local play/pass/npc completes ───
-// Pushes state and updates UI
+// Called after every local move (human or NPC) in FT mode
 async function ftAfterMove() {
   if (!_myTableId) return;
   setPlayerControls(isMyTurn());
   updateTurnIndicator();
-  await ftPushState(); // wait for DB write before scheduling next NPC
-  // Only the designated NPC runner schedules NPC turns
-  // This prevents both players from running NPCs simultaneously
+  await ftPushState(); // write state then schedule next NPC
+  // If runner and NPC is next, continue chain
   if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
-    setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*600);
+    setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*500);
   }
 }
 
-// ── Restart game within same FT room ─────────────────
+function ftGuestPlay(cards, play) { executePlay(0, cards, play); }
+function ftGuestPass() { doPass(0); }
+
+// Restart game within same FT room
 async function ftRestartGame() {
-  if (!_myTableId || !supaClient) return;
-  // Clear pending_move so polling doesn't re-apply old state
-  try {
-    await supaClient.from('friend_tables')
-      .update({ pending_move: null, payload: { seed: _ftSeed, started: true } })
-      .eq('id', _myTableId);
-  } catch(e) {}
-  // Re-fetch table and relaunch
+  if (!_myTableId || !supaClient || !ftAmNpcRunner()) return;
+  const newSeed = Math.floor(Math.random() * 0x7fffffff);
+  await supaClient.from('friend_tables')
+    .update({ payload: { seed: newSeed, started: true }, pending_move: null })
+    .eq('id', _myTableId);
   const { data: row } = await supaClient.from('friend_tables').select('*').eq('id', _myTableId).single();
-  if (row) {
-    // Generate new seed for new game
-    const newSeed = Math.floor(Math.random() * 2147483647);
-    await supaClient.from('friend_tables')
-      .update({ payload: { seed: newSeed, started: true }, pending_move: null })
-      .eq('id', _myTableId);
-    const fresh = {...row, payload: { seed: newSeed, started: true }};
-    await launchFriendTableGame(fresh);
-  }
+  if (row) await launchFriendTableGame(row);
 }
-
-// ── Determine if this player runs NPCs ──────────────
-// The lowest-seated human always runs NPCs to avoid both players running them
-function ftAmNpcRunner() {
-  const seats = _ftSeats || [];
-  const lowestHuman = seats.findIndex(uid => !!uid);
-  return _myGlobalSeat === lowestHuman;
-}
-
-// ── Player plays a card in FT mode ───────────────────
-function ftGuestPlay(cards, play) {
-  executePlay(0, cards, play);
-}
-
-// ── Player passes in FT mode ─────────────────────────
-function ftGuestPass() {
-  doPass(0);
-}
-
 // ── Override playerPlay/playerPass for friend table ───────
 // All players (not just guests) publish moves in friend table mode
 
