@@ -6688,24 +6688,27 @@ function watchMyTable(tableId) {
       event: 'UPDATE', schema: 'public', table: 'friend_tables',
       filter: 'id=eq.' + tableId
     }, async (payload) => {
-      if (gameActive) return; // already in a game
-      // payload.new may be incomplete without REPLICA IDENTITY FULL
-      // so fetch the full row directly and check status there
+      _ftDebug('WATCH fired! gameActive='+gameActive+' newId='+JSON.stringify(payload.new).slice(0,30));
+      if (gameActive) { _ftDebug('WATCH: already in game, skip'); return; }
       const rowId = payload.new?.id || _myTableId;
-      if (!rowId) return;
+      if (!rowId) { _ftDebug('WATCH: no rowId!'); return; }
       try {
         const { data: row } = await supaClient
           .from('friend_tables').select('*').eq('id', rowId).single();
-        if (!row) return;
+        if (!row) { _ftDebug('WATCH: fetch returned no row'); return; }
+        _ftDebug('WATCH: status='+row.status+' seed='+row.payload?.seed);
         if (row.status === 'playing' && row.payload?.seed) {
-          console.log('Game starting! seed:', row.payload.seed);
+          _ftDebug('LAUNCHING GAME!');
           supaClient.removeChannel(_myTableWatchSub); _myTableWatchSub = null;
           closeFriendRoom();
           await launchFriendTableGame(row);
         }
-      } catch(e) { console.warn('watchMyTable fetch error:', e); }
+      } catch(e) { _ftDebug('WATCH ERR: '+e.message); }
     })
-    .subscribe(s => console.log('watchMyTable sub:', s));
+    .subscribe(s => {
+      console.log('watchMyTable sub:', s);
+      _ftDebug('WATCH:'+s+' tbl='+tableId.slice(0,8));
+    });
 }
 
 // ── Launch game — same for ALL players ───────────────────
@@ -6812,29 +6815,25 @@ async function launchFriendTableGame(table) {
 
   console.log('Game launched! mySeat=', _myGlobalSeat, 'CP=', currentPlayer, 'isMyTurn=', isMyTurn(), 'hand=', hands[0].length);
 
-  // ── Write test: prove we can write to this row ──
+  // ── Write test via green debug bar ──
   (async () => {
-    const testId = _myTableId;
-    if (!testId) { toast('❌ No tableId at launch!'); return; }
-    // First check auth status
+    _ftDebug('TEST: tableId=' + (_myTableId||'NULL').slice(0,8) + ' seat=' + _myGlobalSeat);
+    await new Promise(r => setTimeout(r, 500));
+    if (!_myTableId) { _ftDebug('TEST FAIL: no tableId!'); return; }
     const { data: { session } } = await supaClient.auth.getSession();
-    if (!session) { toast('❌ No auth session! Not logged in.'); return; }
-    toast('🔑 Auth OK uid=' + session.user.id.slice(0,8) + ' seat=' + _myGlobalSeat);
-    await new Promise(r => setTimeout(r, 1500));
+    _ftDebug('TEST: auth=' + (session ? session.user.id.slice(0,8) : 'NO SESSION'));
+    await new Promise(r => setTimeout(r, 500));
     const { data, error } = await supaClient
       .from('friend_tables')
       .update({ pending_move: { test: true, seat: _myGlobalSeat, ts: Date.now() } })
-      .eq('id', testId)
+      .eq('id', _myTableId)
       .select('id');
     if (error) {
-      toast('❌ Write FAILED: ' + JSON.stringify(error).slice(0,80));
-      console.error('Write test error:', error);
+      _ftDebug('WRITE ERR: ' + (error.message||JSON.stringify(error)).slice(0,50));
     } else if (!data || data.length === 0) {
-      toast('❌ Write: 0 rows! RLS blocking. tableId=' + testId.slice(0,8));
-      console.warn('Write test matched 0 rows. tableId=', testId, 'uid=', session.user.id);
+      _ftDebug('WRITE: 0 rows! RLS blocked. id=' + _myTableId.slice(0,8));
     } else {
-      toast('✅ Write OK seat=' + _myGlobalSeat + ' rows=' + data.length);
-      console.log('Write test succeeded:', data);
+      _ftDebug('WRITE OK! rows=' + data.length + ' seat=' + _myGlobalSeat);
     }
   })();
 
@@ -6877,18 +6876,17 @@ let _ftLastStateTs  = 0;
 let _ftPollCount = 0;
 const _ftDebugLog = [];
 function _ftDebug(msg) {
-  _ftDebugLog.push(msg);
-  if (_ftDebugLog.length > 2) _ftDebugLog.shift();
+  const time = new Date().toLocaleTimeString();
+  _ftDebugLog.push('['+time+'] '+msg);
+  if (_ftDebugLog.length > 6) _ftDebugLog.shift();
   let el = document.getElementById('ft-debug-bar');
   if (!el) {
     el = document.createElement('div');
     el.id = 'ft-debug-bar';
-    el.style = 'position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,0.92);color:#0f0;font:13px monospace;padding:8px;z-index:99999;line-height:1.8;';
+    el.style = 'position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,0.95);color:#0f0;font:12px monospace;padding:6px 8px;z-index:99999;line-height:1.7;max-height:50vh;overflow-y:auto;';
     document.body.appendChild(el);
   }
-  el.innerHTML = _ftDebugLog.map((m,i) => 
-    '<div style="opacity:'+(0.4+i*0.2)+'">' + m + '</div>'
-  ).join('');
+  el.innerHTML = _ftDebugLog.slice().reverse().map(m => '<div>' + m + '</div>').join('');
 }
 
 async function pollFTState(tableId) {
