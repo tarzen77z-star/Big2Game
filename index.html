@@ -3909,8 +3909,7 @@ function executePlay(playerIdx, cards, play) {
     gameActive = false; // stop any further moves
     setPlayerControls(false);
     renderAll(); // show empty hand before result
-    if (_myTableId) { broadcastFTState(); }
-    else if (mpGameMode === 'vs_human' && mpIsHost) { mpBroadcastSync(); }
+    if (_myTableId) { ftAfterMove(); } else if (mpGameMode === 'vs_human' && mpIsHost) { mpBroadcastSync(); }
     // Local winner index for celebration
     const winnerLocalForCel = mpGameMode === 'vs_human'
       ? (playerIdx - (mpMySeat||0) + 4) % 4
@@ -3927,7 +3926,7 @@ function executePlay(playerIdx, cards, play) {
     // Render the played card on the pile first, then clear after a visible delay
     saveGameState();
     renderAll();
-    if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync();
+    if (mpGameMode === 'vs_human' && mpIsHost && !_myTableId) mpBroadcastSync(); // PeerJS only
     setTimeout(() => {
       lastPlay = null;
       passCount = 0;
@@ -3935,8 +3934,7 @@ function executePlay(playerIdx, cards, play) {
       currentPlayer = playerIdx;
       renderDiscardPile();
       document.getElementById('last-play-info').textContent = 'New round – play anything!';
-      if (_myTableId) { broadcastFTState(); }
-      else if (mpGameMode === 'vs_human' && mpIsHost) { mpBroadcastSync(); }
+      if (_myTableId) { ftAfterMove(); } else if (mpGameMode === 'vs_human' && mpIsHost) { mpBroadcastSync(); }
       if (isMyTurn()) {
         setPlayerControls(true);
         updateTurnIndicator();
@@ -3953,19 +3951,8 @@ function executePlay(playerIdx, cards, play) {
   renderAll();
 
   if (_myTableId) {
-    // ── Friend Table mode ──────────────────────────────────
-    // Always broadcast after any play so the other player is in sync.
-    // The NPC runner will receive and handle NPC chains.
-    setPlayerControls(isMyTurn());
-    updateTurnIndicator();
-    broadcastFTState();
-    // NPC runner: also kick off NPC chain locally if needed
-    if (_ftIsNpcRunner && !isMyTurn() && mpNpcSlots[currentPlayer]) {
-      const token = ++mpTurnToken;
-      setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 1000 + Math.random()*600);
-    }
+    ftAfterMove();
   } else {
-    // ── PeerJS / single-player mode ────────────────────────
     if (!isMyTurn()) {
       setPlayerControls(false);
       if (mpGameMode !== 'vs_human' || mpIsHost) {
@@ -4004,16 +3991,8 @@ function doPass(playerIdx) {
   renderAll();
 
   if (_myTableId) {
-    // ── Friend Table mode ──────────────────────────────────
-    setPlayerControls(isMyTurn());
-    updateTurnIndicator();
-    broadcastFTState();
-    if (_ftIsNpcRunner && !isMyTurn() && mpNpcSlots[currentPlayer]) {
-      const token = ++mpTurnToken;
-      setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 900 + Math.random()*500);
-    }
+    ftAfterMove();
   } else {
-    // ── PeerJS / single-player mode ────────────────────────
     if (!isMyTurn()) {
       setPlayerControls(false);
       if (mpGameMode !== 'vs_human' || mpIsHost) {
@@ -4056,8 +4035,6 @@ function isMyTurn() {
 
 function npcTurn() {
   if (!gameActive) return;
-  // In Friend Table mode: only the designated NPC runner executes NPC turns
-  if (_myTableId && !_ftIsNpcRunner) return;
   // In PeerJS MP: guests never run NPC AI
   if (!_myTableId && mpGameMode === 'vs_human' && !mpIsHost) return;
   // Skip if it's the local human player's turn
@@ -6634,7 +6611,6 @@ async function timerForceStart(tableId) {
 let _ftSeed        = 0;      // shared random seed for dealing
 let _ftMovesSub    = null;   // realtime subscription / broadcast channel for state
 let _ftStateChannel = null;  // shortcut ref to the broadcast channel once subscribed
-let _ftIsNpcRunner  = false; // true if this player is responsible for running NPCs
 let _ftLastMoveTs  = 0;      // last processed move timestamp
 let _ftMoveQueue   = [];     // queue of moves to process in order
 let _ftActedThisRound = new Set(); // local indices that acted since last round clear
@@ -6757,9 +6733,6 @@ async function launchFriendTableGame(table) {
 
   // ── Determine who runs NPCs (lowest-numbered human seat) ──
   // Both players agree on this deterministically — no communication needed.
-  const firstHumanSeat = seats.findIndex(uid => !!uid);
-  _ftIsNpcRunner = (_myGlobalSeat === firstHumanSeat);
-  console.log('FT: _ftIsNpcRunner=', _ftIsNpcRunner, 'myGlobalSeat=', _myGlobalSeat);
 
   // ── Set player name label ──
   const lbl = document.getElementById('player-name-label');
@@ -6780,11 +6753,12 @@ async function launchFriendTableGame(table) {
   updateTurnIndicator();
 
   // ── Subscribe to state broadcasts from other players ──
-  subscribeFTState(table.id);
+  ftStartPolling(table.id);
 
-  // ── Start NPC turn if needed (only the NPC runner does this) ──
-  if (!isMyTurn() && mpNpcSlots[currentPlayer] && _ftIsNpcRunner) {
-    setTimeout(npcTurn, 1200);
+  // ── Start NPC turn if needed ──
+  if (!isMyTurn() && mpNpcSlots[currentPlayer]) {
+    const tok = ++mpTurnToken;
+    setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 1200);
   }
 
   console.log('Game launched! mySeat=', _myGlobalSeat, 'CP=', currentPlayer, 'isMyTurn=', isMyTurn(), 'hand=', hands[0].length);
@@ -6812,170 +6786,136 @@ async function launchFriendTableGame(table) {
 // Uses Supabase Realtime Broadcast (not postgres_changes) so we don't
 // depend on REPLICA IDENTITY FULL being set on the table.
 
-function subscribeFTState(tableId) {
-  if (_ftMovesSub) { supaClient.removeChannel(_ftMovesSub); _ftMovesSub = null; }
-  _ftMovesSub = supaClient
-    .channel('ft_state_' + tableId)
-    .on('postgres_changes', {
-      event: 'UPDATE', schema: 'public', table: 'friend_tables',
-      filter: 'id=eq.' + tableId
-    }, (evt) => {
-      const row = evt.new;
-      if (!row || !row.pending_move) return;
-      const snap = row.pending_move;
-      if (!snap.ft_state) return;
-      if (snap.ft_state_author === _myGlobalSeat) return;
-      if (snap.ft_state_ts <= _ftLastStateTs) return;
-      _ftLastStateTs = snap.ft_state_ts;
-      console.log('FT realtime: got state from seat', snap.ft_state_author);
-      applyFTState(snap.ft_state);
-    })
-    .subscribe(s => console.log('FT state sub:', s));
-  // Also poll as fallback every 2s in case realtime misses anything
+// ════════════════════════════════════════════════════════
+// FRIEND TABLE SYNC — Clean rewrite
+//
+// HOW IT WORKS:
+// - All players share the same deck (seeded random)
+// - Turn order: seats go 0→1→2→3→0... NPCs run on whoever's turn it is
+// - After ANY human move (or NPC chain), the active player writes
+//   the full game state to friend_tables.pending_move
+// - All other players poll every 1.5s, read it, apply it
+// - No realtime channels — just simple reliable polling
+// ════════════════════════════════════════════════════════
+
+// ── State vars ────────────────────────────────────────
+let _ftPollTimer   = null;
+let _ftLastApplied = 0;   // ts of last state we applied from DB
+
+// ── Start polling for state from other players ────────
+function ftStartPolling(tableId) {
   if (_ftPollTimer) clearInterval(_ftPollTimer);
-  _ftPollTimer = setInterval(() => pollFTState(tableId), 2000);
-  console.log('FT: subscribed + polling for table', tableId);
+  _ftPollTimer = setInterval(() => ftPoll(tableId), 1500);
 }
 
-let _ftPollTimer    = null;
-let _ftLastStateTs  = 0;
+function ftStopPolling() {
+  if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
+}
 
-
-
-async function pollFTState(tableId) {
-  if (!gameActive || !supaClient) {
-    return;
-  }
+async function ftPoll(tableId) {
+  if (!gameActive || !supaClient) return;
   try {
-    const { data, error } = await supaClient
+    const { data } = await supaClient
       .from('friend_tables')
       .select('pending_move')
       .eq('id', tableId)
       .single();
-    if (error) { console.warn('poll err:',error); return; }
-    if (!data) return;
-    const snap = data.pending_move;
-    if (!snap || !snap.ft_state) return;
-    if (snap.ft_state_author === _myGlobalSeat) return; // own write
-    if (snap.ft_state_ts <= _ftLastStateTs) return;     // already applied
-    _ftLastStateTs = snap.ft_state_ts;
-    applyFTState(snap.ft_state);
-  } catch(e) { console.warn('poll ex:',e); }
+    if (!data?.pending_move?.ts) return;
+    const s = data.pending_move;
+    // Skip if it's our own write or already applied
+    if (s.author === _myGlobalSeat) return;
+    if (s.ts <= _ftLastApplied) return;
+    _ftLastApplied = s.ts;
+    ftApplyState(s.state);
+  } catch(e) {}
 }
 
-function applyFTState(state) {
-  if (!gameActive) { console.log('FT applyFTState: skipped, gameActive=false'); return; }
-  console.log('FT applyFTState: myGlobalSeat=', _myGlobalSeat, 'CP_global=', state.currentPlayer_global, 'author=', state.ft_state_author);
-  toast('📥 Got state CP=' + state.currentPlayer_global + ' me=seat' + _myGlobalSeat);
+// ── Write state to DB after our move ─────────────────
+async function ftPushState() {
+  if (!supaClient || !_myTableId) return;
+  const r = _myGlobalSeat;
+  const ts = Date.now();
+  const state = {
+    // Store hands in global order so any player can reconstruct their view
+    hands:   [0,1,2,3].map(g => hands[(g - r + 4) % 4]),
+    cp:      (currentPlayer + r) % 4,   // currentPlayer in global seats
+    op:      (openingPlayer + r) % 4,   // openingPlayer in global seats
+    lp:      lastPlay,
+    dp:      discardPile,
+    crp:     currentRoundPlays.map(p => ({...p, pi: (p.playerIdx + r) % 4})),
+    pc:      passCount,
+    ft:      firstTurn,
+    ga:      gameActive,
+    ss:      [0,1,2,3].map(g => mpSessionScores[(g - r + 4) % 4] || 0),
+    gdc:     [...globalDiscardedCards],
+  };
+  try {
+    await supaClient.from('friend_tables')
+      .update({ pending_move: { state, author: r, ts } })
+      .eq('id', _myTableId);
+    _ftLastApplied = ts; // don't re-apply our own write
+  } catch(e) { console.warn('ftPushState:', e); }
+}
 
-  // Convert global currentPlayer to local index
-  const globalCP = state.currentPlayer_global;
-  const localCP  = (globalCP - _myGlobalSeat + 4) % 4;
-
-  // Apply all global state fields — hands are stored in global order
-  hands         = [0,1,2,3].map(li => state.hands_global[(li + _myGlobalSeat) % 4]);
-  currentPlayer = localCP;
-  discardPile   = state.discardPile   || [];
-  lastPlay      = state.lastPlay      || null;
-  passCount     = state.passCount     || 0;
-  firstTurn     = state.firstTurn     !== undefined ? state.firstTurn : false;
-  openingPlayer = (state.openingPlayer_global - _myGlobalSeat + 4) % 4;
-  currentRoundPlays = (state.currentRoundPlays_global || []).map(p => ({
-    ...p,
-    playerIdx: (p.playerIdx_global - _myGlobalSeat + 4) % 4
-  }));
-  globalDiscardedCards = new Set(state.globalDiscardedCards || []);
-  gameActive    = state.gameActive !== undefined ? state.gameActive : true;
-  if (state.sessionScores_global) {
-    mpSessionScores = [0,1,2,3].map(li => state.sessionScores_global[(li + _myGlobalSeat) % 4] || 0);
-  }
+// ── Apply state received from another player ──────────
+function ftApplyState(s) {
+  if (!gameActive) return;
+  const r = _myGlobalSeat;
+  hands             = [0,1,2,3].map(li => s.hands[(li + r) % 4]);
+  currentPlayer     = (s.cp - r + 4) % 4;
+  openingPlayer     = (s.op - r + 4) % 4;
+  lastPlay          = s.lp || null;
+  discardPile       = s.dp || [];
+  passCount         = s.pc || 0;
+  firstTurn         = s.ft !== undefined ? s.ft : false;
+  gameActive        = s.ga !== undefined ? s.ga : true;
+  currentRoundPlays = (s.crp||[]).map(p => ({...p, playerIdx: (p.pi - r + 4) % 4}));
+  globalDiscardedCards = new Set(s.gdc||[]);
+  if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[(li + r) % 4] || 0);
 
   saveGameState();
   renderAll();
 
-  if (!gameActive) {
-    if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
-    return;
-  }
+  if (!gameActive) { ftStopPolling(); return; }
 
   if (isMyTurn()) {
-    // It's our turn — enable controls
     setPlayerControls(true);
     updateTurnIndicator();
-  } else if (mpNpcSlots[currentPlayer] && _ftIsNpcRunner) {
-    // NPC's turn and we are the runner — run the NPC chain then broadcast
+  } else if (mpNpcSlots[currentPlayer]) {
+    // NPC turn — we run it locally after a short delay
     setPlayerControls(false);
     updateTurnIndicator();
-    const token = ++mpTurnToken;
-    setTimeout(() => { if (mpTurnToken === token) npcTurn(); }, 1000 + Math.random()*600);
+    const tok = ++mpTurnToken;
+    setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*600);
   } else {
-    // Other human's turn — wait for their broadcast
+    // Another human's turn — wait for their push
     setPlayerControls(false);
     updateTurnIndicator();
   }
 }
 
-let _ftBroadcastTimer = null;
-
-function broadcastFTState() {
-  // Debounce: if called multiple times rapidly (NPC chain), only send the final state
-  if (_ftBroadcastTimer) clearTimeout(_ftBroadcastTimer);
-  _ftBroadcastTimer = setTimeout(_dobroadcastFTState, 80);
+// ── Called after any local play/pass/npc completes ───
+// Pushes state and updates UI
+function ftAfterMove() {
+  if (!_myTableId) return;
+  setPlayerControls(isMyTurn());
+  updateTurnIndicator();
+  ftPushState(); // fire and forget — async
+  // If NPC is next, run it
+  if (!isMyTurn() && mpNpcSlots[currentPlayer]) {
+    const tok = ++mpTurnToken;
+    setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*600);
+  }
 }
 
-async function _dobroadcastFTState() {
-  _ftBroadcastTimer = null;
-  if (!_myTableId || !supaClient) return;
-
-  const r = _myGlobalSeat;
-  const hands_global             = [0,1,2,3].map(gi => hands[(gi - r + 4) % 4]);
-  const currentPlayer_global     = (currentPlayer  + r) % 4;
-  const openingPlayer_global     = (openingPlayer  + r) % 4;
-  const currentRoundPlays_global = currentRoundPlays.map(p => ({
-    ...p, playerIdx_global: (p.playerIdx + r) % 4
-  }));
-  const sessionScores_global = [0,1,2,3].map(gi => mpSessionScores[(gi - r + 4) % 4] || 0);
-
-  const ft_state = {
-    hands_global, currentPlayer_global, openingPlayer_global,
-    currentRoundPlays_global, discardPile, lastPlay, passCount,
-    firstTurn, globalDiscardedCards: [...globalDiscardedCards],
-    gameActive, sessionScores_global
-  };
-
-  const ts = Date.now();
-  // friend_tables has ALL policy for authenticated users — write directly to pending_move
-  // Log key vars so we can debug if write fails
-  console.log('FT broadcast: _myTableId=', _myTableId, '_myGlobalSeat=', _myGlobalSeat, 'userId=', supaUser?.id);
-  if (!_myTableId) { toast('❌ No tableId!'); return; }
-  try {
-    const { data, error, count } = await supaClient
-      .from('friend_tables')
-      .update({ pending_move: { ft_state, ft_state_author: _myGlobalSeat, ft_state_ts: ts } })
-      .eq('id', _myTableId)
-      .select('id'); // force return so we can check rows affected
-    if (error) throw error;
-    const rowsAffected = data ? data.length : 0;
-    if (rowsAffected === 0) {
-      toast('❌ Write: 0 rows! tableId=' + _myTableId.slice(0,8));
-      console.warn('FT: update matched 0 rows. tableId=', _myTableId, 'userId=', supaUser?.id);
-      return;
-    }
-    _ftLastStateTs = ts;
-    toast('📤 Sent CP=' + currentPlayer_global + ' rows=' + rowsAffected);
-    console.log('FT: wrote pending_move, CP_global=', currentPlayer_global, 'rows=', rowsAffected);
-  } catch(e) { console.warn('FT write error:', e); toast('❌ Write:'+e.message.slice(0,40)); }
-}
-
-// ── Player plays or passes in Friend Table mode ───────────
+// ── Player plays a card in FT mode ───────────────────
 function ftGuestPlay(cards, play) {
   executePlay(0, cards, play);
-  // broadcastFTState is called inside executePlay/doPass after NPC chain completes
 }
 
+// ── Player passes in FT mode ─────────────────────────
 function ftGuestPass() {
   doPass(0);
-  // broadcastFTState is called inside doPass after NPC chain completes
 }
 
 // ── Override playerPlay/playerPass for friend table ───────
