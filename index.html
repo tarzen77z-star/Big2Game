@@ -6834,10 +6834,13 @@ async function ftPushState() {
     gdc:     [...globalDiscardedCards],
   };
   try {
-    await supaClient.from('friend_tables')
+    const { data: wr, error: we } = await supaClient.from('friend_tables')
       .update({ pending_move: { state, author: r, ts } })
-      .eq('id', _myTableId);
-    _ftLastApplied = ts; // don't re-apply our own write
+      .eq('id', _myTableId)
+      .select('id');
+    if (we) { toast('❌ Sync error: ' + we.message.slice(0,40)); console.warn('ftPushState err:', we); return; }
+    if (!wr || wr.length === 0) { toast('❌ Write blocked - check Supabase RLS'); console.warn('ftPushState: 0 rows updated'); return; }
+    _ftLastApplied = ts;
   } catch(e) { console.warn('ftPushState:', e); }
 }
 
