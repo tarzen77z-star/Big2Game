@@ -3576,6 +3576,13 @@ function updateScoreboard() {
 // Returns display names for scoreboard in local index order [0..3]
 function mpScoreboardNames() {
   if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
+    // In FT mode, mpSeats is already rotated to local order in launchFriendTableGame
+    // In PeerJS mode, mpSeats is in global order so we need mpMySeat offset
+    if (_myTableId) {
+      // FT: mpSeats already local-rotated — index directly
+      return [0,1,2,3].map(li => mpSeats[li] ? mpSeats[li].name : ('Player '+(li+1)));
+    }
+    // PeerJS: mpSeats in global order, rotate by mpMySeat
     return [0,1,2,3].map(li => {
       const globalSeat = (mpMySeat + li) % 4;
       return mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('Player '+(globalSeat+1));
@@ -3707,8 +3714,18 @@ function playerPlay() {
   }
 
   // Must beat last play if not opening a new round
+  // Exception: if the last play was made by ME (I control the pile), I can play anything
   if (lastPlay && !firstTurn) {
-    if (!beatsPlay(play, lastPlay)) { toast('Must beat the last play!'); return; }
+    const iControlPile = lastPlay.playerIdx === 0; // local idx 0 = always the local player
+    if (!iControlPile && !beatsPlay(play, lastPlay)) {
+      toast('Must beat the last play!'); return;
+    }
+    // If I control the pile and playing a different type, auto-clear it first
+    if (iControlPile && play.type !== lastPlay.type) {
+      lastPlay = null;
+      passCount = 0;
+      currentRoundPlays = [];
+    }
   }
 
   // ── Last-card rule: if next player has 1 card and current play is a single,
@@ -3909,7 +3926,8 @@ function executePlay(playerIdx, cards, play) {
     gameActive = false; // stop any further moves
     setPlayerControls(false);
     renderAll(); // show empty hand before result
-    if (_myTableId) { ftAfterMove(); } else if (mpGameMode === 'vs_human' && mpIsHost) { mpBroadcastSync(); }
+    // NOTE: For FT mode, ftAfterMove (push) is called INSIDE endGame after scores are computed
+    if (!_myTableId && mpGameMode === 'vs_human' && mpIsHost) { mpBroadcastSync(); }
     // Local winner index for celebration
     const winnerLocalForCel = mpGameMode === 'vs_human'
       ? (playerIdx - (mpMySeat||0) + 4) % 4
@@ -4952,6 +4970,12 @@ function endGame(winnerIdx) {
     // Accumulate session scores (host-local order)
     gameDeltas.forEach((d,i) => { mpSessionScores[i] = (mpSessionScores[i]||0) + d; });
   }
+  // In FT mode: push final state NOW (after mpSessionScores updated) so other players
+  // get correct scores in their game-over banner
+  if (_myTableId) {
+    ftAfterMove(); // async — fires push with updated ss including this game's deltas
+  }
+
   showWinCelebration(winnerIdx, mpNames, () => {
     mpShowEndBanner(winnerIdx, raw, mults, gameDeltas, mpNames);
     // In Friend Table mode: update Leave button text
@@ -6824,13 +6848,16 @@ async function launchFriendTableGame(table) {
   // ── Subscribe to state broadcasts from other players ──
   ftStartPolling(table.id);
 
+  // ── Runner: push initial state so late joiners can sync immediately ──
+  if (ftAmNpcRunner()) {
+    setTimeout(() => { if (gameActive && _myTableId) ftPushState(); }, 800);
+  }
+
   // ── Start NPC turn if needed (only NPC runner) ──
   if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
     setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 1200);
   }
-
-
 
   toast('🏓 Friend Table game started!');
 }
@@ -7101,13 +7128,16 @@ function ftApplyState(s) {
           gameDeltas[j] += diff;
         }
       }
-      // Session scores
+      // Session scores — s.ss is already in local order (host rotated it)
       if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[li] || 0);
-      // Record in session history
+      // Record in session history (only if not already recorded — prevent double-count on reconnect)
+      const alreadyRecorded = mpSessionHistory.some(h => h.seq === s.seq);
+      if (alreadyRecorded) return;
       mpSessionHistory.push({
         winnerLocalIdx: winnerLocal,
         gameDeltas: gameDeltas.slice(),
-        raw: rawLocal.slice()
+        raw: rawLocal.slice(),
+        seq: s.seq
       });
       if (!mpSessionNames.length) {
         mpSessionNames = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
@@ -7152,53 +7182,83 @@ async function ftAfterMove() {
 function ftGuestPlay(cards, play) { executePlay(0, cards, play); }
 function ftGuestPass() { doPass(0); }
 
-// Restart game within same FT room
+// Restart game within same FT room.
+// Works even if one player clicks Continue much later than the other.
+// Runner writes new seed immediately. Late player polls until seed changes,
+// launches new game, then syncs to current game state via pending_move.
 async function ftRestartGame() {
   if (!_myTableId || !supaClient) return;
 
-  // Stop old game polling immediately so stale states can't re-apply
+  // Stop old game polling — stale states must not re-apply
   ftStopPolling();
 
   const oldSeed = _ftSeed;
 
   if (ftAmNpcRunner()) {
-    // Only the runner writes the new seed — avoids race condition
+    // Runner writes new seed right away
     const newSeed = Math.floor(Math.random() * 0x7fffffff);
-    // Clear pending_move and old notifications, write new seed
     await supaClient.from('friend_tables')
       .update({ payload: { seed: newSeed, started: true }, pending_move: null })
       .eq('id', _myTableId);
-    // Delete old game_move notifications for all players at this table
-    // so the poll doesn't find and re-apply them
+    // Clean up old game_move notifications (best-effort)
     try {
       await supaClient.from('friend_notifications')
         .delete()
         .in('recipient_id', _ftOtherSeats.concat([supaUser.id]))
         .eq('type', 'game_move')
         .eq('payload->>table_id', _myTableId);
-    } catch(e) {} // best-effort cleanup
+    } catch(e) {}
   }
 
-  // All players poll until the seed changes
-  let attempts = 0;
-  const waitForRestart = setInterval(async () => {
-    attempts++;
-    if (attempts > 30) { clearInterval(waitForRestart); toast('⚠️ Restart timed out'); return; }
+  // Show a "waiting" indicator while polling
+  toast('⏳ Starting new game…');
+
+  // Poll indefinitely (every 1s) until the seed changes — no timeout.
+  // This means a player can click Continue 60s late and still rejoin.
+  let _waitTimer = null;
+  async function checkForNewGame() {
     try {
       const { data: row } = await supaClient.from('friend_tables')
         .select('*').eq('id', _myTableId).single();
-      if (!row) { clearInterval(waitForRestart); return; }
-      if (row.payload?.seed && row.payload.seed !== oldSeed) {
-        clearInterval(waitForRestart);
-        // Full reset of sync state before launching new game
-        _ftAppliedSeq = 0;
-        _ftSeenKeys   = new Set();
+
+      if (!row) {
+        // Table was deleted — go back to lobby
+        toast('Table no longer exists.');
+        endSessionFinal();
+        return;
+      }
+
+      const newSeed = row.payload?.seed;
+      if (newSeed && newSeed !== oldSeed) {
+        // New game seed found — reset all sync state and launch
+        if (_waitTimer) { clearInterval(_waitTimer); _waitTimer = null; }
+        _ftAppliedSeq  = 0;
+        _ftSeenKeys    = new Set();
         _ftLastNotifId = null;
         _ftLastPmSeq   = 0;
+
         await launchFriendTableGame(row);
+
+        // If game already in progress (late joiner), sync to current state
+        // by fetching pending_move which runner keeps updated
+        if (row.pending_move?.state && row.pending_move.state.gameId === newSeed) {
+          const pm = row.pending_move;
+          if (pm.author !== _myGlobalSeat) {
+            _ftAppliedSeq = pm.state.seq; // accept this as starting point
+            _ftSeenKeys.add('pm:' + pm.state.seq);
+            ftApplyState(pm.state);
+          }
+        }
+        return;
       }
-    } catch(e) {}
-  }, 500);
+    } catch(e) { console.warn('ftRestartGame poll:', e); }
+
+    // Seed not yet changed — poll again in 1s
+    _waitTimer = setTimeout(checkForNewGame, 1000);
+  }
+
+  // Start checking immediately
+  checkForNewGame();
 }
 // ── Override playerPlay/playerPass for friend table ───────
 // All players (not just guests) publish moves in friend table mode
