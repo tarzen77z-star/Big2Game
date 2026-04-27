@@ -955,94 +955,47 @@
   .mode-btn.active-mode { border-color: var(--gold); background: rgba(201,168,76,0.12); }
 
   /* ── PLAYER NAME EDIT ── */
-  #player-name-edit-row {
+  /* ── Player handle (inline in identity card) ── */
+  #player-name-edit-row { display: none; } /* legacy wrapper hidden */
+  #sp-handle {
+    flex: 1;
     display: flex;
-    justify-content: center;
-    margin-bottom: 1rem;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    border-left: 1px solid rgba(201,168,76,0.15);
+    padding-left: 12px;
   }
-
-  /* ── Casino nameplate card ── */
-  #player-nameplate {
-    position: relative;
-    background: linear-gradient(160deg, rgba(20,14,5,0.95), rgba(35,22,5,0.9), rgba(20,14,5,0.95));
-    border: 1px solid rgba(201,168,76,0.5);
-    border-radius: 12px;
-    padding: 10px 20px 12px;
-    width: 220px;
-    text-align: center;
-    box-shadow:
-      0 4px 20px rgba(0,0,0,0.6),
-      0 0 0 1px rgba(201,168,76,0.08),
-      inset 0 1px 0 rgba(255,220,100,0.06);
-    overflow: hidden;
-    transition: box-shadow 0.3s, border-color 0.3s;
-  }
-  #player-nameplate:focus-within {
-    border-color: rgba(201,168,76,0.85);
-    box-shadow:
-      0 4px 24px rgba(0,0,0,0.7),
-      0 0 18px rgba(201,168,76,0.18),
-      inset 0 1px 0 rgba(255,220,100,0.1);
-  }
-  /* Corner ornaments */
-  #player-nameplate::before,
-  #player-nameplate::after {
-    content: '◆';
-    position: absolute;
-    font-size: 0.45rem;
-    color: rgba(201,168,76,0.45);
-    line-height: 1;
-  }
-  #player-nameplate::before { top: 6px; left: 8px; }
-  #player-nameplate::after  { bottom: 6px; right: 8px; }
-
-  /* Shine overlay */
-  #player-nameplate-shine {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(105deg, transparent 30%, rgba(255,220,100,0.04) 50%, transparent 70%);
-    pointer-events: none;
-    border-radius: 12px;
-  }
-
-  /* "YOUR NAME" micro-label */
-  #player-nameplate-label {
+  #sp-handle-label {
     font-family: 'Crimson Pro', serif;
-    font-size: 0.58rem;
+    font-size: 0.55rem;
     letter-spacing: 0.22em;
-    color: rgba(201,168,76,0.55);
+    color: rgba(201,168,76,0.45);
     text-transform: uppercase;
-    margin-bottom: 5px;
     user-select: none;
   }
-
-  /* Input field inside the card */
   #player-name-input {
     background: none;
     border: none;
-    border-bottom: 1px solid rgba(201,168,76,0.35);
+    border-bottom: 1px solid rgba(201,168,76,0.25);
     color: var(--gold-light);
     font-family: 'Playfair Display', serif;
-    font-size: 1.15rem;
+    font-size: 1.05rem;
     font-weight: 700;
-    letter-spacing: 0.06em;
-    padding: 2px 4px 4px;
+    letter-spacing: 0.05em;
+    padding: 1px 0 3px;
     width: 100%;
-    text-align: center;
     outline: none;
     transition: border-color 0.2s;
-    position: relative;
-    z-index: 1;
   }
-  #player-name-input:focus { border-bottom-color: var(--gold); }
+  #player-name-input:focus { border-bottom-color: rgba(201,168,76,0.7); }
   #player-name-input::placeholder {
-    color: rgba(201,168,76,0.3);
+    color: rgba(201,168,76,0.22);
     font-weight: 400;
     font-style: italic;
-    font-size: 0.95rem;
-    letter-spacing: 0.03em;
+    font-size: 0.88rem;
   }
-  .edit-name-label { display: none; } /* hidden — replaced by nameplate label */
+  .edit-name-label { display: none; }
 
   /* ── SPLASH TITLES ── */
   #splash-stonybrook {
@@ -1639,23 +1592,74 @@
   }
   .btn-auth-guest:hover { color:rgba(160,184,255,0.8); }
 
-  /* ── Splash mini leaderboard ── */
+  /* ══════════════════════════════════════════════════════
+     SPLASH SCREEN — Playing Card Theme
+     ══════════════════════════════════════════════════════ */
+
+  /* Floating card decorations */
+  .sp-card-deco {
+    position: absolute;
+    font-family: 'Playfair Display', serif;
+    font-weight: 900;
+    line-height: 1;
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.06;
+    font-size: 4rem;
+    color: #fff;
+  }
+  .sp-card-deco-1 { top: 8%; left: 4%; transform: rotate(-15deg); }
+  .sp-card-deco-2 { top: 12%; right: 5%; transform: rotate(12deg); color: #ff6666; }
+  .sp-card-deco-3 { bottom: 10%; left: 6%; transform: rotate(8deg); }
+
+  /* Player identity card */
+  #sp-identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 340px;
+    margin: 8px 0 10px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(201,168,76,0.25);
+    border-radius: 2px;
+    padding: 10px 14px;
+    position: relative;
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  }
+  #sp-identity::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(201,168,76,0.05) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  #sp-identity-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  #sp-rank-info { line-height: 1.3; }
+
+  /* Leaderboard mini */
   #splash-leaderboard {
     width: 100%;
     max-width: 340px;
-    background: rgba(0,0,0,0.28);
+    background: rgba(0,0,0,0.3);
     border: 1px solid rgba(201,168,76,0.18);
-    border-radius: 12px;
+    border-left: 3px solid rgba(201,168,76,0.5);
+    border-radius: 0 2px 2px 0;
     padding: 10px 14px;
-    margin: 6px 0 10px;
+    margin: 0 0 10px;
   }
   .splash-lb-title {
-    font-size: 0.68rem;
-    letter-spacing: 0.14em;
+    font-size: 0.64rem;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: rgba(201,168,76,0.6);
+    color: rgba(201,168,76,0.55);
     font-family: 'Crimson Pro', serif;
-    margin-bottom: 7px;
+    margin-bottom: 8px;
     text-align: center;
   }
   .splash-lb-row {
@@ -1667,81 +1671,141 @@
     font-size: 0.78rem;
   }
   .splash-lb-row:last-child { border-bottom: none; }
-  .splash-lb-pos { width: 20px; text-align: center; font-size: 0.9rem; flex-shrink: 0; }
+  .splash-lb-pos { width: 20px; text-align: center; font-size: 0.88rem; flex-shrink: 0; }
   .splash-lb-name { flex: 1; color: var(--text-light); font-family: 'Crimson Pro', serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .splash-lb-name.me { color: #7fffaa; font-weight: 700; }
-  .splash-lb-score { color: var(--gold-light); font-weight: 600; font-size: 0.73rem; flex-shrink: 0; }
+  .splash-lb-score { color: var(--gold-light); font-weight: 700; font-size: 0.72rem; flex-shrink: 0; }
   .splash-lb-loading { text-align: center; color: var(--text-dim); font-style: italic; font-size: 0.78rem; padding: 4px 0; }
 
-  /* ── Splash groups ── */
-  .splash-group {
+  /* Action cards — sharp card-style rows */
+  .sp-action-card {
     width: 100%;
     max-width: 340px;
-    background: rgba(255,255,255,0.025);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 14px;
-    margin-bottom: 10px;
-    overflow: hidden;
-  }
-  .splash-group-dim { opacity: 0.55; }
-  .splash-group-label {
-    font-size: 0.62rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.3);
-    font-family: 'Crimson Pro', serif;
-    padding: 7px 14px 5px;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
     display: flex;
     align-items: center;
-    gap: 8px;
-  }
-  .splash-group-body {
-    padding: 12px 14px 14px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-  .splash-soon {
-    font-size: 0.58rem;
-    background: rgba(255,180,60,0.2);
-    border: 1px solid rgba(255,180,60,0.4);
-    color: rgba(255,200,100,0.8);
-    border-radius: 4px;
-    padding: 1px 6px;
-    letter-spacing: 0.08em;
-  }
-  .splash-soon-btn {
-    width: 100%;
-    padding: 10px;
-    background: rgba(255,255,255,0.04);
-    border: 1px dashed rgba(255,255,255,0.15);
-    border-radius: 8px;
-    color: rgba(160,184,255,0.4);
-    font-family: 'Crimson Pro', serif;
-    font-size: 0.95rem;
-    cursor: not-allowed;
-  }
-  .splash-btn-row {
-    display: flex;
-    gap: 6px;
-    width: 100%;
-    max-width: 320px;
-  }
-  .splash-sub-btn {
-    flex: 1;
-    padding: 7px 4px;
+    gap: 0;
+    margin-bottom: 7px;
+    cursor: pointer;
     background: rgba(255,255,255,0.04);
     border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
-    color: rgba(160,184,255,0.7);
+    border-radius: 2px;
+    overflow: hidden;
+    transition: all 0.18s;
+    position: relative;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sp-action-card:hover {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(201,168,76,0.4);
+    transform: translateX(2px);
+  }
+  .sp-action-card:active { transform: translateX(4px); opacity: 0.85; }
+  .sp-action-dim { opacity: 0.35; cursor: default; pointer-events: none; }
+  .sp-action-card-suit {
+    width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    color: rgba(201,168,76,0.7);
+    flex-shrink: 0;
+    padding: 14px 0;
+    background: rgba(0,0,0,0.2);
+    border-right: 1px solid rgba(255,255,255,0.06);
+    font-family: 'Playfair Display', serif;
+  }
+  .sp-action-card-body {
+    flex: 1;
+    padding: 12px 14px;
+  }
+  .sp-action-title {
     font-family: 'Crimson Pro', serif;
-    font-size: 0.78rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: rgba(220,235,255,0.9);
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sp-action-sub {
+    font-size: 0.68rem;
+    color: rgba(140,165,220,0.5);
+    margin-top: 2px;
+    font-family: 'Crimson Pro', serif;
+    letter-spacing: 0.04em;
+  }
+  .sp-action-arrow {
+    padding: 0 14px;
+    font-size: 1rem;
+    color: rgba(201,168,76,0.5);
+    flex-shrink: 0;
+    transition: transform 0.2s;
+  }
+  .sp-action-arrow.open { transform: rotate(90deg); }
+  .sp-soon-pill {
+    font-size: 0.55rem;
+    background: rgba(255,180,60,0.18);
+    border: 1px solid rgba(255,180,60,0.35);
+    color: rgba(255,200,100,0.7);
+    border-radius: 3px;
+    padding: 1px 5px;
+    letter-spacing: 0.1em;
+    font-family: 'Crimson Pro', serif;
+    vertical-align: middle;
+  }
+
+  /* Solo drawer */
+  #sp-solo-card { margin-bottom: 0; border-bottom: none; }
+  #sp-solo-drawer {
+    width: 100%;
+    max-width: 340px;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-top: none;
+    border-radius: 0 0 2px 2px;
+    padding: 12px 12px 10px;
+    margin-bottom: 7px;
+    display: none;
+  }
+  #sp-solo-drawer.open { display: block; }
+  .sp-drawer-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .sp-drawer-btn {
+    flex: 1;
+    padding: 7px 6px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 2px;
+    color: rgba(160,184,255,0.65);
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.8rem;
     cursor: pointer;
     transition: all 0.15s;
     text-align: center;
+    letter-spacing: 0.03em;
   }
-  .splash-sub-btn:hover { background: rgba(60,100,200,0.2); border-color: rgba(100,160,255,0.35); color: rgba(200,220,255,0.9); }
+  .sp-drawer-btn:hover { background: rgba(60,100,200,0.18); border-color: rgba(100,160,255,0.35); color: rgba(200,220,255,0.9); }
+
+  /* Mode grid inside drawer */
+  .mode-grid { width: 100%; gap: 5px; margin-bottom: 0; }
+  .mode-btn {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 2px;
+    padding: 9px 6px;
+    font-size: 0.8rem;
+    transition: all 0.15s;
+  }
+  .mode-btn:hover:not(:disabled) { background: rgba(201,168,76,0.12); border-color: rgba(201,168,76,0.5); }
+  .mode-btn.active-mode { border-color: var(--gold); background: rgba(201,168,76,0.1); color: var(--gold-light); }
+  .mode-btn:disabled { opacity: 0.28; cursor: not-allowed; }
+
+  .splash-btn-row { display: flex; gap: 6px; width: 100%; max-width: 340px; }
   .splash-half-btn { flex: 1; margin-top: 0 !important; }
 
 
@@ -2154,12 +2218,13 @@
 
 <!-- SPLASH -->
 <div id="splash">
-  <!-- ── Header: title + account ── -->
-  <div id="splash-stonybrook">Stony Brook</div>
-  <h1>鋤大弟</h1>
-  <div id="splash-big2">Big 2</div>
 
-  <!-- Account bar -->
+  <!-- ── Floating card decorations ── -->
+  <div class="sp-card-deco sp-card-deco-1">A<br>♠</div>
+  <div class="sp-card-deco sp-card-deco-2">K<br>♥</div>
+  <div class="sp-card-deco sp-card-deco-3">2<br>♣</div>
+
+  <!-- ── Account bar (top right) ── -->
   <div id="account-bar">
     <div id="account-status">
       <span id="account-icon">👤</span>
@@ -2171,104 +2236,109 @@
     </div>
   </div>
 
-  <!-- Name plate -->
-  <div id="player-name-edit-row">
-    <div id="player-nameplate">
-      <div id="player-nameplate-label">✦ YOUR NAME ✦</div>
-      <input type="text" id="player-name-input" maxlength="16" placeholder="Enter your name" oninput="updatePlayerName(this.value)" autocomplete="off" spellcheck="false"/>
-      <div id="player-nameplate-shine"></div>
+  <!-- ── Title block ── -->
+  <div id="splash-stonybrook">Stony Brook</div>
+  <h1>鋤大弟</h1>
+  <div id="splash-big2">Big 2</div>
+
+  <!-- ── Player identity card: name + rank + score combined ── -->
+  <div id="sp-identity">
+    <div id="sp-identity-left">
+      <div class="rank-badge beginner" id="splash-badge"></div>
+      <div id="sp-rank-info">
+        <div id="splash-rank-name" style="font-size:0.78rem;color:var(--gold-light);font-weight:700;font-family:'Crimson Pro',serif;letter-spacing:0.06em;">Normal</div>
+        <div style="font-size:0.65rem;color:rgba(201,168,76,0.55);font-family:'Crimson Pro',serif;">✦ <span id="splash-pts">0</span> pts</div>
+      </div>
+    </div>
+    <div id="sp-handle">
+      <div id="sp-handle-label">ALIAS</div>
+      <input type="text" id="player-name-input" maxlength="16" placeholder="Enter handle…" oninput="updatePlayerName(this.value)" autocomplete="off" spellcheck="false"/>
     </div>
   </div>
 
-  <!-- Rank bar -->
-  <div id="splash-rank">
-    <div class="rank-badge beginner" id="splash-badge"></div>
-    <div id="splash-rank-text">Rank: <strong id="splash-rank-name">Normal</strong> &nbsp;|&nbsp; Score: <strong id="splash-pts">0</strong></div>
-  </div>
-
-  <!-- Top 5 Rank Leaderboard mini -->
-  <div id="splash-leaderboard">
-    <div class="splash-lb-title">🏆 Top Players</div>
+  <!-- ── Top 5 leaderboard — signed-in users only ── -->
+  <div id="splash-leaderboard" style="display:none">
+    <div class="splash-lb-title">♠ Top Players ♠</div>
     <div id="splash-lb-rows"><div class="splash-lb-loading">Loading…</div></div>
   </div>
 
-  <!-- ══════════════════════════════════════
-       GROUP 1: SOLO PLAY
-       ══════════════════════════════════════ -->
-  <div class="splash-group">
-    <div class="splash-group-label">Solo Play</div>
-    <div class="splash-group-body">
-
-      <!-- Mode selector -->
-      <div class="mode-grid" id="mode-grid">
-        <button class="mode-btn active-mode" id="mode-beginner" onclick="selectMode('beginner')">
-          <span class="mode-icon">🌱</span>Beginner
-          <span class="mode-req">Open to all</span>
-        </button>
-        <button class="mode-btn" id="mode-intermediate" onclick="selectMode('intermediate')" disabled>
-          <span class="mode-icon">🥉</span>Inter.
-          <span class="mode-req">Bronze req.</span>
-        </button>
-        <button class="mode-btn" id="mode-hard" onclick="selectMode('hard')" disabled>
-          <span class="mode-icon">🥈</span>Hard
-          <span class="mode-req">Silver req.</span>
-        </button>
-        <button class="mode-btn" id="mode-pro" onclick="selectMode('pro')" disabled>
-          <span class="mode-icon">🥇</span>Pro
-          <span class="mode-req">Gold req.</span>
-        </button>
-      </div>
-
-      <button class="btn-gold" id="btn-start-game" onclick="startGame()" style="width:100%;max-width:320px;margin-top:10px;">▶ Start Game</button>
-
-      <!-- Standings + Feats inline -->
-      <div class="splash-btn-row" style="margin-top:8px;">
-        <button class="splash-sub-btn" onclick="showScoreboard()">📊 Standings</button>
-        <button class="splash-sub-btn" onclick="showFeats()">🎖️ Feats</button>
-        <button class="splash-sub-btn" onclick="document.getElementById('legend-panel').classList.add('open')">📖 Guide</button>
-      </div>
+  <!-- ── SOLO PLAY — one button opens drawer ── -->
+  <div id="sp-solo-card" class="sp-action-card" onclick="toggleSoloDrawer()">
+    <div class="sp-action-card-suit">♦</div>
+    <div class="sp-action-card-body">
+      <div class="sp-action-title">Solo Play</div>
+      <div class="sp-action-sub">vs AI · 4 difficulty modes</div>
     </div>
+    <div class="sp-action-arrow" id="sp-solo-arrow">▾</div>
   </div>
-
-  <!-- ══════════════════════════════════════
-       GROUP 2: FRIEND ROOM
-       ══════════════════════════════════════ -->
-  <div class="splash-group">
-    <div class="splash-group-label">Friend Room</div>
-    <div class="splash-group-body">
-      <button id="btn-friend-room" onclick="openFriendRoom()" style="width:100%;">
-        🏠 Open Friend Room
-        <span id="friend-notif-badge" style="display:none;background:#ff6b6b;color:#fff;border-radius:50%;padding:1px 6px;font-size:0.7rem;margin-left:6px;font-family:sans-serif;pointer-events:none">!</span>
+  <div id="sp-solo-drawer">
+    <div class="mode-grid" id="mode-grid">
+      <button class="mode-btn active-mode" id="mode-beginner" onclick="selectAndPlay('beginner')">
+        <span class="mode-icon">🌱</span>Beginner
+        <span class="mode-req">Open to all</span>
       </button>
-      <div style="font-size:0.72rem;color:rgba(140,165,220,0.5);text-align:center;margin-top:5px;">Play with friends · Tables · Leaderboard</div>
-    </div>
-  </div>
-
-  <!-- ══════════════════════════════════════
-       GROUP 3: ONLINE (COMING SOON)
-       ══════════════════════════════════════ -->
-  <div class="splash-group splash-group-dim">
-    <div class="splash-group-label">Online <span class="splash-soon">Coming Soon</span></div>
-    <div class="splash-group-body">
-      <button class="splash-soon-btn" disabled>
-        🌐 Matchmaking
+      <button class="mode-btn" id="mode-intermediate" onclick="selectAndPlay('intermediate')" disabled>
+        <span class="mode-icon">🥉</span>Inter.
+        <span class="mode-req">Bronze+</span>
       </button>
-      <div style="font-size:0.72rem;color:rgba(140,165,220,0.35);text-align:center;margin-top:5px;">Ranked online matches with players worldwide</div>
+      <button class="mode-btn" id="mode-hard" onclick="selectAndPlay('hard')" disabled>
+        <span class="mode-icon">🥈</span>Hard
+        <span class="mode-req">Silver+</span>
+      </button>
+      <button class="mode-btn" id="mode-pro" onclick="selectAndPlay('pro')" disabled>
+        <span class="mode-icon">🥇</span>Pro
+        <span class="mode-req">Gold+</span>
+      </button>
+    </div>
+    <div class="sp-drawer-row">
+      <button class="sp-drawer-btn" onclick="showScoreboard();toggleSoloDrawer()">📊 Standings</button>
+      <button class="sp-drawer-btn" onclick="showFeats();toggleSoloDrawer()">🎖 Feats</button>
     </div>
   </div>
 
-  <!-- ══════════════════════════════════════
-       GROUP 4: HOST GAME (PeerJS)
-       ══════════════════════════════════════ -->
-  <div class="splash-group">
-    <div class="splash-group-label">Host Game</div>
-    <div class="splash-group-body">
-      <button id="btn-multiplayer" onclick="openMpLobby()" style="width:100%;margin-top:0;">👥 Host / Join Room</button>
-      <div style="font-size:0.72rem;color:rgba(140,165,220,0.5);text-align:center;margin-top:5px;">Share a code with up to 3 friends</div>
+  <!-- ── FRIEND ROOM ── -->
+  <div class="sp-action-card" onclick="openFriendRoom()">
+    <div class="sp-action-card-suit">♣</div>
+    <div class="sp-action-card-body">
+      <div class="sp-action-title">Friend Room
+        <span id="friend-notif-badge" style="display:none;background:#e05555;color:#fff;border-radius:50%;width:16px;height:16px;font-size:0.6rem;display:none;align-items:center;justify-content:center;font-family:sans-serif;margin-left:6px;vertical-align:middle">!</span>
+      </div>
+      <div class="sp-action-sub">Tables · Leaderboard · Friends</div>
     </div>
+    <div class="sp-action-arrow">▸</div>
   </div>
+
+  <!-- ── ONLINE — coming soon ── -->
+  <div class="sp-action-card sp-action-dim">
+    <div class="sp-action-card-suit" style="color:rgba(160,184,255,0.2)">♥</div>
+    <div class="sp-action-card-body">
+      <div class="sp-action-title" style="color:rgba(160,184,255,0.35)">Online Room <span class="sp-soon-pill">Soon</span></div>
+      <div class="sp-action-sub" style="color:rgba(140,165,220,0.25)">Ranked matches worldwide</div>
+    </div>
+    <div class="sp-action-arrow" style="color:rgba(255,255,255,0.1)">▸</div>
+  </div>
+
+  <!-- ── HOST GAME ── -->
+  <div class="sp-action-card" onclick="openMpLobby()">
+    <div class="sp-action-card-suit">♠</div>
+    <div class="sp-action-card-body">
+      <div class="sp-action-title">Host Game</div>
+      <div class="sp-action-sub">Share a code · up to 4 players</div>
+    </div>
+    <div class="sp-action-arrow">▸</div>
+  </div>
+
+  <!-- ── LEGEND ── -->
+  <button id="legend-toggle" onclick="document.getElementById('legend-panel').classList.add('open')">📖 Rank &amp; Mode Guide</button>
+
+  <!-- Hidden btn-start-game and btn-multiplayer kept for JS compat -->
+  <button id="btn-start-game" onclick="startGame()" style="display:none"></button>
+  <button id="btn-multiplayer" onclick="openMpLobby()" style="display:none"></button>
 
 </div>
+
+<!-- Solo Drawer backdrop -->
+<div id="sp-drawer-bg" onclick="toggleSoloDrawer()" style="display:none;position:fixed;inset:0;z-index:98;"></div>
 
 
 <!-- FRIEND ROOM MODAL -->
@@ -3077,7 +3147,14 @@ function updateRankUI() {
   if (sp) sp.textContent = rankScore;
 
   // Refresh mini leaderboard on splash if signed in
-  if (supaClient && supaUser) loadSplashLeaderboard();
+  if (supaClient && supaUser) {
+    const lbEl = document.getElementById('splash-leaderboard');
+    if (lbEl) lbEl.style.display = 'block';
+    loadSplashLeaderboard();
+  } else {
+    const lbEl = document.getElementById('splash-leaderboard');
+    if (lbEl) lbEl.style.display = 'none';
+  }
 
   // Unlock mode buttons — use cumulative rankScore thresholds
   // Beginner: always open, Intermediate: 100+, Hard: 1100+, Pro: 6100+
@@ -6224,6 +6301,31 @@ function clearConfetti() {
 //  FRIEND ROOM — PHASE 1: Friends, Invite, Requests
 // ════════════════════════════════════════════════════════════
 
+
+// ── Solo play drawer ─────────────────────────────────────────
+function toggleSoloDrawer() {
+  const drawer = document.getElementById('sp-solo-drawer');
+  const arrow  = document.getElementById('sp-solo-arrow');
+  const bg     = document.getElementById('sp-drawer-bg');
+  const open   = drawer.classList.toggle('open');
+  if (arrow) arrow.classList.toggle('open', open);
+  if (bg) bg.style.display = open ? 'block' : 'none';
+}
+
+// Mode click in drawer: select mode then start or resume
+function selectAndPlay(mode) {
+  selectMode(mode);
+  toggleSoloDrawer();
+  // Small delay so mode selection renders before game starts
+  setTimeout(() => {
+    const hasSaved = !!localStorage.getItem(modeKey(mode, 'big2_gamestate'));
+    if (hasSaved) {
+      resumeGame();
+    } else {
+      startGame();
+    }
+  }, 120);
+}
 
 // ── Save Friend Table game result to profiles ────────────────
 async function saveFriendGameStats(didWin, pointsDelta) {
