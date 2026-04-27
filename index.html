@@ -6956,6 +6956,7 @@ function ftBuildState() {
     gdc: [...globalDiscardedCards],
     author: r,
     seq: Date.now(),
+    gameId: _ftSeed,  // reject states from previous games
     // Include winner info so non-winning players can show the end banner
     winnerGlobal: gameActive ? null : (() => {
       // Find the player with 0 cards — they're the winner
@@ -7042,6 +7043,9 @@ function ftApplyState(s) {
   const r = _myGlobalSeat;
   if (r === null || r === undefined) return;
   if (!s || !s.seq) return;
+
+  // Reject states from a different game (previous or future)
+  if (s.gameId && s.gameId !== _ftSeed) return;
 
   // Reject stale states — only ever move time forward
   if (s.seq <= _ftAppliedSeq) return;
@@ -7151,28 +7155,49 @@ function ftGuestPass() { doPass(0); }
 // Restart game within same FT room
 async function ftRestartGame() {
   if (!_myTableId || !supaClient) return;
+
+  // Stop old game polling immediately so stale states can't re-apply
+  ftStopPolling();
+
+  const oldSeed = _ftSeed;
+
   if (ftAmNpcRunner()) {
-    // Only the runner (lowest seat) writes the new seed — avoids race condition
+    // Only the runner writes the new seed — avoids race condition
     const newSeed = Math.floor(Math.random() * 0x7fffffff);
-    const { error } = await supaClient.from('friend_tables')
+    // Clear pending_move and old notifications, write new seed
+    await supaClient.from('friend_tables')
       .update({ payload: { seed: newSeed, started: true }, pending_move: null })
       .eq('id', _myTableId);
-    if (error) { toast('❌ Could not restart: ' + error.message); return; }
+    // Delete old game_move notifications for all players at this table
+    // so the poll doesn't find and re-apply them
+    try {
+      await supaClient.from('friend_notifications')
+        .delete()
+        .in('recipient_id', _ftOtherSeats.concat([supaUser.id]))
+        .eq('type', 'game_move')
+        .eq('payload->>table_id', _myTableId);
+    } catch(e) {} // best-effort cleanup
   }
-  // All players watch for the new seed — poll until the row updates
+
+  // All players poll until the seed changes
   let attempts = 0;
   const waitForRestart = setInterval(async () => {
     attempts++;
-    if (attempts > 20) { clearInterval(waitForRestart); toast('⚠️ Restart timed out'); return; }
-    const { data: row } = await supaClient.from('friend_tables').select('*').eq('id', _myTableId).single();
-    if (!row) { clearInterval(waitForRestart); return; }
-    // Check if seed changed (new game has different seed from current)
-    if (row.payload?.seed && row.payload.seed !== _ftSeed) {
-      clearInterval(waitForRestart);
-      _ftAppliedSeq = 0; // reset seq guard for new game
-      _ftSeenKeys = new Set();
-      await launchFriendTableGame(row);
-    }
+    if (attempts > 30) { clearInterval(waitForRestart); toast('⚠️ Restart timed out'); return; }
+    try {
+      const { data: row } = await supaClient.from('friend_tables')
+        .select('*').eq('id', _myTableId).single();
+      if (!row) { clearInterval(waitForRestart); return; }
+      if (row.payload?.seed && row.payload.seed !== oldSeed) {
+        clearInterval(waitForRestart);
+        // Full reset of sync state before launching new game
+        _ftAppliedSeq = 0;
+        _ftSeenKeys   = new Set();
+        _ftLastNotifId = null;
+        _ftLastPmSeq   = 0;
+        await launchFriendTableGame(row);
+      }
+    } catch(e) {}
   }, 500);
 }
 // ── Override playerPlay/playerPass for friend table ───────
