@@ -6156,12 +6156,14 @@ async function loadFriendsList() {
       if (tableInfo) {
         const grpLabel = {beginner:'🌱',intermediate:'🥉',hard:'🥈',pro:'🥇'}[tableInfo.group]||'🏓';
         const statusLabel = tableInfo.status==='playing' ? '🎮 Playing' : '⏳ Waiting';
-        const npcLabel = tableInfo.npcCount > 0 ? ` · ${tableInfo.npcCount} NPC slot${tableInfo.npcCount>1?'s':''}` : '';
+        // Show NPC slots for both waiting and playing — player can reserve a slot for next game
+        const npcLabel = tableInfo.npcCount > 0
+          ? ` · ${tableInfo.npcCount} NPC slot${tableInfo.npcCount>1?'s':''}` : '';
         tableStr = `<span style="color:rgba(100,220,120,0.9);font-size:0.7rem;margin-left:4px">${grpLabel} ${statusLabel}${npcLabel}</span>`;
       }
 
       const statusHtml = onlineStr + tableStr;
-      const joinBtn = (tableInfo && tableInfo.status==='waiting' && tableInfo.npcCount>0 && !_myTableId)
+      const joinBtn = (tableInfo && tableInfo.npcCount>0 && !_myTableId)
         ? `<button class="friend-action-btn accept" onclick="openFriendRoom();friendSwitchTab('tables');" style="white-space:nowrap;font-size:0.7rem;">Join Table</button>`
         : '';
       const removeBtn = `<button class="friend-action-btn danger" onclick="removeFriend('${p.id}','${p.username}')">Remove</button>`;
@@ -6569,18 +6571,27 @@ function renderTableCard(t, num, seats, nameMap, isMyTable) {
             <div class="seat-avatar" style="background:rgba(100,100,100,0.2);color:rgba(150,150,150,0.5)">—</div>
             <span>NPC</span></div>`;
     }
+    // Game in progress — clicking reserves the NPC seat for the next game
+    if (t.status === 'playing') {
+      return `<div class="table-seat empty" onclick="reserveNpcSeat('${t.id}',${seatNum})" style="cursor:pointer;border:1px dashed rgba(100,220,120,0.4)">
+            <div class="seat-avatar" style="background:rgba(100,220,120,0.15);color:rgba(100,220,120,0.7)">+</div>
+            <span style="color:rgba(100,220,120,0.8);font-size:0.72rem">Join next game</span></div>`;
+    }
     return `<div class="table-seat empty" onclick="joinTable('${t.id}',${seatNum})">
           <div class="seat-avatar" style="background:rgba(100,160,255,0.2);color:rgba(100,160,255,0.6)">+</div>
           <span>Click to sit</span></div>`;
   }).join('');
 
   const myVoted = isMyTable && Array.isArray(t.ready_votes) && t.ready_votes.includes(supaUser?.id);
-  const readyBtn = isMyTable
+  // Only show Ready button when table is waiting (not mid-game)
+  const readyBtn = (isMyTable && t.status === 'waiting')
     ? myVoted
       ? `<button class="btn-table-start" id="ready-btn-${t.id}" disabled style="opacity:0.6;cursor:default">⏳ Waiting…</button>`
       : `<button class="btn-table-start" id="ready-btn-${t.id}" onclick="voteReady('${t.id}')">✓ Ready</button>`
-    : '';
-  const timer = isMyTable
+    : (isMyTable && t.status === 'playing')
+      ? `<div style="font-size:0.75rem;color:rgba(100,220,120,0.7);text-align:center;padding:4px">🎮 Game in progress — you'll join next round</div>`
+      : '';
+  const timer = (isMyTable && t.status === 'waiting')
     ? `<div class="table-timer" id="table-timer-${t.id}">⏱ 60s · all tap Ready to start</div>`
     : '';
 
@@ -6644,6 +6655,37 @@ async function createAndJoinTable(seatNum) {
     startTableTimer(data);
     toast('Seated! Waiting for friends…');
   } catch(e) { console.warn('createAndJoinTable:', e); toast('❌ Error: ' + e.message); }
+}
+
+// Reserve an NPC seat on a currently-playing table.
+// The player will enter the game when it restarts for the next round.
+async function reserveNpcSeat(tableId, seatNum) {
+  if (!supaClient || !supaUser) return;
+  if (_myTableId) { toast('You are already seated at a table!'); return; }
+  try {
+    const seatCol = 'seat_' + seatNum;
+    const { data: current } = await supaClient.from('friend_tables').select('*').eq('id', tableId).single();
+    if (!current) { toast('Table not found.'); return; }
+    // Make sure seat is still empty (NPC) and player not already seated
+    if (current[seatCol]) { toast('That seat was just taken!'); loadTables(); return; }
+    const allSeats = [current.seat_1, current.seat_2, current.seat_3, current.seat_4];
+    if (allSeats.includes(supaUser.id)) { toast('You are already seated at this table!'); return; }
+
+    const { error } = await supaClient.from('friend_tables')
+      .update({ [seatCol]: supaUser.id })
+      .eq('id', tableId);
+    if (error) throw error;
+
+    _myTableId   = tableId;
+    _myTableSeat = seatNum;
+    _myGlobalSeat = seatNum - 1;
+    _ftIsHost    = current.host_id === supaUser.id;
+
+    // Watch for the game to restart — then join automatically
+    watchMyTable(tableId);
+    loadTables();
+    toast('✅ Reserved! You will join when the current game ends.');
+  } catch(e) { console.warn('reserveNpcSeat:', e); toast('❌ Could not reserve seat: ' + e.message); }
 }
 
 async function joinTable(tableId, seatNum) {
@@ -7135,7 +7177,10 @@ function ftApplyState(s) {
   gameActive        = s.ga !== false;
   currentRoundPlays = (s.crp||[]).map(p => ({...p, playerIdx: toLoc(p.pi)}));
   globalDiscardedCards = new Set(s.gdc || []);
-  if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[(li + r) % 4] || 0);
+  // Only apply session scores from game-over state (ga=false)
+  // During gameplay ss is always [0,0,0,0] since endGame hasn't run yet —
+  // applying it mid-game would wipe cumulative scores from previous games
+  if (s.ss && !s.ga) mpSessionScores = [0,1,2,3].map(li => s.ss[(li + r) % 4] || 0);
 
   // Update "last play" info label so Player 2 sees what was just played
   const lastPlayInfo = document.getElementById('last-play-info');
