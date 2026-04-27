@@ -6735,6 +6735,7 @@ function watchMyTable(tableId) {
 async function launchFriendTableGame(table) {
   // table row already fresh from watchMyTable poll
 
+  _myTableId  = table.id;   // ← CRITICAL: must be set before ftAfterMove/ftPushState run
   const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
   _ftSeats    = seats;
   _myGlobalSeat = seats.indexOf(supaUser.id); // 0-3
@@ -6890,8 +6891,7 @@ function ftAmNpcRunner() {
 
 // Fallback poll — checks BOTH friend_notifications AND pending_move
 async function ftPollMoves(tableId) {
-  console.log('[FT POLL] tick — gameActive='+gameActive+' tableId='+_myTableId+' seat='+_myGlobalSeat+' lastApplied='+_ftLastApplied);
-  if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) { console.log('[FT POLL] early return'); return; }
+  if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) return;
 
   // Path A: friend_notifications (if RLS allows SELECT)
   try {
