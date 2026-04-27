@@ -4086,22 +4086,26 @@ function isMyTurn() {
 
 
 function npcTurn() {
-  if (!gameActive) return;
+  console.log('[NPC] npcTurn fired: gameActive='+gameActive+' cp='+currentPlayer+' isNpc='+mpNpcSlots[currentPlayer]+' isRunner='+ftAmNpcRunner()+' tableId='+_myTableId);
+  if (!gameActive) { console.log('[NPC] skip: !gameActive'); return; }
   // In PeerJS MP: guests never run NPC AI
-  if (!_myTableId && mpGameMode === 'vs_human' && !mpIsHost) return;
+  if (!_myTableId && mpGameMode === 'vs_human' && !mpIsHost) { console.log('[NPC] skip: guest'); return; }
   // Skip if it's the local human player's turn
-  if (currentPlayer === 0) return;
+  if (currentPlayer === 0) { console.log('[NPC] skip: cp===0 (human)'); return; }
   // Skip remote human slots
-  if (mpGameMode === 'vs_human' && !mpNpcSlots[currentPlayer]) return;
+  if (mpGameMode === 'vs_human' && !mpNpcSlots[currentPlayer]) { console.log('[NPC] skip: not npc slot, mpNpcSlots='+JSON.stringify(mpNpcSlots)); return; }
 
   const idx = currentPlayer;
   const hand = hands[idx];
+  console.log('[NPC] running NPC at idx='+idx+' hand='+hand.length+' cards');
 
   const play = findBestNpcPlay(hand, lastPlay, firstTurn && idx === openingPlayer);
 
   if (!play) {
+    console.log('[NPC] NPC passes');
     doPass(idx);
   } else {
+    console.log('[NPC] NPC plays:', play.type, play.cards?.length, 'cards');
     executePlay(idx, play.cards, play);
   }
 }
