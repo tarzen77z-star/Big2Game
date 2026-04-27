@@ -1742,97 +1742,211 @@
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.82);
+    background: rgba(0,0,0,0.88);
     z-index: 350;
     align-items: flex-start;
     justify-content: center;
     overflow-y: auto;
-    padding: 16px;
+    padding: 12px;
     box-sizing: border-box;
   }
   #friend-room-overlay.open { display: flex; }
   #friend-room-box {
-    background: linear-gradient(160deg,#0f1a2e,#1a2640);
-    border: 1px solid rgba(100,140,255,0.3);
-    border-radius: 16px;
-    padding: 24px 20px 20px;
-    width: min(440px, 96vw);
+    background: linear-gradient(170deg,#0d1625 0%,#121e35 50%,#0f1a2a 100%);
+    border: 1px solid rgba(120,160,255,0.2);
+    border-radius: 20px;
+    padding: 0;
+    width: min(460px, 98vw);
     position: relative;
     margin: auto;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.8);
-    max-height: 90vh;
+    box-shadow: 0 16px 60px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04);
+    max-height: 92vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
+  /* Header */
+  #fr-header {
+    padding: 18px 20px 14px;
+    background: linear-gradient(135deg,rgba(30,50,120,0.5),rgba(20,35,80,0.3));
+    border-bottom: 1px solid rgba(100,140,255,0.15);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #fr-header h2 {
+    font-family: 'Cinzel Decorative', 'Crimson Pro', serif;
+    font-size: 1.15rem;
+    color: rgba(200,220,255,0.95);
+    margin: 0;
+    letter-spacing: 0.03em;
+  }
+  #fr-header-close {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 50%;
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: rgba(160,184,255,0.7);
+    font-size: 0.9rem;
+    transition: all 0.15s;
+  }
+  #fr-header-close:hover { background: rgba(200,60,60,0.25); color: #ffaaaa; border-color: rgba(200,60,60,0.4); }
+  /* Tab bar */
   .friend-tabs {
     display: flex;
     gap: 0;
-    margin-bottom: 14px;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid rgba(100,140,255,0.2);
     flex-shrink: 0;
+    background: rgba(0,0,0,0.25);
+    border-bottom: 1px solid rgba(100,140,255,0.12);
   }
   .friend-tab {
     flex: 1;
-    padding: 8px 4px;
+    padding: 11px 6px 10px;
     text-align: center;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     font-family: 'Crimson Pro', serif;
-    color: rgba(160,184,255,0.55);
-    background: rgba(0,0,0,0.2);
+    color: rgba(140,165,220,0.55);
+    background: none;
+    cursor: pointer;
+    transition: all 0.18s;
+    border-bottom: 2px solid transparent;
+    letter-spacing: 0.02em;
+    position: relative;
+  }
+  .friend-tab:hover { color: rgba(160,184,255,0.85); }
+  .friend-tab.active {
+    color: rgba(180,210,255,1);
+    font-weight: 700;
+    border-bottom: 2px solid rgba(100,160,255,0.8);
+    background: rgba(60,100,200,0.12);
+  }
+  .friend-tab .tab-badge {
+    position: absolute;
+    top: 6px; right: 8px;
+    background: #e05555;
+    color: #fff;
+    border-radius: 50%;
+    width: 16px; height: 16px;
+    font-size: 0.6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+  }
+  /* Section content */
+  .friend-section { display: none; overflow-y: auto; flex: 1; padding: 14px 16px; }
+  .friend-section.active { display: block; }
+  /* Sub-tabs inside Friends tab */
+  .fr-subtabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .fr-subtab {
+    flex: 1;
+    padding: 7px 8px;
+    text-align: center;
+    font-size: 0.76rem;
+    font-family: 'Crimson Pro', serif;
+    color: rgba(140,165,220,0.6);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(100,140,255,0.15);
+    border-radius: 8px;
     cursor: pointer;
     transition: all 0.15s;
-    border-right: 1px solid rgba(100,140,255,0.15);
   }
-  .friend-tab:last-child { border-right: none; }
-  .friend-tab.active { background: rgba(60,100,200,0.3); color: rgba(160,184,255,1); font-weight: 600; }
-  .friend-section { display: none; overflow-y: auto; flex: 1; }
-  .friend-section.active { display: block; }
-
+  .fr-subtab:hover { background: rgba(60,100,200,0.15); color: rgba(160,184,255,0.9); }
+  .fr-subtab.active {
+    background: rgba(60,100,200,0.28);
+    border-color: rgba(100,160,255,0.45);
+    color: rgba(190,215,255,1);
+    font-weight: 700;
+  }
+  .fr-subsection { display: none; }
+  .fr-subsection.active { display: block; }
   /* Friend row card */
   .friend-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 9px 10px;
-    border-radius: 8px;
+    gap: 11px;
+    padding: 10px 12px;
+    border-radius: 12px;
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.06);
-    margin-bottom: 6px;
+    margin-bottom: 7px;
+    transition: background 0.15s;
   }
+  .friend-row:hover { background: rgba(255,255,255,0.055); }
   .friend-avatar {
-    width: 36px; height: 36px;
+    width: 40px; height: 40px;
     border-radius: 50%;
-    background: rgba(60,100,200,0.4);
-    border: 1.5px solid rgba(100,140,255,0.4);
+    background: linear-gradient(135deg,rgba(60,100,200,0.5),rgba(40,70,160,0.6));
+    border: 2px solid rgba(100,140,255,0.35);
     display: flex; align-items: center; justify-content: center;
-    font-size: 0.85rem; font-weight: 700; color: rgba(180,210,255,0.9);
+    font-size: 0.88rem; font-weight: 700; color: rgba(190,215,255,0.95);
     flex-shrink: 0;
     font-family: 'Crimson Pro', serif;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   }
+  .friend-avatar.online-ring { border-color: rgba(80,220,120,0.6); box-shadow: 0 0 0 2px rgba(80,220,120,0.2); }
   .friend-info { flex: 1; min-width: 0; }
-  .friend-name { font-size: 0.9rem; color: var(--text-light); font-weight: 600; font-family: 'Crimson Pro', serif; }
-  .friend-meta { font-size: 0.7rem; color: var(--text-dim); margin-top: 1px; }
-  .friend-online { color: #7fffaa; }
-  .friend-offline { color: var(--text-dim); }
+  .friend-name { font-size: 0.92rem; color: var(--text-light); font-weight: 700; font-family: 'Crimson Pro', serif; }
+  .friend-meta { font-size: 0.7rem; color: var(--text-dim); margin-top: 2px; line-height: 1.5; }
+  .friend-online { color: #6edf9e; font-weight: 600; }
+  .friend-offline { color: rgba(130,150,180,0.6); }
   .friend-action-btn {
-    background: none;
-    border: 1px solid rgba(100,140,255,0.35);
-    border-radius: 6px;
-    color: rgba(160,184,255,0.8);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(100,140,255,0.3);
+    border-radius: 7px;
+    color: rgba(160,184,255,0.85);
     font-size: 0.72rem;
-    padding: 4px 9px;
+    padding: 5px 10px;
     cursor: pointer;
     font-family: 'Crimson Pro', serif;
     transition: all 0.15s;
     white-space: nowrap;
   }
-  .friend-action-btn:hover { background: rgba(60,100,200,0.25); border-color: rgba(100,140,255,0.7); }
-  .friend-action-btn.danger { border-color: rgba(200,60,60,0.35); color: rgba(255,150,150,0.8); }
-  .friend-action-btn.danger:hover { background: rgba(180,30,30,0.2); }
-  .friend-action-btn.accept { border-color: rgba(45,138,80,0.5); color: #7fffaa; }
-  .friend-action-btn.accept:hover { background: rgba(45,138,80,0.2); }
+  .friend-action-btn:hover { background: rgba(60,100,200,0.3); border-color: rgba(100,160,255,0.6); color: #fff; }
+  .friend-action-btn.danger { border-color: rgba(200,60,60,0.3); color: rgba(255,140,140,0.8); }
+  .friend-action-btn.danger:hover { background: rgba(180,30,30,0.25); border-color: rgba(220,80,80,0.5); }
+  .friend-action-btn.accept { border-color: rgba(45,160,90,0.5); color: #7fffaa; background: rgba(30,100,60,0.15); }
+  .friend-action-btn.accept:hover { background: rgba(45,138,80,0.3); }
+  /* Section header label */
+  .fr-section-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(120,150,210,0.5);
+    margin: 0 0 8px 2px;
+  }
+  /* Leaderboard */
+  .lb-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    margin-bottom: 5px;
+  }
+  .lb-rank { font-size: 1rem; width: 24px; text-align: center; flex-shrink: 0; }
+  .lb-avatar {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: rgba(60,100,200,0.4);
+    border: 1.5px solid rgba(100,140,255,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700; color: rgba(180,210,255,0.9);
+    font-family: 'Crimson Pro', serif;
+    flex-shrink: 0;
+  }
+  .lb-info { flex: 1; min-width: 0; }
+  .lb-name { font-size: 0.88rem; color: var(--text-light); font-weight: 600; font-family: 'Crimson Pro', serif; }
+  .lb-score { font-size: 0.7rem; color: var(--gold-light); }
+  .lb-me { background: rgba(60,100,200,0.12); border-color: rgba(100,160,255,0.25); }
   .friend-feature-item {
     font-size: 0.82rem;
     color: rgba(200,220,255,0.8);
@@ -2029,8 +2143,10 @@
 <!-- FRIEND ROOM MODAL -->
 <div id="friend-room-overlay">
   <div id="friend-room-box">
-    <button onclick="closeFriendRoom()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:rgba(255,255,255,0.5);font-size:1.3rem;cursor:pointer">✕</button>
-    <h2 style="font-family:'Playfair Display',serif;color:var(--gold-light);margin-bottom:4px;font-size:1.3rem;">🏠 Friend Room</h2>
+    <div id="fr-header">
+      <h2>🏠 Friend Room</h2>
+      <div id="fr-header-close" onclick="closeFriendRoom()">✕</div>
+    </div>
     <div id="friend-auth-warning" style="display:none;text-align:center;padding:10px 4px 20px;">
       <!-- Hero icon with glow -->
       <div style="font-size:3.5rem;margin-bottom:12px;filter:drop-shadow(0 0 18px rgba(201,168,76,0.5))">🏠</div>
@@ -2042,7 +2158,7 @@
         <div style="font-size:0.72rem;letter-spacing:0.15em;color:rgba(201,168,76,0.55);margin-bottom:10px;font-family:'Crimson Pro',serif">WITH A FREE ACCOUNT YOU GET</div>
         <div class="friend-feature-item">👥 <strong>Friends List</strong> — add and track friends across all devices</div>
         <div class="friend-feature-item">📬 <strong>Friend Invites</strong> — send &amp; receive friend requests</div>
-        <div class="friend-feature-item">🏓 <strong>Friend Tables</strong> — play together in private rooms <span style="color:rgba(201,168,76,0.6);font-size:0.7rem">(coming soon)</span></div>
+        <div class="friend-feature-item">🎴 <strong>Friend Tables</strong> — play together in private rooms <span style="color:rgba(201,168,76,0.6);font-size:0.7rem">(coming soon)</span></div>
         <div class="friend-feature-item">🏆 <strong>Leaderboard</strong> — rank among your friends <span style="color:rgba(201,168,76,0.6);font-size:0.7rem">(coming soon)</span></div>
         <div class="friend-feature-item">☁ <strong>Cloud Save</strong> — your progress syncs everywhere</div>
       </div>
@@ -2061,42 +2177,61 @@
         Maybe later
       </button>
     </div>
-    <div id="friend-room-content" style="display:none">
-      <!-- Tabs -->
+    <div id="friend-room-content" style="display:none;flex-direction:column;overflow:hidden;flex:1;">
+
+      <!-- Tab bar: 3 tabs -->
       <div class="friend-tabs">
         <div class="friend-tab active" id="ftab-friends" onclick="friendSwitchTab('friends')">👥 Friends</div>
-        <div class="friend-tab" id="ftab-invite" onclick="friendSwitchTab('invite')">➕ Invite</div>
-        <div class="friend-tab" id="ftab-requests" onclick="friendSwitchTab('requests')">📬 Requests <span id="ftab-requests-badge" style="display:none;background:#ff6b6b;color:#fff;border-radius:50%;padding:0 5px;font-size:0.65rem;margin-left:2px">0</span></div>
-        <div class="friend-tab" id="ftab-tables" onclick="friendSwitchTab('tables')">🏓 Tables</div>
+        <div class="friend-tab" id="ftab-tables" onclick="friendSwitchTab('tables')"><svg width="14" height="14" viewBox="0 0 20 20" style="vertical-align:-2px;margin-right:3px" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="10" cy="10" rx="9" ry="6" stroke="currentColor" stroke-width="1.5"/><ellipse cx="10" cy="10" rx="5.5" ry="3.2" stroke="currentColor" stroke-width="1"/><line x1="1" y1="10" x2="19" y2="10" stroke="currentColor" stroke-width="1" stroke-dasharray="2 1.5"/></svg>Tables</div>
+        <div class="friend-tab" id="ftab-leaderboard" onclick="friendSwitchTab('leaderboard')">🏆 Leaderboard</div>
       </div>
 
-      <!-- Friends List -->
+      <!-- ── TAB 1: Friends (with sub-tabs: My Friends / Add Friends / Requests) ── -->
       <div class="friend-section active" id="fsec-friends">
-        <div id="friends-list-content">
-          <div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading friends…</div>
+        <!-- Sub-tabs -->
+        <div class="fr-subtabs">
+          <div class="fr-subtab active" id="fsubtab-myf" onclick="friendSubTab('myf')">My Friends</div>
+          <div class="fr-subtab" id="fsubtab-invite" onclick="friendSubTab('invite')">➕ Add</div>
+          <div class="fr-subtab" id="fsubtab-requests" onclick="friendSubTab('requests')">
+            📬 Requests <span id="ftab-requests-badge" style="display:none;background:#e05555;color:#fff;border-radius:50%;padding:0 4px;font-size:0.6rem;vertical-align:middle;margin-left:2px">0</span>
+          </div>
+        </div>
+
+        <!-- My Friends -->
+        <div class="fr-subsection active" id="fss-myf">
+          <div class="fr-section-label">Online Friends</div>
+          <div id="friends-list-content">
+            <div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading friends…</div>
+          </div>
+        </div>
+
+        <!-- Add Friends / Invite -->
+        <div class="fr-subsection" id="fss-invite">
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <input id="invite-search" type="text" placeholder="Search by username…" maxlength="16"
+              style="flex:1;background:rgba(0,0,0,0.35);border:1px solid rgba(100,140,255,0.2);border-radius:9px;color:var(--text-light);font-family:'Crimson Pro',serif;font-size:0.9rem;padding:8px 12px;outline:none;"
+              oninput="loadInvitePlayers(this.value)"
+              autocomplete="off" spellcheck="false"/>
+            <button onclick="loadInvitePlayers(document.getElementById('invite-search').value)"
+              style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:var(--text-dim);font-family:'Crimson Pro',serif;font-size:0.88rem;padding:8px 12px;cursor:pointer;">🔄</button>
+          </div>
+          <div class="fr-section-label" style="margin-bottom:6px">Recent players</div>
+          <div id="invite-list-content">
+            <div style="text-align:center;padding:16px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading players…</div>
+          </div>
+        </div>
+
+        <!-- Requests -->
+        <div class="fr-subsection" id="fss-requests">
+          <div class="fr-section-label">Pending Requests</div>
+          <div id="requests-list-content">
+            <div style="text-align:center;padding:16px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading…</div>
+          </div>
         </div>
       </div>
 
-      <!-- Invite Tab -->
-      <div class="friend-section" id="fsec-invite">
-        <div style="display:flex;gap:6px;margin-bottom:10px;">
-          <input id="invite-search" type="text" placeholder="Search by username…" maxlength="16"
-            style="flex:1;background:rgba(0,0,0,0.4);border:1px solid rgba(100,140,255,0.25);border-radius:8px;color:var(--text-light);font-family:'Crimson Pro',serif;font-size:0.92rem;padding:7px 12px;outline:none;"
-            oninput="loadInvitePlayers(this.value)"
-            autocomplete="off" spellcheck="false"/>
-          <button onclick="loadInvitePlayers(document.getElementById('invite-search').value)"
-            style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:var(--text-dim);font-family:'Crimson Pro',serif;font-size:0.88rem;padding:7px 12px;cursor:pointer;white-space:nowrap;">🔄</button>
-        </div>
-        <p style="font-size:0.75rem;color:rgba(160,184,255,0.55);margin-bottom:8px">Showing 10 most recent players. Search by name to find anyone.</p>
-        <div id="invite-list-content">
-          <div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading players…</div>
-        </div>
-      </div>
-
-
-      <!-- Tables Tab -->
+      <!-- ── TAB 2: Tables ── -->
       <div class="friend-section" id="fsec-tables">
-        <!-- Group selector -->
         <div id="tables-group-bar" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
           <button class="table-group-btn active" id="tgrp-beginner"    onclick="selectTableGroup('beginner')">🌱 Beginner</button>
           <button class="table-group-btn locked"  id="tgrp-intermediate" onclick="selectTableGroup('intermediate')" disabled>🥉 Intermediate</button>
@@ -2106,18 +2241,20 @@
         <div id="tables-list-content">
           <div class="friend-status-msg">Loading tables…</div>
         </div>
-        <div id="my-table-banner" style="display:none;background:rgba(45,138,80,0.15);border:1px solid rgba(45,138,80,0.4);border-radius:10px;padding:10px 14px;margin-top:10px;font-size:0.82rem;color:#7fffaa;text-align:center;">
+        <div id="my-table-banner" style="display:none;background:rgba(45,138,80,0.12);border:1px solid rgba(45,138,80,0.35);border-radius:10px;padding:10px 14px;margin-top:10px;font-size:0.82rem;color:#7fffaa;text-align:center;">
           <span id="my-table-banner-text">You are seated at a table</span>
-          <button onclick="leaveCurrentTable()" style="margin-left:10px;background:rgba(180,30,30,0.3);border:1px solid rgba(200,60,60,0.4);color:#ffaaaa;border-radius:6px;padding:3px 10px;font-size:0.75rem;cursor:pointer;font-family:'Crimson Pro',serif;">Leave</button>
+          <button onclick="leaveCurrentTable()" style="margin-left:10px;background:rgba(180,30,30,0.25);border:1px solid rgba(200,60,60,0.35);color:#ffaaaa;border-radius:6px;padding:3px 10px;font-size:0.75rem;cursor:pointer;font-family:'Crimson Pro',serif;">Leave</button>
         </div>
       </div>
 
-      <!-- Requests Tab -->
-      <div class="friend-section" id="fsec-requests">
-        <div id="requests-list-content">
-          <div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading requests…</div>
+      <!-- ── TAB 3: Leaderboard ── -->
+      <div class="friend-section" id="fsec-leaderboard">
+        <div class="fr-section-label" style="margin-bottom:10px">Top Players · All Modes</div>
+        <div id="leaderboard-content">
+          <div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading leaderboard…</div>
         </div>
       </div>
+
     </div>
   </div>
 </div>
@@ -5980,21 +6117,27 @@ function buildRsMap(scores) {
 // ── Shared helper: render a single friend row ──
 function renderFriendRow(p, rs, extraBtn, statusHtml) {
   const rank = rankFromScore(rs||0);
-  // Build a small trophy badge using same CSS as game
-  const trophyHtml = `<span style="display:inline-flex;align-items:center;gap:3px;font-size:0.72rem">${rank.icon} <span style="color:var(--gold-light)">${rank.name}</span></span>`;
+  const trophyHtml = `<span style="display:inline-flex;align-items:center;gap:3px;font-size:0.7rem">${rank.icon} <span style="color:var(--gold-light)">${rank.name}</span></span>`;
   const rankScoreHtml = `<span style="color:var(--gold-light);font-weight:600">✦ ${rs||0}</span>`;
-  const statusPart = statusHtml ? ` &nbsp;·&nbsp; ${statusHtml}` : '';
+  // Check if online (statusHtml contains 'Online')
+  const isOnline = statusHtml && statusHtml.includes('Online');
+  const avatarClass = isOnline ? 'friend-avatar online-ring' : 'friend-avatar';
+  const statusPart = statusHtml ? `<div class="friend-meta" style="margin-top:2px">${statusHtml}</div>` : '';
   return `<div class="friend-row">
-    <div class="friend-avatar">${initials(p.username)}</div>
+    <div class="${avatarClass}">${initials(p.username)}</div>
     <div class="friend-info">
       <div class="friend-name">${p.username||'Unknown'}</div>
-      <div class="friend-meta">${trophyHtml} &nbsp;·&nbsp; ${rankScoreHtml}${statusPart}</div>
+      <div class="friend-meta">${trophyHtml} &nbsp;·&nbsp; ${rankScoreHtml}</div>
+      ${statusPart}
     </div>
     ${extraBtn}
   </div>`;
 }
 
 function openFriendRoom() {
+  // Reset to Friends tab on open
+  friendSwitchTab('friends');
+  friendSubTab('myf');
   const overlay = document.getElementById('friend-room-overlay');
   overlay.classList.add('open');
   const warning = document.getElementById('friend-auth-warning');
@@ -6030,20 +6173,63 @@ function closeFriendRoom() {
 }
 
 function friendSwitchTab(tab) {
-  ['friends','invite','requests','tables'].forEach(t => {
+  ['friends','tables','leaderboard'].forEach(t => {
     document.getElementById('ftab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('fsec-'+t)?.classList.toggle('active', t===tab);
   });
-  if (tab === 'invite') {
-    const searchEl = document.getElementById('invite-search');
-    if (searchEl) searchEl.value = '';
-    loadInvitePlayers('');
-  }
-  if (tab === 'requests') loadPendingRequests();
   if (tab === 'tables') {
     updateTableGroupLocks();
     loadTables();
     subscribeToTables();
+  }
+  if (tab === 'leaderboard') loadLeaderboard();
+  if (tab === 'friends') loadFriendsList();
+}
+
+function friendSubTab(sub) {
+  ['myf','invite','requests'].forEach(s => {
+    document.getElementById('fsubtab-'+s)?.classList.toggle('active', s===sub);
+    document.getElementById('fss-'+s)?.classList.toggle('active', s===sub);
+  });
+  if (sub === 'invite') {
+    const el = document.getElementById('invite-search');
+    if (el) el.value = '';
+    loadInvitePlayers('');
+  }
+  if (sub === 'requests') loadPendingRequests();
+  if (sub === 'myf') loadFriendsList();
+}
+
+async function loadLeaderboard() {
+  const el = document.getElementById('leaderboard-content');
+  if (!el || !supaClient) return;
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading…</div>';
+  try {
+    // Fetch top 20 by rank_score from profiles
+    const { data: top } = await supaClient
+      .from('profiles')
+      .select('id,username,rank_score,is_online')
+      .order('rank_score', { ascending: false })
+      .limit(20);
+    if (!top || !top.length) { el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim)">No data yet.</div>'; return; }
+    const myId = supaUser?.id;
+    el.innerHTML = top.map((p, i) => {
+      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:var(--text-dim);font-size:0.82rem">${i+1}</span>`;
+      const isMe = p.id === myId;
+      const rank = rankFromScore(p.rank_score||0);
+      const onlineDot = p.is_online ? '<span style="color:#6edf9e;font-size:0.65rem">● </span>' : '';
+      return `<div class="lb-row${isMe?' lb-me':''}">
+        <div class="lb-rank">${medal}</div>
+        <div class="lb-avatar">${initials(p.username)}</div>
+        <div class="lb-info">
+          <div class="lb-name">${onlineDot}${p.username||'Player'}${isMe?' <span style="color:rgba(120,160,255,0.7);font-size:0.7rem">(you)</span>':''}</div>
+          <div class="lb-score">${rank.icon} ${rank.name} &nbsp;·&nbsp; ✦ ${p.rank_score||0}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim)">Could not load leaderboard.</div>';
+    console.warn('loadLeaderboard:', e);
   }
 }
 
@@ -6151,10 +6337,10 @@ async function loadFriendsList() {
         ? '<span class="friend-online">● Online</span>'
         : '<span class="friend-offline">Last seen ' + timeAgo(p.last_active) + '</span>';
 
-      // Table status label
+      // Table status label — only show if player is online (active within 5 min)
       let tableStr = '';
-      if (tableInfo) {
-        const grpLabel = {beginner:'🌱',intermediate:'🥉',hard:'🥈',pro:'🥇'}[tableInfo.group]||'🏓';
+      if (tableInfo && isOnline) {
+        const grpLabel = {beginner:'🌱',intermediate:'🥉',hard:'🥈',pro:'🥇'}[tableInfo.group]||'🃏';
         const statusLabel = tableInfo.status==='playing' ? '🎮 Playing' : '⏳ Waiting';
         // Show NPC slots for both waiting and playing — player can reserve a slot for next game
         const npcLabel = tableInfo.npcCount > 0
@@ -6163,7 +6349,7 @@ async function loadFriendsList() {
       }
 
       const statusHtml = onlineStr + tableStr;
-      const joinBtn = (tableInfo && tableInfo.npcCount>0 && !_myTableId)
+      const joinBtn = (tableInfo && tableInfo.npcCount>0 && !_myTableId && isOnline)
         ? `<button class="friend-action-btn accept" onclick="openFriendRoom();friendSwitchTab('tables');" style="white-space:nowrap;font-size:0.7rem;">Join Table</button>`
         : '';
       const removeBtn = `<button class="friend-action-btn danger" onclick="removeFriend('${p.id}','${p.username}')">Remove</button>`;
@@ -6942,7 +7128,7 @@ async function launchFriendTableGame(table) {
     setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 1200);
   }
 
-  toast('🏓 Friend Table game started!');
+  toast('🃏 Friend Table game started!');
 }
 
 // ════════════════════════════════════════════════════════
@@ -7483,7 +7669,7 @@ function showTableInviteToast(fromName, group, tableId, notifId) {
   const div = document.createElement('div');
   div.id = 'table-invite-toast-' + notifId;
   div.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(20,50,30,0.97);border:1px solid rgba(45,138,80,0.6);border-radius:12px;padding:10px 14px;z-index:500;font-family:Crimson Pro,serif;font-size:0.85rem;color:#7fffaa;max-width:300px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.6);';
-  div.innerHTML = `<div style="font-weight:700;margin-bottom:4px">🏓 ${fromName} started a ${group} table!</div>
+  div.innerHTML = `<div style="font-weight:700;margin-bottom:4px">🃏 ${fromName} started a ${group} table!</div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button onclick="joinTableFromToast('${tableId}','${notifId}',this)"
         style="flex:1;background:rgba(45,138,80,0.4);border:1px solid rgba(45,138,80,0.6);border-radius:6px;color:#7fffaa;padding:5px;cursor:pointer;font-size:0.82rem;">Join Table</button>
