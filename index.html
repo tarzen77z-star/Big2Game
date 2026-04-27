@@ -5126,6 +5126,10 @@ function endGame(winnerIdx) {
   // get correct scores in their game-over banner
   if (_myTableId) {
     ftAfterMove(); // async — fires push with updated ss including this game's deltas
+    // Save this player's friend game stats (local player is always index 0)
+    const myDelta = gameDeltas[0];
+    const iWon = winnerIdx === 0;
+    saveFriendGameStats(iWon, myDelta);
   }
 
   showWinCelebration(winnerIdx, mpNames, () => {
@@ -6087,6 +6091,26 @@ function clearConfetti() {
 // ════════════════════════════════════════════════════════════
 
 
+// ── Save Friend Table game result to profiles ────────────────
+async function saveFriendGameStats(didWin, pointsDelta) {
+  if (!supaClient || !supaUser) return;
+  try {
+    // Read current values first (atomic increment via RPC would be ideal,
+    // but simple read+write is fine for this use case)
+    const { data: p } = await supaClient
+      .from('profiles')
+      .select('ft_wins, ft_games, ft_points')
+      .eq('id', supaUser.id)
+      .single();
+    const cur = p || { ft_wins: 0, ft_games: 0, ft_points: 0 };
+    await supaClient.from('profiles').update({
+      ft_wins:   (cur.ft_wins  || 0) + (didWin ? 1 : 0),
+      ft_games:  (cur.ft_games || 0) + 1,
+      ft_points: (cur.ft_points || 0) + (pointsDelta || 0),
+    }).eq('id', supaUser.id);
+  } catch(e) { console.warn('saveFriendGameStats:', e); }
+}
+
 // ── Shared helper: build rsMap from supabase player_scores rows ──
 function buildRsMap(scores) {
   // First pass: use rank_score column if available (already computed total)
@@ -6204,32 +6228,98 @@ async function loadLeaderboard() {
   const el = document.getElementById('leaderboard-content');
   if (!el || !supaClient) return;
   el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading…</div>';
+
+  // Two sub-tabs: Rank Score (solo) and Friend Games
+  el.innerHTML = `
+    <div class="fr-subtabs" style="margin-bottom:12px">
+      <div class="fr-subtab active" id="lbtab-rank" onclick="lbSwitchTab('rank')">✦ Rank Score</div>
+      <div class="fr-subtab" id="lbtab-friend" onclick="lbSwitchTab('friend')">🤝 Friend Games</div>
+    </div>
+    <div id="lb-rank-content"></div>
+    <div id="lb-friend-content" style="display:none"></div>
+  `;
+
+  await lbLoadRank();
+}
+
+function lbSwitchTab(tab) {
+  ['rank','friend'].forEach(t => {
+    document.getElementById('lbtab-'+t)?.classList.toggle('active', t===tab);
+    const sec = document.getElementById('lb-'+t+'-content');
+    if (sec) sec.style.display = t===tab ? 'block' : 'none';
+  });
+  if (tab === 'friend') lbLoadFriend();
+}
+
+async function lbLoadRank() {
+  const el = document.getElementById('lb-rank-content');
+  if (!el || !supaClient) return;
+  el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim);font-style:italic;font-size:0.8rem">Loading…</div>';
   try {
-    // Fetch top 20 by rank_score from profiles
     const { data: top } = await supaClient
       .from('profiles')
       .select('id,username,rank_score,is_online')
       .order('rank_score', { ascending: false })
       .limit(20);
-    if (!top || !top.length) { el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim)">No data yet.</div>'; return; }
+    if (!top?.length) { el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim)">No data yet.</div>'; return; }
     const myId = supaUser?.id;
     el.innerHTML = top.map((p, i) => {
-      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:var(--text-dim);font-size:0.82rem">${i+1}</span>`;
+      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:var(--text-dim);font-size:0.8rem">${i+1}</span>`;
       const isMe = p.id === myId;
       const rank = rankFromScore(p.rank_score||0);
-      const onlineDot = p.is_online ? '<span style="color:#6edf9e;font-size:0.65rem">● </span>' : '';
+      const dot = p.is_online ? '<span style="color:#6edf9e;font-size:0.62rem">● </span>' : '';
       return `<div class="lb-row${isMe?' lb-me':''}">
         <div class="lb-rank">${medal}</div>
         <div class="lb-avatar">${initials(p.username)}</div>
         <div class="lb-info">
-          <div class="lb-name">${onlineDot}${p.username||'Player'}${isMe?' <span style="color:rgba(120,160,255,0.7);font-size:0.7rem">(you)</span>':''}</div>
+          <div class="lb-name">${dot}${p.username||'Player'}${isMe?' <span style="color:rgba(120,160,255,0.6);font-size:0.68rem">(you)</span>':''}</div>
           <div class="lb-score">${rank.icon} ${rank.name} &nbsp;·&nbsp; ✦ ${p.rank_score||0}</div>
         </div>
       </div>`;
     }).join('');
   } catch(e) {
-    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim)">Could not load leaderboard.</div>';
-    console.warn('loadLeaderboard:', e);
+    el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim)">Could not load.</div>';
+  }
+}
+
+async function lbLoadFriend() {
+  const el = document.getElementById('lb-friend-content');
+  if (!el || !supaClient) return;
+  el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim);font-style:italic;font-size:0.8rem">Loading…</div>';
+  try {
+    const { data: top } = await supaClient
+      .from('profiles')
+      .select('id,username,is_online,ft_wins,ft_games,ft_points')
+      .gt('ft_games', 0)
+      .order('ft_points', { ascending: false })
+      .limit(20);
+    if (!top?.length) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim)">No friend games played yet.<br><span style="font-size:0.75rem;opacity:0.6">Play with friends to appear here!</span></div>';
+      return;
+    }
+    const myId = supaUser?.id;
+    el.innerHTML = top.map((p, i) => {
+      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:var(--text-dim);font-size:0.8rem">${i+1}</span>`;
+      const isMe = p.id === myId;
+      const dot = p.is_online ? '<span style="color:#6edf9e;font-size:0.62rem">● </span>' : '';
+      const winRate = p.ft_games > 0 ? Math.round((p.ft_wins / p.ft_games) * 100) : 0;
+      const pts = p.ft_points || 0;
+      const ptsColor = pts > 0 ? '#7fffaa' : pts < 0 ? '#ff9999' : 'var(--text-dim)';
+      return `<div class="lb-row${isMe?' lb-me':''}">
+        <div class="lb-rank">${medal}</div>
+        <div class="lb-avatar">${initials(p.username)}</div>
+        <div class="lb-info">
+          <div class="lb-name">${dot}${p.username||'Player'}${isMe?' <span style="color:rgba(120,160,255,0.6);font-size:0.68rem">(you)</span>':''}</div>
+          <div class="lb-score">
+            🏆 ${p.ft_wins}W / ${p.ft_games}G &nbsp;·&nbsp; ${winRate}% win
+            &nbsp;·&nbsp; <span style="color:${ptsColor};font-weight:700">${pts>0?'+':''}${pts} pts</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim)">Could not load.</div>';
+    console.warn('lbLoadFriend:', e);
   }
 }
 
@@ -7411,6 +7501,8 @@ function ftApplyState(s) {
         raw: rawLocal.slice(),
         seq: s.seq
       });
+      // Save this player's friend game stats (local index 0 = this player)
+      saveFriendGameStats(winnerLocal === 0, gameDeltas[0]);
       if (!mpSessionNames.length) {
         mpSessionNames = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
       }
