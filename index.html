@@ -3547,30 +3547,27 @@ function updateTurnIndicator() {
 }
 
 function updateScoreboard() {
-  // In MP mode show session scores; in single-player show normal scores
   const displayScores = (mpGameMode === 'vs_human') ? mpSessionScores : scores;
-  ['p1','p2','p3','p4'].forEach((id,i)=>{
-    const el = document.getElementById('sc-'+id);
-    if(el){
-      const v = displayScores[i] || 0;
-      el.textContent = (v > 0 ? '+' : '') + v;
-      el.style.color = v > 0 ? '#7fffaa' : v < 0 ? '#ff9999' : '';
-    }
+  const scNames = mpScoreboardNames();
+  ['p1','p2','p3','p4'].forEach((id, i) => {
+    const row = document.getElementById('sc-'+id)?.parentElement;
+    const el  = document.getElementById('sc-'+id);
+    const nm  = document.getElementById('sc-'+id+'-name');
+    if (!el) return;
+
+    // In MP Friend Table mode: hide NPC rows
+    const isNpcRow = mpGameMode === 'vs_human' && _myTableId && mpNpcSlots[i];
+    if (row) row.style.display = isNpcRow ? 'none' : '';
+
+    const v = displayScores[i] || 0;
+    el.textContent = (v > 0 ? '+' : '') + v;
+    el.style.color = v > 0 ? '#7fffaa' : v < 0 ? '#ff9999' : '';
+    if (nm) nm.textContent = scNames[i];
   });
   const gp = document.getElementById('games-played');
-  if(gp) gp.textContent = mpGameMode === 'vs_human'
+  if (gp) gp.textContent = mpGameMode === 'vs_human'
     ? 'Games this session: ' + mpSessionHistory.length
     : 'Games played: ' + gamesPlayed;
-  // Update names: in MP use actual seat names, otherwise use defaults
-  const scNames = mpScoreboardNames();
-  const n1 = document.getElementById('sc-p1-name');
-  const n2 = document.getElementById('sc-p2-name');
-  const n3 = document.getElementById('sc-p3-name');
-  const n4 = document.getElementById('sc-p4-name');
-  if (n1) n1.textContent = scNames[0];
-  if (n2) n2.textContent = scNames[1];
-  if (n3) n3.textContent = scNames[2];
-  if (n4) n4.textContent = scNames[3];
 }
 
 // Returns display names for scoreboard in local index order [0..3]
@@ -5127,6 +5124,14 @@ function endSessionFinal() {
   document.getElementById('splash').style.display = 'flex';
   const btn = document.getElementById('btn-end-session');
   if (btn) { btn.textContent = 'End Session'; btn.onclick = endSession; }
+  // In Friend Table mode: null our seat in DB so staying players treat us as NPC
+  if (_myTableId && supaClient && supaUser && _myTableSeat) {
+    const seatCol = 'seat_' + _myTableSeat;
+    supaClient.from('friend_tables')
+      .update({ [seatCol]: null })
+      .eq('id', _myTableId)
+      .then(() => {});  // fire and forget
+  }
   if (_myTableId) cleanupFriendTable();
   mpDestroy();
 }
@@ -6539,13 +6544,23 @@ function renderTableCard(t, num, seats, nameMap, isMyTable) {
         <span>${name}${isMe?' (you)':''}</span>
       </div>`;
     }
+    // Don't show join option if player is already seated at this table
+    const alreadySeated = supaUser && [t.seat_1,t.seat_2,t.seat_3,t.seat_4].includes(supaUser.id);
+    if (alreadySeated) {
+      return `<div class="table-seat empty" style="opacity:0.3;cursor:default">
+            <div class="seat-avatar" style="background:rgba(100,100,100,0.2);color:rgba(150,150,150,0.5)">—</div>
+            <span>NPC</span></div>`;
+    }
     return `<div class="table-seat empty" onclick="joinTable('${t.id}',${seatNum})">
           <div class="seat-avatar" style="background:rgba(100,160,255,0.2);color:rgba(100,160,255,0.6)">+</div>
           <span>Click to sit</span></div>`;
   }).join('');
 
+  const myVoted = isMyTable && Array.isArray(t.ready_votes) && t.ready_votes.includes(supaUser?.id);
   const readyBtn = isMyTable
-    ? `<button class="btn-table-start" id="ready-btn-${t.id}" onclick="voteReady('${t.id}')">✓ Ready</button>`
+    ? myVoted
+      ? `<button class="btn-table-start" id="ready-btn-${t.id}" disabled style="opacity:0.6;cursor:default">⏳ Waiting…</button>`
+      : `<button class="btn-table-start" id="ready-btn-${t.id}" onclick="voteReady('${t.id}')">✓ Ready</button>`
     : '';
   const timer = isMyTable
     ? `<div class="table-timer" id="table-timer-${t.id}">⏱ 60s · all tap Ready to start</div>`
@@ -6615,11 +6630,17 @@ async function createAndJoinTable(seatNum) {
 
 async function joinTable(tableId, seatNum) {
   if (!supaClient || !supaUser) return;
-  if (_myTableId) { _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; }
+  // Prevent joining if already seated at ANY table
+  if (_myTableId) { toast('You are already seated at a table!'); return; }
   try {
     const seatCol = 'seat_' + seatNum;
     const { data: current } = await supaClient.from('friend_tables').select('*').eq('id', tableId).single();
-    if (!current || current[seatCol]) { toast('That seat was just taken!'); loadTables(); return; }
+    if (!current) { toast('Table not found.'); loadTables(); return; }
+    // Check target seat not taken
+    if (current[seatCol]) { toast('That seat was just taken!'); loadTables(); return; }
+    // Check player not already seated elsewhere in this table
+    const allSeats = [current.seat_1, current.seat_2, current.seat_3, current.seat_4];
+    if (allSeats.includes(supaUser.id)) { toast('You are already seated at this table!'); return; }
 
     const { error } = await supaClient.from('friend_tables').update({ [seatCol]: supaUser.id }).eq('id', tableId);
     if (error) throw error;
@@ -6811,7 +6832,9 @@ async function launchFriendTableGame(table) {
   globalDiscardedCards = new Set();
   selectedCards = [];
   gameActive    = true;
-  mpSessionScores = [0,0,0,0];
+  // Only reset session scores at start of a NEW session (first game)
+  // On restart, preserve cumulative scores across games
+  if (mpSessionHistory.length === 0) mpSessionScores = [0,0,0,0];
 
   // ── Rotate: put MY seat at index 0 ──
   // This means hands[0] = my hand, hands[1] = right, etc.
@@ -7128,8 +7151,8 @@ function ftApplyState(s) {
           gameDeltas[j] += diff;
         }
       }
-      // Session scores — s.ss is already in local order (host rotated it)
-      if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[li] || 0);
+      // Session scores — s.ss is in GLOBAL order; rotate to local perspective
+      if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[(li + r) % 4] || 0);
       // Record in session history (only if not already recorded — prevent double-count on reconnect)
       const alreadyRecorded = mpSessionHistory.some(h => h.seq === s.seq);
       if (alreadyRecorded) return;
@@ -7230,21 +7253,31 @@ async function ftRestartGame() {
 
       const newSeed = row.payload?.seed;
       if (newSeed && newSeed !== oldSeed) {
-        // New game seed found — reset all sync state and launch
         if (_waitTimer) { clearInterval(_waitTimer); _waitTimer = null; }
+
+        // Wait 1.5s for any leaving players to null their seats in DB,
+        // then re-fetch the freshest row before launching
+        await new Promise(r => setTimeout(r, 1500));
+        let freshRow = row;
+        try {
+          const { data: fr } = await supaClient.from('friend_tables')
+            .select('*').eq('id', _myTableId).single();
+          if (fr) freshRow = fr;
+        } catch(e) {}
+
+        // Reset all sync state for new game
         _ftAppliedSeq  = 0;
         _ftSeenKeys    = new Set();
         _ftLastNotifId = null;
         _ftLastPmSeq   = 0;
 
-        await launchFriendTableGame(row);
+        await launchFriendTableGame(freshRow);
 
-        // If game already in progress (late joiner), sync to current state
-        // by fetching pending_move which runner keeps updated
-        if (row.pending_move?.state && row.pending_move.state.gameId === newSeed) {
-          const pm = row.pending_move;
+        // Late joiner: sync to current state via pending_move
+        if (freshRow.pending_move?.state && freshRow.pending_move.state.gameId === newSeed) {
+          const pm = freshRow.pending_move;
           if (pm.author !== _myGlobalSeat) {
-            _ftAppliedSeq = pm.state.seq; // accept this as starting point
+            _ftAppliedSeq = pm.state.seq;
             _ftSeenKeys.add('pm:' + pm.state.seq);
             ftApplyState(pm.state);
           }
