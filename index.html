@@ -6890,7 +6890,8 @@ function ftAmNpcRunner() {
 
 // Fallback poll — checks BOTH friend_notifications AND pending_move
 async function ftPollMoves(tableId) {
-  if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) return;
+  console.log('[FT POLL] tick — gameActive='+gameActive+' tableId='+_myTableId+' seat='+_myGlobalSeat+' lastApplied='+_ftLastApplied);
+  if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) { console.log('[FT POLL] early return'); return; }
 
   // Path A: friend_notifications (if RLS allows SELECT)
   try {
