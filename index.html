@@ -1639,28 +1639,110 @@
   }
   .btn-auth-guest:hover { color:rgba(160,184,255,0.8); }
 
-  /* ── Splash section labels ── */
-  .splash-section-label {
-    font-size: 0.65rem;
-    font-family: 'Crimson Pro', serif;
-    letter-spacing: 0.18em;
-    color: rgba(255,255,255,0.22);
+  /* ── Splash mini leaderboard ── */
+  #splash-leaderboard {
+    width: 100%;
+    max-width: 340px;
+    background: rgba(0,0,0,0.28);
+    border: 1px solid rgba(201,168,76,0.18);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin: 6px 0 10px;
+  }
+  .splash-lb-title {
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    align-self: flex-start;
-    margin-top: 6px;
-    margin-bottom: 0px;
-    padding-left: 2px;
+    color: rgba(201,168,76,0.6);
+    font-family: 'Crimson Pro', serif;
+    margin-bottom: 7px;
+    text-align: center;
+  }
+  .splash-lb-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 2px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.78rem;
+  }
+  .splash-lb-row:last-child { border-bottom: none; }
+  .splash-lb-pos { width: 20px; text-align: center; font-size: 0.9rem; flex-shrink: 0; }
+  .splash-lb-name { flex: 1; color: var(--text-light); font-family: 'Crimson Pro', serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .splash-lb-name.me { color: #7fffaa; font-weight: 700; }
+  .splash-lb-score { color: var(--gold-light); font-weight: 600; font-size: 0.73rem; flex-shrink: 0; }
+  .splash-lb-loading { text-align: center; color: var(--text-dim); font-style: italic; font-size: 0.78rem; padding: 4px 0; }
+
+  /* ── Splash groups ── */
+  .splash-group {
+    width: 100%;
+    max-width: 340px;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .splash-group-dim { opacity: 0.55; }
+  .splash-group-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.3);
+    font-family: 'Crimson Pro', serif;
+    padding: 7px 14px 5px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .splash-group-body {
+    padding: 12px 14px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .splash-soon {
+    font-size: 0.58rem;
+    background: rgba(255,180,60,0.2);
+    border: 1px solid rgba(255,180,60,0.4);
+    color: rgba(255,200,100,0.8);
+    border-radius: 4px;
+    padding: 1px 6px;
+    letter-spacing: 0.08em;
+  }
+  .splash-soon-btn {
+    width: 100%;
+    padding: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px dashed rgba(255,255,255,0.15);
+    border-radius: 8px;
+    color: rgba(160,184,255,0.4);
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.95rem;
+    cursor: not-allowed;
   }
   .splash-btn-row {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
     max-width: 320px;
   }
-  .splash-half-btn {
+  .splash-sub-btn {
     flex: 1;
-    margin-top: 0 !important;
+    padding: 7px 4px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: rgba(160,184,255,0.7);
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
   }
+  .splash-sub-btn:hover { background: rgba(60,100,200,0.2); border-color: rgba(100,160,255,0.35); color: rgba(200,220,255,0.9); }
+  .splash-half-btn { flex: 1; margin-top: 0 !important; }
 
 
   /* ── Win celebration overlay ── */
@@ -2072,23 +2154,12 @@
 
 <!-- SPLASH -->
 <div id="splash">
-  <div class="splash-cards">
-    <div class="mini-card" style="width:55px;height:78px;transform:rotate(-8deg)"></div>
-    <div class="mini-card" style="width:55px;height:78px;transform:rotate(-3deg)"></div>
-    <div class="mini-card" style="width:55px;height:78px;transform:rotate(3deg)"></div>
-    <div class="mini-card" style="width:55px;height:78px;transform:rotate(8deg)"></div>
-  </div>
+  <!-- ── Header: title + account ── -->
   <div id="splash-stonybrook">Stony Brook</div>
   <h1>鋤大弟</h1>
   <div id="splash-big2">Big 2</div>
-  <div id="player-name-edit-row">
-    <div id="player-nameplate">
-      <div id="player-nameplate-label">✦ YOUR NAME ✦</div>
-      <input type="text" id="player-name-input" maxlength="16" placeholder="Enter your name" oninput="updatePlayerName(this.value)" autocomplete="off" spellcheck="false"/>
-      <div id="player-nameplate-shine"></div>
-    </div>
-  </div>
-  <!-- Account status bar -->
+
+  <!-- Account bar -->
   <div id="account-bar">
     <div id="account-status">
       <span id="account-icon">👤</span>
@@ -2099,44 +2170,104 @@
       <button id="btn-account-signout" onclick="doSignOut()" style="display:none;background:none;border:1px solid rgba(255,100,100,0.35);color:rgba(255,150,150,0.7);font-family:'Crimson Pro',serif;font-size:0.72rem;padding:3px 10px;border-radius:10px;cursor:pointer;" title="Sign out">↩ Out</button>
     </div>
   </div>
+
+  <!-- Name plate -->
+  <div id="player-name-edit-row">
+    <div id="player-nameplate">
+      <div id="player-nameplate-label">✦ YOUR NAME ✦</div>
+      <input type="text" id="player-name-input" maxlength="16" placeholder="Enter your name" oninput="updatePlayerName(this.value)" autocomplete="off" spellcheck="false"/>
+      <div id="player-nameplate-shine"></div>
+    </div>
+  </div>
+
+  <!-- Rank bar -->
   <div id="splash-rank">
     <div class="rank-badge beginner" id="splash-badge"></div>
     <div id="splash-rank-text">Rank: <strong id="splash-rank-name">Normal</strong> &nbsp;|&nbsp; Score: <strong id="splash-pts">0</strong></div>
   </div>
-  <div class="mode-grid" id="mode-grid">
-    <button class="mode-btn active-mode" id="mode-beginner" onclick="selectMode('beginner')">
-      <span class="mode-icon">🌱</span>Beginner
-      <span class="mode-req">Open to all</span>
-    </button>
-    <button class="mode-btn" id="mode-intermediate" onclick="selectMode('intermediate')" disabled>
-      <span class="mode-icon">🥉</span>Intermediate
-      <span class="mode-req">Bronze req.</span>
-    </button>
-    <button class="mode-btn" id="mode-hard" onclick="selectMode('hard')" disabled>
-      <span class="mode-icon">🥈</span>Hard
-      <span class="mode-req">Silver req.</span>
-    </button>
-    <button class="mode-btn" id="mode-pro" onclick="selectMode('pro')" disabled>
-      <span class="mode-icon">🥇</span>Professional
-      <span class="mode-req">Gold req.</span>
-    </button>
-  </div>
-  <!-- PLAY section -->
-  <div class="splash-section-label">PLAY</div>
-  <button class="btn-gold" id="btn-start-game" onclick="startGame()">▶ Start New Game</button>
 
-  <!-- PROGRESS section -->
-  <div class="splash-section-label">PROGRESS</div>
-  <div class="splash-btn-row">
-    <button class="btn-ghost splash-half-btn" onclick="showScoreboard()">📊 Standings</button>
-    <button id="feats-toggle" class="splash-half-btn" onclick="showFeats()">🎖️ Feats</button>
+  <!-- Top 5 Rank Leaderboard mini -->
+  <div id="splash-leaderboard">
+    <div class="splash-lb-title">🏆 Top Players</div>
+    <div id="splash-lb-rows"><div class="splash-lb-loading">Loading…</div></div>
   </div>
 
-  <!-- CONNECT section -->
-  <div class="splash-section-label">CONNECT</div>
-  <button id="btn-multiplayer" onclick="openMpLobby()">👥 Multiplayer</button>
-  <button id="btn-friend-room" onclick="openFriendRoom()">🏠 Friend Room <span id="friend-notif-badge" style="display:none;background:#ff6b6b;color:#fff;border-radius:50%;padding:1px 6px;font-size:0.7rem;margin-left:4px;font-family:sans-serif;pointer-events:none">!</span></button>
-  <button id="legend-toggle" onclick="document.getElementById('legend-panel').classList.add('open')">📖 Rank &amp; Mode Guide</button>
+  <!-- ══════════════════════════════════════
+       GROUP 1: SOLO PLAY
+       ══════════════════════════════════════ -->
+  <div class="splash-group">
+    <div class="splash-group-label">Solo Play</div>
+    <div class="splash-group-body">
+
+      <!-- Mode selector -->
+      <div class="mode-grid" id="mode-grid">
+        <button class="mode-btn active-mode" id="mode-beginner" onclick="selectMode('beginner')">
+          <span class="mode-icon">🌱</span>Beginner
+          <span class="mode-req">Open to all</span>
+        </button>
+        <button class="mode-btn" id="mode-intermediate" onclick="selectMode('intermediate')" disabled>
+          <span class="mode-icon">🥉</span>Inter.
+          <span class="mode-req">Bronze req.</span>
+        </button>
+        <button class="mode-btn" id="mode-hard" onclick="selectMode('hard')" disabled>
+          <span class="mode-icon">🥈</span>Hard
+          <span class="mode-req">Silver req.</span>
+        </button>
+        <button class="mode-btn" id="mode-pro" onclick="selectMode('pro')" disabled>
+          <span class="mode-icon">🥇</span>Pro
+          <span class="mode-req">Gold req.</span>
+        </button>
+      </div>
+
+      <button class="btn-gold" id="btn-start-game" onclick="startGame()" style="width:100%;max-width:320px;margin-top:10px;">▶ Start Game</button>
+
+      <!-- Standings + Feats inline -->
+      <div class="splash-btn-row" style="margin-top:8px;">
+        <button class="splash-sub-btn" onclick="showScoreboard()">📊 Standings</button>
+        <button class="splash-sub-btn" onclick="showFeats()">🎖️ Feats</button>
+        <button class="splash-sub-btn" onclick="document.getElementById('legend-panel').classList.add('open')">📖 Guide</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       GROUP 2: FRIEND ROOM
+       ══════════════════════════════════════ -->
+  <div class="splash-group">
+    <div class="splash-group-label">Friend Room</div>
+    <div class="splash-group-body">
+      <button id="btn-friend-room" onclick="openFriendRoom()" style="width:100%;">
+        🏠 Open Friend Room
+        <span id="friend-notif-badge" style="display:none;background:#ff6b6b;color:#fff;border-radius:50%;padding:1px 6px;font-size:0.7rem;margin-left:6px;font-family:sans-serif;pointer-events:none">!</span>
+      </button>
+      <div style="font-size:0.72rem;color:rgba(140,165,220,0.5);text-align:center;margin-top:5px;">Play with friends · Tables · Leaderboard</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       GROUP 3: ONLINE (COMING SOON)
+       ══════════════════════════════════════ -->
+  <div class="splash-group splash-group-dim">
+    <div class="splash-group-label">Online <span class="splash-soon">Coming Soon</span></div>
+    <div class="splash-group-body">
+      <button class="splash-soon-btn" disabled>
+        🌐 Matchmaking
+      </button>
+      <div style="font-size:0.72rem;color:rgba(140,165,220,0.35);text-align:center;margin-top:5px;">Ranked online matches with players worldwide</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       GROUP 4: HOST GAME (PeerJS)
+       ══════════════════════════════════════ -->
+  <div class="splash-group">
+    <div class="splash-group-label">Host Game</div>
+    <div class="splash-group-body">
+      <button id="btn-multiplayer" onclick="openMpLobby()" style="width:100%;margin-top:0;">👥 Host / Join Room</button>
+      <div style="font-size:0.72rem;color:rgba(140,165,220,0.5);text-align:center;margin-top:5px;">Share a code with up to 3 friends</div>
+    </div>
+  </div>
+
 </div>
 
 
@@ -2944,6 +3075,9 @@ function updateRankUI() {
   if (sb) { sb.innerHTML = trophySVG(rank.cls); sb.className = 'rank-badge ' + rank.cls; }
   if (sn) sn.textContent = rank.name;
   if (sp) sp.textContent = rankScore;
+
+  // Refresh mini leaderboard on splash if signed in
+  if (supaClient && supaUser) loadSplashLeaderboard();
 
   // Unlock mode buttons — use cumulative rankScore thresholds
   // Beginner: always open, Intermediate: 100+, Hard: 1100+, Pro: 6100+
@@ -6371,6 +6505,34 @@ function lbEmpty() {
   return '<div style="text-align:center;padding:18px;color:var(--text-dim);font-style:italic;font-size:0.8rem">No data yet for this mode.</div>';
 }
 
+// ── Splash screen mini leaderboard (top 5 by rank score) ─────────────────────
+async function loadSplashLeaderboard() {
+  const el = document.getElementById('splash-lb-rows');
+  if (!el || !supaClient) return;
+  try {
+    const { data } = await supaClient
+      .from('profiles')
+      .select('id, username, rank_score, is_online')
+      .order('rank_score', { ascending: false })
+      .limit(5);
+    if (!data?.length) { el.innerHTML = '<div class="splash-lb-loading">No data yet</div>'; return; }
+    const myId = supaUser?.id;
+    const medals = ['🥇','🥈','🥉','4','5'];
+    el.innerHTML = data.map((p, i) => {
+      const isMe = p.id === myId;
+      const dot = p.is_online ? '<span style="color:#6edf9e;font-size:0.6rem;margin-right:2px">●</span>' : '';
+      const pos = i < 3 ? medals[i] : `<span style="color:var(--text-dim);font-size:0.7rem">${i+1}</span>`;
+      return `<div class="splash-lb-row">
+        <div class="splash-lb-pos">${pos}</div>
+        <div class="splash-lb-name${isMe?' me':''}">${dot}${p.username||'Player'}${isMe?' ✦':''}</div>
+        <div class="splash-lb-score">✦ ${p.rank_score||0}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="splash-lb-loading">—</div>';
+  }
+}
+
 // ── Rank helpers ──────────────────────────────────────────
 function rankFromScore(rs) {
   if (rs >= 6100) return { name:'Gold',   cls:'gold',   icon:'🥇' };
@@ -7916,6 +8078,8 @@ function resumeGame() {
   if (lbl) lbl.textContent = playerCustomName;
 
   updateRankUI();
+// Load splash leaderboard after a short delay to let Supabase init
+setTimeout(() => { if (supaClient && supaUser) loadSplashLeaderboard(); }, 1500);
   renderAll();
   setPlayerControls(isMyTurn());
   updateTurnIndicator();
