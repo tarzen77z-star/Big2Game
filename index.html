@@ -4954,6 +4954,14 @@ function endGame(winnerIdx) {
   }
   showWinCelebration(winnerIdx, mpNames, () => {
     mpShowEndBanner(winnerIdx, raw, mults, gameDeltas, mpNames);
+    // In Friend Table mode: update Leave button text
+    if (_myTableId) {
+      const btn = document.getElementById('btn-end-session');
+      if (btn) {
+        btn.textContent = '🏠 Leave Room';
+        btn.onclick = endSessionFinal;
+      }
+    }
   });
 }
 // winnerLocalIdx is local to THIS player's perspective (0 = "you")
@@ -5065,8 +5073,7 @@ function buildMpRoomStanding() {
 function continueGame() {
   document.getElementById('winner-banner').style.display = 'none';
   if (_myTableId) {
-    // In Friend Table mode — restart within the same table
-    ftRestartGame();
+    ftRestartGame(); // works for ALL players — runner writes seed, others poll
   } else {
     startGame();
   }
@@ -6949,6 +6956,12 @@ function ftBuildState() {
     gdc: [...globalDiscardedCards],
     author: r,
     seq: Date.now(),
+    // Include winner info so non-winning players can show the end banner
+    winnerGlobal: gameActive ? null : (() => {
+      // Find the player with 0 cards — they're the winner
+      const wi = hands.findIndex(h => h.length === 0);
+      return wi >= 0 ? toGlobal(wi) : null;
+    })(),
   };
 }
 
@@ -7064,7 +7077,52 @@ function ftApplyState(s) {
 
   saveGameState();
   renderAll();
-  if (!gameActive) { ftStopPolling(); return; }
+
+  if (!gameActive) {
+    ftStopPolling();
+    // Show end-game banner for non-winning players who received this via sync
+    // (The winning player already called endGame() locally)
+    if (s.winnerGlobal !== null && s.winnerGlobal !== undefined) {
+      const r2 = _myGlobalSeat;
+      const winnerLocal = (s.winnerGlobal - r2 + 4) % 4;
+      // Reconstruct hands/scores from state for banner display
+      const raw = s.h.map(h => h.length); // global order card counts
+      const rawLocal = [0,1,2,3].map(li => s.h[(li + r2) % 4].length);
+      const mults = rawLocal.map(penaltyMultiplier);
+      const gameDeltas = [0,0,0,0];
+      for (let i = 0; i < 4; i++) {
+        for (let j = i + 1; j < 4; j++) {
+          const diff = rawLocal[i] * mults[i] - rawLocal[j] * mults[j];
+          gameDeltas[i] -= diff;
+          gameDeltas[j] += diff;
+        }
+      }
+      // Session scores
+      if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[li] || 0);
+      // Record in session history
+      mpSessionHistory.push({
+        winnerLocalIdx: winnerLocal,
+        gameDeltas: gameDeltas.slice(),
+        raw: rawLocal.slice()
+      });
+      if (!mpSessionNames.length) {
+        mpSessionNames = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
+      }
+      // Build names in local order
+      const names = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
+      showWinCelebration(winnerLocal, names, () => {
+        mpShowEndBanner(winnerLocal, rawLocal, mults, gameDeltas, names);
+        // Set up Continue button for Friend Table — all players can trigger restart
+        const btn = document.getElementById('btn-end-session');
+        if (btn) {
+          btn.textContent = '🏠 Leave Room';
+          btn.onclick = endSessionFinal;
+        }
+      });
+    }
+    return;
+  }
+
   setPlayerControls(isMyTurn());
   updateTurnIndicator();
   // If I'm the NPC runner and an NPC is next, run them
@@ -7092,13 +7150,30 @@ function ftGuestPass() { doPass(0); }
 
 // Restart game within same FT room
 async function ftRestartGame() {
-  if (!_myTableId || !supaClient || !ftAmNpcRunner()) return;
-  const newSeed = Math.floor(Math.random() * 0x7fffffff);
-  await supaClient.from('friend_tables')
-    .update({ payload: { seed: newSeed, started: true }, pending_move: null })
-    .eq('id', _myTableId);
-  const { data: row } = await supaClient.from('friend_tables').select('*').eq('id', _myTableId).single();
-  if (row) await launchFriendTableGame(row);
+  if (!_myTableId || !supaClient) return;
+  if (ftAmNpcRunner()) {
+    // Only the runner (lowest seat) writes the new seed — avoids race condition
+    const newSeed = Math.floor(Math.random() * 0x7fffffff);
+    const { error } = await supaClient.from('friend_tables')
+      .update({ payload: { seed: newSeed, started: true }, pending_move: null })
+      .eq('id', _myTableId);
+    if (error) { toast('❌ Could not restart: ' + error.message); return; }
+  }
+  // All players watch for the new seed — poll until the row updates
+  let attempts = 0;
+  const waitForRestart = setInterval(async () => {
+    attempts++;
+    if (attempts > 20) { clearInterval(waitForRestart); toast('⚠️ Restart timed out'); return; }
+    const { data: row } = await supaClient.from('friend_tables').select('*').eq('id', _myTableId).single();
+    if (!row) { clearInterval(waitForRestart); return; }
+    // Check if seed changed (new game has different seed from current)
+    if (row.payload?.seed && row.payload.seed !== _ftSeed) {
+      clearInterval(waitForRestart);
+      _ftAppliedSeq = 0; // reset seq guard for new game
+      _ftSeenKeys = new Set();
+      await launchFriendTableGame(row);
+    }
+  }, 500);
 }
 // ── Override playerPlay/playerPass for friend table ───────
 // All players (not just guests) publish moves in friend table mode
