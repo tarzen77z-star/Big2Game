@@ -6622,6 +6622,7 @@ async function leaveCurrentTable() {
 
 function cleanupFriendTable() {
   _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; _ftSeats = [];
+  _ftOtherSeats = []; _ftLastApplied = 0;
   ftStopPolling();
   stopTableTimer();
   if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
@@ -6743,6 +6744,8 @@ async function launchFriendTableGame(table) {
   mpMySeat     = _myGlobalSeat;
   mpNpcSlots   = npcSlots;
   mpSeats      = seats.map((uid, i) => ({ name: seatNames[i], conn: null }));
+  // Other human player UIDs — we INSERT game_move notifications to these
+  _ftOtherSeats = seats.filter(uid => uid && uid !== supaUser.id);
 
   // ── Show game screen ──
   document.getElementById('splash').style.display = 'none';
@@ -6824,33 +6827,16 @@ async function launchFriendTableGame(table) {
 
 let _ftPollTimer   = null;
 let _ftLastApplied = 0;
+let _ftOtherSeats  = []; // recipient user IDs (other humans at the table)
 
+// ── ftStartPolling: no longer polls friend_tables.
+// Game moves now go through friend_notifications (INSERT, not UPDATE),
+// so RLS is not a problem. The existing subscribeToNotifications() realtime
+// channel handles incoming game_move notifications instantly.
+// We keep a 3s fallback poll that queries friend_notifications directly.
 function ftStartPolling(tableId) {
-  // ── Primary: Supabase Realtime subscription on this table row ──
-  // Fires instantly when pending_move changes — no 1500ms wait.
-  if (supaClient && !_friendTableGameSub) {
-    _friendTableGameSub = supaClient
-      .channel('ft_game_' + tableId)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'friend_tables',
-        filter: 'id=eq.' + tableId
-      }, (payload) => {
-        const pm = payload.new?.pending_move;
-        if (!pm || !pm.state) return;
-        if (pm.author === _myGlobalSeat) return; // our own write
-        if (pm.seq === _ftLastApplied) return;   // already applied
-        _ftLastApplied = pm.seq;
-        ftApplyState(pm.state);
-      })
-      .subscribe(status => {
-        console.log('FT game realtime:', status);
-      });
-  }
-  // ── Fallback: poll every 1500ms in case realtime misses anything ──
   if (_ftPollTimer) clearInterval(_ftPollTimer);
-  _ftPollTimer = setInterval(() => ftPoll(tableId), 1500);
+  _ftPollTimer = setInterval(() => ftPollMoves(), 3000);
 }
 
 function ftStopPolling() {
@@ -6867,53 +6853,75 @@ function ftAmNpcRunner() {
   return _myGlobalSeat === lowestHuman;
 }
 
-// Poll DB — fallback for when realtime subscription misses a change
-async function ftPoll(tableId) {
-  if (!gameActive || !supaClient || _myGlobalSeat === null) return;
+// Fallback poll: query friend_notifications for game_move rows we may have missed
+async function ftPollMoves() {
+  if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) return;
   try {
+    const since = new Date(Date.now() - 30000).toISOString(); // last 30s
     const { data, error } = await supaClient
-      .from('friend_tables').select('pending_move').eq('id', tableId).single();
-    if (error) { console.warn('ftPoll error:', error.message); return; }
-    if (!data?.pending_move) return;
-    const pm = data.pending_move;
-    if (!pm.state) return;
-    if (pm.author === _myGlobalSeat) return; // our own write, skip
-    if (pm.seq === _ftLastApplied) return;   // already applied
-    console.log('ftPoll caught missed update from seat', pm.author, 'seq', pm.seq);
-    _ftLastApplied = pm.seq;
-    ftApplyState(pm.state);
-  } catch(e) { console.warn('ftPoll exception:', e); }
+      .from('friend_notifications')
+      .select('id,sender_id,payload,created_at')
+      .eq('recipient_id', supaUser.id)
+      .eq('type', 'game_move')
+      .eq('payload->>table_id', _myTableId)
+      .gt('created_at', since)
+      .order('created_at', { ascending: true });
+    if (error) { console.warn('ftPollMoves error:', error.message); return; }
+    if (!data || !data.length) return;
+    // Apply any we haven't seen yet
+    for (const row of data) {
+      if (_ftLastApplied === row.id) continue;
+      if (row.sender_id === supaUser.id) continue; // our own write
+      _ftLastApplied = row.id;
+      console.log('ftPollMoves caught missed move from', row.sender_id);
+      ftApplyState(row.payload.state);
+    }
+  } catch(e) { console.warn('ftPollMoves exception:', e); }
 }
 
-// Push state to DB — only called by the active player after their move
+// Push game state — INSERT into friend_notifications for each other human player.
+// Using INSERT (not UPDATE) means no RLS issue — any authenticated user can insert
+// a row where sender_id = their own uid. Recipients get it via their existing
+// realtime subscription on friend_notifications.
 async function ftPushState() {
-  if (!supaClient || !_myTableId) return;
-  // Build state in GLOBAL seat order
-  const r = _myGlobalSeat; // my rotation offset
-  const toGlobal = li => (li + r) % 4;       // local index → global seat
+  if (!supaClient || !_myTableId || !supaUser) return;
+  if (!_ftOtherSeats || !_ftOtherSeats.length) return; // no one to tell
+
+  // Build state in GLOBAL seat order so recipients can remap to their local view
+  const r = _myGlobalSeat;
+  const toGlobal = li => (li + r) % 4;
   const state = {
-    h:  [0,1,2,3].map(g => hands[(g - r + 4) % 4]),           // hands[global]
-    cp: toGlobal(currentPlayer),                                 // currentPlayer global
-    op: toGlobal(openingPlayer),                                 // openingPlayer global
-    lp: lastPlay ? {...lastPlay, pi: toGlobal(lastPlay.playerIdx)} : null,
-    dp: discardPile,
+    h:   [0,1,2,3].map(g => hands[(g - r + 4) % 4]),
+    cp:  toGlobal(currentPlayer),
+    op:  toGlobal(openingPlayer),
+    lp:  lastPlay ? {...lastPlay, pi: toGlobal(lastPlay.playerIdx)} : null,
+    dp:  discardPile,
     crp: currentRoundPlays.map(p => ({...p, pi: toGlobal(p.playerIdx)})),
-    pc: passCount,
-    ft: firstTurn,
-    ga: gameActive,
-    ss: [0,1,2,3].map(g => mpSessionScores[(g - r + 4) % 4] || 0),
+    pc:  passCount,
+    ft:  firstTurn,
+    ga:  gameActive,
+    ss:  [0,1,2,3].map(g => mpSessionScores[(g - r + 4) % 4] || 0),
     gdc: [...globalDiscardedCards],
   };
-  const seq = Date.now() * 10 + r; // unique per player
+
+  const rows = _ftOtherSeats.map(uid => ({
+    sender_id:    supaUser.id,
+    recipient_id: uid,
+    type:         'game_move',
+    payload:      { table_id: _myTableId, state },
+    read:         false,
+  }));
+
   try {
-    const { data: wr, error } = await supaClient.from('friend_tables')
-      .update({ pending_move: { state, author: r, seq } })
-      .eq('id', _myTableId)
+    const { data: inserted, error } = await supaClient
+      .from('friend_notifications')
+      .insert(rows)
       .select('id');
-    if (error) { console.warn('ftPushState error:', error); return; }
-    if (!wr || !wr.length) { console.warn('ftPushState: 0 rows — RLS?'); return; }
-    _ftLastApplied = seq; // mark so we don't re-apply our own write
-  } catch(e) { console.warn('ftPushState:', e); }
+    if (error) { console.warn('ftPushState INSERT error:', error.message, error.details); return; }
+    // Mark the inserted IDs as "our own" so ftPollMoves skips them
+    if (inserted) inserted.forEach(r => { _ftLastApplied = r.id; });
+    console.log('ftPushState: sent move to', _ftOtherSeats.length, 'players');
+  } catch(e) { console.warn('ftPushState exception:', e); }
 }
 
 // Apply state received from another player
@@ -7138,6 +7146,18 @@ function subscribeToNotifications() {
     }, (payload) => {
       const n = payload.new;
       if (!n || n.read) return;
+      if (n.type === 'game_move') {
+        // Incoming game state from another player at our table
+        const pm = n.payload;
+        if (!pm || !pm.state) return;
+        if (!_myTableId || pm.table_id !== _myTableId) return; // not for our table
+        if (n.sender_id === supaUser.id) return; // our own echo
+        if (_ftLastApplied === n.id) return; // already applied
+        _ftLastApplied = n.id;
+        console.log('Received game_move from', n.sender_id);
+        ftApplyState(pm.state);
+        return;
+      }
       if (n.type === 'table_started' && !_myTableId) {
         supaClient.from('friend_tables').select('id,status').eq('id',n.payload?.table_id).single()
           .then(({data:t}) => {
