@@ -3549,21 +3549,37 @@ function updateTurnIndicator() {
 function updateScoreboard() {
   const displayScores = (mpGameMode === 'vs_human') ? mpSessionScores : scores;
   const scNames = mpScoreboardNames();
+
+  // In FT/MP mode, build scores and wins from session history (same as Room Standing)
+  const wins = [0,0,0,0];
+  if (mpGameMode === 'vs_human' && mpSessionHistory.length) {
+    mpSessionHistory.forEach(g => {
+      if (g.winnerLocalIdx >= 0 && g.winnerLocalIdx < 4) wins[g.winnerLocalIdx]++;
+    });
+  }
+
   ['p1','p2','p3','p4'].forEach((id, i) => {
     const row = document.getElementById('sc-'+id)?.parentElement;
     const el  = document.getElementById('sc-'+id);
     const nm  = document.getElementById('sc-'+id+'-name');
     if (!el) return;
 
-    // In MP Friend Table mode: hide NPC rows
-    const isNpcRow = mpGameMode === 'vs_human' && _myTableId && mpNpcSlots[i];
-    if (row) row.style.display = isNpcRow ? 'none' : '';
+    // Always show all 4 rows — NPCs included, same as Room Standing
+    if (row) row.style.display = '';
 
     const v = displayScores[i] || 0;
-    el.textContent = (v > 0 ? '+' : '') + v;
+    // Show score + wins if in MP mode with history
+    if (mpGameMode === 'vs_human' && mpSessionHistory.length) {
+      const sign = v > 0 ? '+' : '';
+      const winStr = wins[i] ? ` · ${wins[i]}W` : '';
+      el.textContent = sign + v + winStr;
+    } else {
+      el.textContent = (v > 0 ? '+' : '') + v;
+    }
     el.style.color = v > 0 ? '#7fffaa' : v < 0 ? '#ff9999' : '';
     if (nm) nm.textContent = scNames[i];
   });
+
   const gp = document.getElementById('games-played');
   if (gp) gp.textContent = mpGameMode === 'vs_human'
     ? 'Games this session: ' + mpSessionHistory.length
@@ -3573,11 +3589,13 @@ function updateScoreboard() {
 // Returns display names for scoreboard in local index order [0..3]
 function mpScoreboardNames() {
   if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
-    // In FT mode, mpSeats is already rotated to local order in launchFriendTableGame
-    // In PeerJS mode, mpSeats is in global order so we need mpMySeat offset
     if (_myTableId) {
-      // FT: mpSeats already local-rotated — index directly
-      return [0,1,2,3].map(li => mpSeats[li] ? mpSeats[li].name : ('Player '+(li+1)));
+      // FT: mpSeats already local-rotated — use name, mark NPCs clearly
+      return [0,1,2,3].map(li => {
+        if (!mpSeats[li]) return 'NPC ' + (li+1);
+        const isNpc = mpNpcSlots[li];
+        return isNpc ? ('🤖 ' + mpSeats[li].name) : mpSeats[li].name;
+      });
     }
     // PeerJS: mpSeats in global order, rotate by mpMySeat
     return [0,1,2,3].map(li => {
