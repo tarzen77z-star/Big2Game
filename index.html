@@ -6846,8 +6846,27 @@ let _ftOtherSeats  = []; // recipient user IDs (other humans at the table)
 // channel handles incoming game_move notifications instantly.
 // We keep a 3s fallback poll that queries friend_notifications directly.
 function ftStartPolling(tableId) {
+  // Realtime on friend_tables.pending_move — fires when host UPDATEs as fallback
+  if (supaClient && !_friendTableGameSub) {
+    _friendTableGameSub = supaClient
+      .channel('ft_game_' + tableId)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'friend_tables',
+        filter: 'id=eq.' + tableId
+      }, (payload) => {
+        const pm = payload.new?.pending_move;
+        if (!pm || !pm.state) return;
+        if (pm.author === _myGlobalSeat) return;  // our own write
+        if (pm.seq === _ftLastApplied) return;     // already applied
+        _ftLastApplied = pm.seq;
+        console.log('[FT RECV] ✅ via pending_move fallback cp:', pm.state?.cp);
+        ftApplyState(pm.state);
+      })
+      .subscribe(s => console.log('[FT] table realtime:', s));
+  }
+  // Fallback poll every 3s — catches anything realtime misses
   if (_ftPollTimer) clearInterval(_ftPollTimer);
-  _ftPollTimer = setInterval(() => ftPollMoves(), 3000);
+  _ftPollTimer = setInterval(() => ftPollMoves(tableId), 3000);
 }
 
 function ftStopPolling() {
@@ -6864,11 +6883,13 @@ function ftAmNpcRunner() {
   return _myGlobalSeat === lowestHuman;
 }
 
-// Fallback poll: query friend_notifications for game_move rows we may have missed
-async function ftPollMoves() {
+// Fallback poll — checks BOTH friend_notifications AND pending_move
+async function ftPollMoves(tableId) {
   if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) return;
+
+  // Path A: friend_notifications (if RLS allows SELECT)
   try {
-    const since = new Date(Date.now() - 30000).toISOString(); // last 30s
+    const since = new Date(Date.now() - 30000).toISOString();
     const { data, error } = await supaClient
       .from('friend_notifications')
       .select('id,sender_id,payload,created_at')
@@ -6877,31 +6898,40 @@ async function ftPollMoves() {
       .eq('payload->>table_id', _myTableId)
       .gt('created_at', since)
       .order('created_at', { ascending: true });
-    if (error) { console.warn('ftPollMoves error:', error.message); return; }
-    if (!data || !data.length) return;
-    // Apply any we haven't seen yet
-    for (const row of data) {
-      if (_ftLastApplied === row.id) continue;
-      if (row.sender_id === supaUser.id) continue; // our own write
-      _ftLastApplied = row.id;
-      console.log('ftPollMoves caught missed move from', row.sender_id);
-      ftApplyState(row.payload.state);
+    if (!error && data && data.length) {
+      for (const row of data) {
+        if (_ftLastApplied === row.id) continue;
+        if (row.sender_id === supaUser.id) continue;
+        _ftLastApplied = row.id;
+        console.log('[FT POLL] caught missed notification from', row.sender_id);
+        ftApplyState(row.payload.state);
+        return; // applied — done
+      }
     }
-  } catch(e) { console.warn('ftPollMoves exception:', e); }
+  } catch(e) {}
+
+  // Path B: friend_tables.pending_move (always readable — ft_select allows all authenticated)
+  try {
+    const { data: row, error } = await supaClient
+      .from('friend_tables')
+      .select('pending_move')
+      .eq('id', _myTableId)
+      .single();
+    if (error || !row?.pending_move) return;
+    const pm = row.pending_move;
+    if (!pm.state || pm.author === _myGlobalSeat) return;
+    if (pm.seq === _ftLastApplied) return;
+    _ftLastApplied = pm.seq;
+    console.log('[FT POLL] ✅ caught missed pending_move from seat', pm.author, 'cp:', pm.state?.cp);
+    ftApplyState(pm.state);
+  } catch(e) { console.warn('[FT POLL] exception:', e); }
 }
 
-// Push game state — INSERT into friend_notifications for each other human player.
-// Using INSERT (not UPDATE) means no RLS issue — any authenticated user can insert
-// a row where sender_id = their own uid. Recipients get it via their existing
-// realtime subscription on friend_notifications.
-async function ftPushState() {
-  if (!supaClient || !_myTableId || !supaUser) return;
-  if (!_ftOtherSeats || !_ftOtherSeats.length) return; // no one to tell
-
-  // Build state in GLOBAL seat order so recipients can remap to their local view
+// Build the global-order state snapshot every player can remap locally
+function ftBuildState() {
   const r = _myGlobalSeat;
   const toGlobal = li => (li + r) % 4;
-  const state = {
+  return {
     h:   [0,1,2,3].map(g => hands[(g - r + 4) % 4]),
     cp:  toGlobal(currentPlayer),
     op:  toGlobal(openingPlayer),
@@ -6913,8 +6943,24 @@ async function ftPushState() {
     ga:  gameActive,
     ss:  [0,1,2,3].map(g => mpSessionScores[(g - r + 4) % 4] || 0),
     gdc: [...globalDiscardedCards],
+    author: r,
+    seq: Date.now(),
   };
+}
 
+// Push game state to all other human players.
+// PRIMARY:  INSERT into friend_notifications (instant realtime delivery)
+// FALLBACK: UPDATE friend_tables.pending_move (polling-based, 3s delay)
+//           Used if friend_notifications RLS blocks the INSERT.
+async function ftPushState() {
+  if (!supaClient || !_myTableId || !supaUser) return;
+  if (!_ftOtherSeats || !_ftOtherSeats.length) return;
+
+  const r = _myGlobalSeat;
+  const state = ftBuildState();
+  console.log('[FT PUSH] seat=' + r + ' cp=' + state.cp + ' to=' + _ftOtherSeats.length + ' recipients');
+
+  // ── PRIMARY: friend_notifications INSERT ──────────────────────
   const rows = _ftOtherSeats.map(uid => ({
     sender_id:    supaUser.id,
     recipient_id: uid,
@@ -6923,25 +6969,51 @@ async function ftPushState() {
     read:         false,
   }));
 
-  console.log('[FT PUSH] seat=' + r + ' cp=' + state.cp + ' crp=' + state.crp?.length + ' to=' + _ftOtherSeats.length + ' recipients');
   try {
     const { data: inserted, error } = await supaClient
       .from('friend_notifications')
       .insert(rows)
       .select('id');
-    if (error) {
-      console.error('[FT PUSH] ❌ INSERT FAILED:', error.message, '| code:', error.code);
-      toast('⚠️ Move not sent: ' + error.message);
+
+    if (!error && inserted && inserted.length) {
+      inserted.forEach(row => { _ftLastApplied = row.id; });
+      console.log('[FT PUSH] ✅ via notifications — inserted', inserted.length);
+      // Also write to pending_move so fallback poll works
+      await supaClient.from('friend_tables')
+        .update({ pending_move: { state, author: r, seq: state.seq } })
+        .eq('id', _myTableId);
       return;
     }
-    if (!inserted || !inserted.length) {
-      console.error('[FT PUSH] ❌ INSERT returned 0 rows — RLS is blocking Player ' + (r+1) + '!');
-      toast('⚠️ Move blocked by server — check Supabase RLS');
+
+    // INSERT failed — log and fall through to fallback
+    console.warn('[FT PUSH] notifications INSERT failed:', error?.message, '— using pending_move fallback');
+  } catch(e) {
+    console.warn('[FT PUSH] notifications exception:', e, '— using pending_move fallback');
+  }
+
+  // ── FALLBACK: friend_tables.pending_move UPDATE ───────────────
+  // ft_update policy allows any seated player to update the table row.
+  try {
+    const { data: wr, error: wr_err } = await supaClient
+      .from('friend_tables')
+      .update({ pending_move: { state, author: r, seq: state.seq } })
+      .eq('id', _myTableId)
+      .select('id');
+
+    if (wr_err) {
+      console.error('[FT PUSH] ❌ pending_move fallback ALSO failed:', wr_err.message);
+      toast('⚠️ Sync failed — both channels blocked');
       return;
     }
-    if (inserted) inserted.forEach(row => { _ftLastApplied = row.id; });
-    console.log('[FT PUSH] ✅ OK — inserted', inserted.length, 'notification(s)');
-  } catch(e) { console.error('[FT PUSH] exception:', e); }
+    if (!wr || !wr.length) {
+      console.error('[FT PUSH] ❌ pending_move: 0 rows — not seated at this table?');
+      return;
+    }
+    _ftLastApplied = state.seq;
+    console.log('[FT PUSH] ✅ via pending_move fallback');
+  } catch(e) {
+    console.error('[FT PUSH] ❌ pending_move exception:', e);
+  }
 }
 
 // Apply state received from another player
