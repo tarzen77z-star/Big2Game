@@ -4086,26 +4086,21 @@ function isMyTurn() {
 
 
 function npcTurn() {
-  console.log('[NPC] npcTurn fired: gameActive='+gameActive+' cp='+currentPlayer+' isNpc='+mpNpcSlots[currentPlayer]+' isRunner='+ftAmNpcRunner()+' tableId='+_myTableId);
-  if (!gameActive) { console.log('[NPC] skip: !gameActive'); return; }
+  if (!gameActive) return;
   // In PeerJS MP: guests never run NPC AI
-  if (!_myTableId && mpGameMode === 'vs_human' && !mpIsHost) { console.log('[NPC] skip: guest'); return; }
+  if (!_myTableId && mpGameMode === 'vs_human' && !mpIsHost) return;
   // Skip if it's the local human player's turn
-  if (currentPlayer === 0) { console.log('[NPC] skip: cp===0 (human)'); return; }
+  if (currentPlayer === 0) return;
   // Skip remote human slots
-  if (mpGameMode === 'vs_human' && !mpNpcSlots[currentPlayer]) { console.log('[NPC] skip: not npc slot, mpNpcSlots='+JSON.stringify(mpNpcSlots)); return; }
+  if (mpGameMode === 'vs_human' && !mpNpcSlots[currentPlayer]) return;
 
   const idx = currentPlayer;
   const hand = hands[idx];
-  console.log('[NPC] running NPC at idx='+idx+' hand='+hand.length+' cards');
-
   const play = findBestNpcPlay(hand, lastPlay, firstTurn && idx === openingPlayer);
 
   if (!play) {
-    console.log('[NPC] NPC passes');
     doPass(idx);
   } else {
-    console.log('[NPC] NPC plays:', play.type, play.cards?.length, 'cards');
     executePlay(idx, play.cards, play);
   }
 }
@@ -6355,7 +6350,7 @@ function subscribeToNotifications() {
         if (n.sender_id === supaUser.id) return;               // our own echo
         if (_ftLastApplied === n.id) return;                   // already applied
         _ftLastApplied = n.id;
-        console.log('[FT RECV] ✅ game_move from', n.sender_id, 'cp:', pm.state?.cp);
+
         ftApplyState(pm.state);
       }
     })
@@ -6761,7 +6756,7 @@ async function launchFriendTableGame(table) {
   mpSeats      = seats.map((uid, i) => ({ name: seatNames[i], conn: null }));
   // Other human player UIDs — we INSERT game_move notifications to these
   _ftOtherSeats = seats.filter(uid => uid && uid !== supaUser.id);
-  console.log('[FT LAUNCH] myGlobalSeat='+_myGlobalSeat+' myUID='+supaUser.id+' otherSeats='+JSON.stringify(_ftOtherSeats));
+
 
   // ── Show game screen ──
   document.getElementById('splash').style.display = 'none';
@@ -6828,7 +6823,7 @@ async function launchFriendTableGame(table) {
     setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 1200);
   }
 
-  console.log('Game launched! mySeat=', _myGlobalSeat, 'CP=', currentPlayer, 'isMyTurn=', isMyTurn(), 'hand=', hands[0].length);
+
 
   toast('🏓 Friend Table game started!');
 }
@@ -6859,16 +6854,14 @@ function ftStartPolling(tableId) {
         event: 'UPDATE', schema: 'public', table: 'friend_tables',
         filter: 'id=eq.' + tableId
       }, (payload) => {
-        console.log('[FT TABLE RT] fired — author:', payload.new?.pending_move?.author, 'myGlobalSeat:', _myGlobalSeat);
         const pm = payload.new?.pending_move;
-        if (!pm || !pm.state) { console.log('[FT TABLE RT] no pm.state, skipping'); return; }
-        if (pm.author === _myGlobalSeat) { console.log('[FT TABLE RT] own write, skipping'); return; }
-        if (pm.seq === _ftLastApplied) { console.log('[FT TABLE RT] already applied, skipping'); return; }
+        if (!pm || !pm.state) return;
+        if (pm.author === _myGlobalSeat) return;
+        if (pm.seq === _ftLastApplied) return;
         _ftLastApplied = pm.seq;
-        console.log('[FT RECV] ✅ via pending_move realtime cp:', pm.state?.cp);
         ftApplyState(pm.state);
       })
-      .subscribe(s => console.log('[FT] table realtime:', s));
+      .subscribe(() => {});
   }
   // Fallback poll every 3s — catches anything realtime misses
   if (_ftPollTimer) clearInterval(_ftPollTimer);
@@ -6909,7 +6902,7 @@ async function ftPollMoves(tableId) {
         if (_ftLastApplied === row.id) continue;
         if (row.sender_id === supaUser.id) continue;
         _ftLastApplied = row.id;
-        console.log('[FT POLL] caught missed notification from', row.sender_id);
+
         ftApplyState(row.payload.state);
         return; // applied — done
       }
@@ -6928,7 +6921,7 @@ async function ftPollMoves(tableId) {
     if (!pm.state || pm.author === _myGlobalSeat) return;
     if (pm.seq === _ftLastApplied) return;
     _ftLastApplied = pm.seq;
-    console.log('[FT POLL] ✅ caught missed pending_move from seat', pm.author, 'cp:', pm.state?.cp);
+
     ftApplyState(pm.state);
   } catch(e) { console.warn('[FT POLL] exception:', e); }
 }
@@ -6964,7 +6957,7 @@ async function ftPushState() {
 
   const r = _myGlobalSeat;
   const state = ftBuildState();
-  console.log('[FT PUSH] seat=' + r + ' cp=' + state.cp + ' to=' + _ftOtherSeats.length + ' recipients');
+
 
   // ── PRIMARY: friend_notifications INSERT ──────────────────────
   const rows = _ftOtherSeats.map(uid => ({
@@ -6983,20 +6976,19 @@ async function ftPushState() {
 
     if (!error && inserted && inserted.length) {
       inserted.forEach(row => { _ftLastApplied = row.id; });
-      console.log('[FT PUSH] ✅ via notifications — inserted', inserted.length);
+
       // ALWAYS also write pending_move — this is what the friend_tables realtime sub picks up
       const { error: pmErr } = await supaClient.from('friend_tables')
         .update({ pending_move: { state, author: r, seq: state.seq } })
         .eq('id', _myTableId);
-      if (pmErr) console.warn('[FT PUSH] pending_move secondary write failed:', pmErr.message);
-      else console.log('[FT PUSH] ✅ pending_move also written (dual sync)');
+      if (pmErr) console.warn('[FT PUSH] pending_move write failed:', pmErr.message);
       return;
     }
 
     // INSERT failed — log and fall through to fallback
-    console.warn('[FT PUSH] notifications INSERT failed:', error?.message, '— using pending_move fallback');
+
   } catch(e) {
-    console.warn('[FT PUSH] notifications exception:', e, '— using pending_move fallback');
+
   }
 
   // ── FALLBACK: friend_tables.pending_move UPDATE ───────────────
@@ -7018,7 +7010,7 @@ async function ftPushState() {
       return;
     }
     _ftLastApplied = state.seq;
-    console.log('[FT PUSH] ✅ via pending_move fallback');
+
   } catch(e) {
     console.error('[FT PUSH] ❌ pending_move exception:', e);
   }
@@ -7031,7 +7023,7 @@ function ftApplyState(s) {
   if (r === null || r === undefined) return; // not in a game yet
   const toLoc = g => (g - r + 4) % 4; // global seat → local index
 
-  console.log('[FT] applying state from seat', s ? 'ok' : 'NULL', 'cp='+s?.cp, 'crp='+s?.crp?.length);
+
   // Snapshot what changed so we can show feedback
   const prevLastPlay = lastPlay;
 
