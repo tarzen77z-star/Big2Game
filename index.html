@@ -6343,6 +6343,16 @@ function subscribeToNotifications() {
         toast('📬 New friend request!');
         const badge = document.getElementById('friend-notif-badge');
         if (badge) { badge.style.display = 'inline'; }
+      } else if (n.type === 'game_move') {
+        // ── Game state from another player at our Friend Table ──
+        const pm = n.payload;
+        if (!pm || !pm.state) return;
+        if (!_myTableId || pm.table_id !== _myTableId) return; // not our table
+        if (n.sender_id === supaUser.id) return;               // our own echo
+        if (_ftLastApplied === n.id) return;                   // already applied
+        _ftLastApplied = n.id;
+        console.log('[FT RECV] ✅ game_move from', n.sender_id, 'cp:', pm.state?.cp);
+        ftApplyState(pm.state);
       }
     })
     .subscribe((status) => {
@@ -6746,6 +6756,7 @@ async function launchFriendTableGame(table) {
   mpSeats      = seats.map((uid, i) => ({ name: seatNames[i], conn: null }));
   // Other human player UIDs — we INSERT game_move notifications to these
   _ftOtherSeats = seats.filter(uid => uid && uid !== supaUser.id);
+  console.log('[FT LAUNCH] myGlobalSeat='+_myGlobalSeat+' myUID='+supaUser.id+' otherSeats='+JSON.stringify(_ftOtherSeats));
 
   // ── Show game screen ──
   document.getElementById('splash').style.display = 'none';
@@ -6912,16 +6923,25 @@ async function ftPushState() {
     read:         false,
   }));
 
+  console.log('[FT PUSH] seat=' + r + ' cp=' + state.cp + ' crp=' + state.crp?.length + ' to=' + _ftOtherSeats.length + ' recipients');
   try {
     const { data: inserted, error } = await supaClient
       .from('friend_notifications')
       .insert(rows)
       .select('id');
-    if (error) { console.warn('ftPushState INSERT error:', error.message, error.details); return; }
-    // Mark the inserted IDs as "our own" so ftPollMoves skips them
-    if (inserted) inserted.forEach(r => { _ftLastApplied = r.id; });
-    console.log('ftPushState: sent move to', _ftOtherSeats.length, 'players');
-  } catch(e) { console.warn('ftPushState exception:', e); }
+    if (error) {
+      console.error('[FT PUSH] ❌ INSERT FAILED:', error.message, '| code:', error.code);
+      toast('⚠️ Move not sent: ' + error.message);
+      return;
+    }
+    if (!inserted || !inserted.length) {
+      console.error('[FT PUSH] ❌ INSERT returned 0 rows — RLS is blocking Player ' + (r+1) + '!');
+      toast('⚠️ Move blocked by server — check Supabase RLS');
+      return;
+    }
+    if (inserted) inserted.forEach(row => { _ftLastApplied = row.id; });
+    console.log('[FT PUSH] ✅ OK — inserted', inserted.length, 'notification(s)');
+  } catch(e) { console.error('[FT PUSH] exception:', e); }
 }
 
 // Apply state received from another player
@@ -6931,6 +6951,7 @@ function ftApplyState(s) {
   if (r === null || r === undefined) return; // not in a game yet
   const toLoc = g => (g - r + 4) % 4; // global seat → local index
 
+  console.log('[FT] applying state from seat', s ? 'ok' : 'NULL', 'cp='+s?.cp, 'crp='+s?.crp?.length);
   // Snapshot what changed so we can show feedback
   const prevLastPlay = lastPlay;
 
@@ -7134,44 +7155,7 @@ function showTableInviteToast(fromName, group, tableId, notifId) {
 }
 
 // ── Realtime: instant notification delivery ───────────────
-// _notifRealtimeSub declared earlier
-
-function subscribeToNotifications() {
-  if (!supaClient || !supaUser || _notifRealtimeSub) return;
-  _notifRealtimeSub = supaClient
-    .channel('friend_notifs_' + supaUser.id)
-    .on('postgres_changes', {
-      event: 'INSERT', schema: 'public', table: 'friend_notifications',
-      filter: 'recipient_id=eq.' + supaUser.id
-    }, (payload) => {
-      const n = payload.new;
-      if (!n || n.read) return;
-      if (n.type === 'game_move') {
-        // Incoming game state from another player at our table
-        const pm = n.payload;
-        if (!pm || !pm.state) return;
-        if (!_myTableId || pm.table_id !== _myTableId) return; // not for our table
-        if (n.sender_id === supaUser.id) return; // our own echo
-        if (_ftLastApplied === n.id) return; // already applied
-        _ftLastApplied = n.id;
-        console.log('Received game_move from', n.sender_id);
-        ftApplyState(pm.state);
-        return;
-      }
-      if (n.type === 'table_started' && !_myTableId) {
-        supaClient.from('friend_tables').select('id,status').eq('id',n.payload?.table_id).single()
-          .then(({data:t}) => {
-            if (!t || t.status !== 'waiting') { markNotifRead(n.id); return; }
-            showTableInviteToast(n.payload?.host_name||'A friend', n.payload?.group||'beginner', n.payload?.table_id, n.id);
-            const badge = document.getElementById('friend-notif-badge');
-            if (badge) { badge.style.display='inline'; badge.textContent='!'; }
-          });
-      } else if (n.type === 'friend_request') {
-        toast('📬 New friend request!');
-      }
-    })
-    .subscribe(s => console.log('Notif sub:', s));
-}
+// game_move handling merged into subscribeToNotifications above
 
 // ── Heartbeat ─────────────────────────────────────────────
 setInterval(async () => {
