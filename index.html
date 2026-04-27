@@ -6224,103 +6224,151 @@ function friendSubTab(sub) {
   if (sub === 'myf') loadFriendsList();
 }
 
+// ── Leaderboard ──────────────────────────────────────────────
+// Tabs: Rank Score | Beginner | Intermediate | Hard | Pro | Friend Games
+let _lbCurrentTab = 'rank';
+
 async function loadLeaderboard() {
   const el = document.getElementById('leaderboard-content');
   if (!el || !supaClient) return;
-  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading…</div>';
 
-  // Two sub-tabs: Rank Score (solo) and Friend Games
   el.innerHTML = `
-    <div class="fr-subtabs" style="margin-bottom:12px">
-      <div class="fr-subtab active" id="lbtab-rank" onclick="lbSwitchTab('rank')">✦ Rank Score</div>
-      <div class="fr-subtab" id="lbtab-friend" onclick="lbSwitchTab('friend')">🤝 Friend Games</div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="lb-tab active" id="lbtab-rank"         onclick="lbSwitchTab('rank')">✦ Rank</button>
+      <button class="lb-tab"        id="lbtab-beginner"     onclick="lbSwitchTab('beginner')">🌱 Beginner</button>
+      <button class="lb-tab"        id="lbtab-intermediate" onclick="lbSwitchTab('intermediate')">🥉 Inter.</button>
+      <button class="lb-tab"        id="lbtab-hard"         onclick="lbSwitchTab('hard')">🥈 Hard</button>
+      <button class="lb-tab"        id="lbtab-pro"          onclick="lbSwitchTab('pro')">🥇 Pro</button>
+      <button class="lb-tab"        id="lbtab-friend"       onclick="lbSwitchTab('friend')">🤝 Friends</button>
     </div>
-    <div id="lb-rank-content"></div>
-    <div id="lb-friend-content" style="display:none"></div>
+    <div id="lb-rows"></div>
   `;
 
-  await lbLoadRank();
+  // Inject tab button CSS once
+  if (!document.getElementById('lb-tab-style')) {
+    const s = document.createElement('style');
+    s.id = 'lb-tab-style';
+    s.textContent = `.lb-tab{flex:1;min-width:60px;padding:5px 4px;font-size:0.7rem;font-family:'Crimson Pro',serif;background:rgba(255,255,255,0.04);border:1px solid rgba(100,140,255,0.15);border-radius:7px;color:rgba(140,165,220,0.6);cursor:pointer;transition:all 0.15s;text-align:center;}
+    .lb-tab:hover{background:rgba(60,100,200,0.15);color:rgba(160,184,255,0.9);}
+    .lb-tab.active{background:rgba(60,100,200,0.28);border-color:rgba(100,160,255,0.45);color:rgba(190,215,255,1);font-weight:700;}`;
+    document.head.appendChild(s);
+  }
+
+  _lbCurrentTab = 'rank';
+  await lbLoad('rank');
 }
 
 function lbSwitchTab(tab) {
-  ['rank','friend'].forEach(t => {
+  ['rank','beginner','intermediate','hard','pro','friend'].forEach(t => {
     document.getElementById('lbtab-'+t)?.classList.toggle('active', t===tab);
-    const sec = document.getElementById('lb-'+t+'-content');
-    if (sec) sec.style.display = t===tab ? 'block' : 'none';
   });
-  if (tab === 'friend') lbLoadFriend();
+  _lbCurrentTab = tab;
+  lbLoad(tab);
 }
 
-async function lbLoadRank() {
-  const el = document.getElementById('lb-rank-content');
+async function lbLoad(tab) {
+  const el = document.getElementById('lb-rows');
   if (!el || !supaClient) return;
   el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim);font-style:italic;font-size:0.8rem">Loading…</div>';
-  try {
-    const { data: top } = await supaClient
-      .from('profiles')
-      .select('id,username,rank_score,is_online')
-      .order('rank_score', { ascending: false })
-      .limit(20);
-    if (!top?.length) { el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim)">No data yet.</div>'; return; }
-    const myId = supaUser?.id;
-    el.innerHTML = top.map((p, i) => {
-      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:var(--text-dim);font-size:0.8rem">${i+1}</span>`;
-      const isMe = p.id === myId;
-      const rank = rankFromScore(p.rank_score||0);
-      const dot = p.is_online ? '<span style="color:#6edf9e;font-size:0.62rem">● </span>' : '';
-      return `<div class="lb-row${isMe?' lb-me':''}">
-        <div class="lb-rank">${medal}</div>
-        <div class="lb-avatar">${initials(p.username)}</div>
-        <div class="lb-info">
-          <div class="lb-name">${dot}${p.username||'Player'}${isMe?' <span style="color:rgba(120,160,255,0.6);font-size:0.68rem">(you)</span>':''}</div>
-          <div class="lb-score">${rank.icon} ${rank.name} &nbsp;·&nbsp; ✦ ${p.rank_score||0}</div>
-        </div>
-      </div>`;
-    }).join('');
-  } catch(e) {
-    el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim)">Could not load.</div>';
-  }
-}
 
-async function lbLoadFriend() {
-  const el = document.getElementById('lb-friend-content');
-  if (!el || !supaClient) return;
-  el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim);font-style:italic;font-size:0.8rem">Loading…</div>';
+  const myId = supaUser?.id;
+
   try {
-    const { data: top } = await supaClient
-      .from('profiles')
-      .select('id,username,is_online,ft_wins,ft_games,ft_points')
-      .gt('ft_games', 0)
-      .order('ft_points', { ascending: false })
-      .limit(20);
-    if (!top?.length) {
-      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim)">No friend games played yet.<br><span style="font-size:0.75rem;opacity:0.6">Play with friends to appear here!</span></div>';
-      return;
+    if (tab === 'rank') {
+      // Rank Score — from profiles, same across all modes
+      const { data } = await supaClient
+        .from('profiles')
+        .select('id,username,rank_score,is_online')
+        .order('rank_score', { ascending: false })
+        .limit(20);
+      if (!data?.length) { el.innerHTML = lbEmpty(); return; }
+      el.innerHTML = data.map((p, i) => {
+        const rank = rankFromScore(p.rank_score||0);
+        return lbRow(i, p, myId,
+          `${rank.icon} ${rank.name} &nbsp;·&nbsp; <span style="color:var(--gold-light)">✦ ${p.rank_score||0}</span>`,
+          p.is_online
+        );
+      }).join('');
+
+    } else if (tab === 'friend') {
+      // Friend Games — from profiles ft_ columns
+      const { data } = await supaClient
+        .from('profiles')
+        .select('id,username,is_online,ft_wins,ft_games,ft_points')
+        .gt('ft_games', 0)
+        .order('ft_points', { ascending: false })
+        .limit(20);
+      if (!data?.length) {
+        el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim)">No friend games yet.<br><span style="font-size:0.72rem;opacity:0.6">Play in Friend Room to appear here!</span></div>';
+        return;
+      }
+      el.innerHTML = data.map((p, i) => {
+        const pts = p.ft_points || 0;
+        const ptsColor = pts > 0 ? '#7fffaa' : pts < 0 ? '#ff9999' : 'var(--text-dim)';
+        const wr = p.ft_games ? Math.round(p.ft_wins/p.ft_games*100) : 0;
+        return lbRow(i, p, myId,
+          `🏆 ${p.ft_wins}W / ${p.ft_games}G &nbsp;·&nbsp; ${wr}% &nbsp;·&nbsp; <span style="color:${ptsColor};font-weight:700">${pts>0?'+':''}${pts} pts</span>`,
+          p.is_online
+        );
+      }).join('');
+
+    } else {
+      // Mode tab: beginner / intermediate / hard / pro
+      // Join player_scores with profiles to get username + online status
+      const { data: scores } = await supaClient
+        .from('player_scores')
+        .select('user_id, games_played, mode_best, scores')
+        .eq('mode', tab)
+        .gt('games_played', 0)
+        .order('mode_best', { ascending: false })
+        .limit(20);
+      if (!scores?.length) { el.innerHTML = lbEmpty(); return; }
+
+      // Fetch profile info for these users
+      const uids = scores.map(s => s.user_id);
+      const { data: profiles } = await supaClient
+        .from('profiles')
+        .select('id,username,rank_score,is_online')
+        .in('id', uids);
+      const pMap = Object.fromEntries((profiles||[]).map(p=>[p.id,p]));
+
+      el.innerHTML = scores.map((s, i) => {
+        const p = pMap[s.user_id] || { username: 'Player', is_online: false };
+        p.id = s.user_id;
+        // Calculate win/loss from scores array [you, ai1, ai2, ai3]
+        const sc = Array.isArray(s.scores) ? s.scores : [0,0,0,0];
+        const myPts = sc[0] || 0;
+        const ptsColor = myPts > 0 ? '#7fffaa' : myPts < 0 ? '#ff9999' : 'var(--text-dim)';
+        const rank = rankFromScore(pMap[s.user_id]?.rank_score||0);
+        return lbRow(i, p, myId,
+          `${rank.icon} ${rank.name} &nbsp;·&nbsp; ${s.games_played}G &nbsp;·&nbsp; Best: <span style="color:var(--gold-light)">${s.mode_best||0}pts</span> &nbsp;·&nbsp; <span style="color:${ptsColor};font-weight:700">${myPts>0?'+':''}${myPts}</span>`,
+          p.is_online
+        );
+      }).join('');
     }
-    const myId = supaUser?.id;
-    el.innerHTML = top.map((p, i) => {
-      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:var(--text-dim);font-size:0.8rem">${i+1}</span>`;
-      const isMe = p.id === myId;
-      const dot = p.is_online ? '<span style="color:#6edf9e;font-size:0.62rem">● </span>' : '';
-      const winRate = p.ft_games > 0 ? Math.round((p.ft_wins / p.ft_games) * 100) : 0;
-      const pts = p.ft_points || 0;
-      const ptsColor = pts > 0 ? '#7fffaa' : pts < 0 ? '#ff9999' : 'var(--text-dim)';
-      return `<div class="lb-row${isMe?' lb-me':''}">
-        <div class="lb-rank">${medal}</div>
-        <div class="lb-avatar">${initials(p.username)}</div>
-        <div class="lb-info">
-          <div class="lb-name">${dot}${p.username||'Player'}${isMe?' <span style="color:rgba(120,160,255,0.6);font-size:0.68rem">(you)</span>':''}</div>
-          <div class="lb-score">
-            🏆 ${p.ft_wins}W / ${p.ft_games}G &nbsp;·&nbsp; ${winRate}% win
-            &nbsp;·&nbsp; <span style="color:${ptsColor};font-weight:700">${pts>0?'+':''}${pts} pts</span>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
   } catch(e) {
     el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim)">Could not load.</div>';
-    console.warn('lbLoadFriend:', e);
+    console.warn('lbLoad:', e);
   }
+}
+
+function lbRow(i, p, myId, metaHtml, isOnline) {
+  const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:var(--text-dim);font-size:0.78rem">${i+1}</span>`;
+  const isMe = p.id === myId;
+  const dot = isOnline ? '<span style="color:#6edf9e;font-size:0.6rem">● </span>' : '';
+  const youLabel = isMe ? ' <span style="color:rgba(120,160,255,0.6);font-size:0.65rem">(you)</span>' : '';
+  return `<div class="lb-row${isMe?' lb-me':''}">
+    <div class="lb-rank">${medal}</div>
+    <div class="lb-avatar">${initials(p.username)}</div>
+    <div class="lb-info">
+      <div class="lb-name">${dot}${p.username||'Player'}${youLabel}</div>
+      <div class="lb-score">${metaHtml}</div>
+    </div>
+  </div>`;
+}
+
+function lbEmpty() {
+  return '<div style="text-align:center;padding:18px;color:var(--text-dim);font-style:italic;font-size:0.8rem">No data yet for this mode.</div>';
 }
 
 // ── Rank helpers ──────────────────────────────────────────
