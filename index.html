@@ -6854,19 +6854,20 @@ function ftStartPolling(tableId) {
         event: 'UPDATE', schema: 'public', table: 'friend_tables',
         filter: 'id=eq.' + tableId
       }, (payload) => {
+        console.log('[FT TABLE RT] fired — author:', payload.new?.pending_move?.author, 'myGlobalSeat:', _myGlobalSeat);
         const pm = payload.new?.pending_move;
-        if (!pm || !pm.state) return;
-        if (pm.author === _myGlobalSeat) return;  // our own write
-        if (pm.seq === _ftLastApplied) return;     // already applied
+        if (!pm || !pm.state) { console.log('[FT TABLE RT] no pm.state, skipping'); return; }
+        if (pm.author === _myGlobalSeat) { console.log('[FT TABLE RT] own write, skipping'); return; }
+        if (pm.seq === _ftLastApplied) { console.log('[FT TABLE RT] already applied, skipping'); return; }
         _ftLastApplied = pm.seq;
-        console.log('[FT RECV] ✅ via pending_move fallback cp:', pm.state?.cp);
+        console.log('[FT RECV] ✅ via pending_move realtime cp:', pm.state?.cp);
         ftApplyState(pm.state);
       })
       .subscribe(s => console.log('[FT] table realtime:', s));
   }
   // Fallback poll every 3s — catches anything realtime misses
   if (_ftPollTimer) clearInterval(_ftPollTimer);
-  _ftPollTimer = setInterval(() => ftPollMoves(tableId), 3000);
+  _ftPollTimer = setInterval(() => ftPollMoves(tableId), 1000);
 }
 
 function ftStopPolling() {
@@ -6978,10 +6979,12 @@ async function ftPushState() {
     if (!error && inserted && inserted.length) {
       inserted.forEach(row => { _ftLastApplied = row.id; });
       console.log('[FT PUSH] ✅ via notifications — inserted', inserted.length);
-      // Also write to pending_move so fallback poll works
-      await supaClient.from('friend_tables')
+      // ALWAYS also write pending_move — this is what the friend_tables realtime sub picks up
+      const { error: pmErr } = await supaClient.from('friend_tables')
         .update({ pending_move: { state, author: r, seq: state.seq } })
         .eq('id', _myTableId);
+      if (pmErr) console.warn('[FT PUSH] pending_move secondary write failed:', pmErr.message);
+      else console.log('[FT PUSH] ✅ pending_move also written (dual sync)');
       return;
     }
 
