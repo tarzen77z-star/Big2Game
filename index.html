@@ -6348,9 +6348,9 @@ function subscribeToNotifications() {
         if (!pm || !pm.state) return;
         if (!_myTableId || pm.table_id !== _myTableId) return; // not our table
         if (n.sender_id === supaUser.id) return;               // our own echo
-        if (_ftLastApplied === n.id) return;                   // already applied
-        _ftLastApplied = n.id;
-
+        if (_ftSeenKeys.has(n.id)) return;
+        _ftSeenKeys.add(n.id);
+        _ftLastNotifId = n.id;
         ftApplyState(pm.state);
       }
     })
@@ -6631,7 +6631,7 @@ async function leaveCurrentTable() {
 
 function cleanupFriendTable() {
   _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; _ftSeats = [];
-  _ftOtherSeats = []; _ftLastApplied = 0;
+  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeq = 0;
   ftStopPolling();
   stopTableTimer();
   if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
@@ -6836,9 +6836,11 @@ async function launchFriendTableGame(table) {
 // State is stored in GLOBAL seat order. Each player rotates on apply.
 // ════════════════════════════════════════════════════════
 
-let _ftPollTimer   = null;
-let _ftLastApplied = 0;
-let _ftOtherSeats  = []; // recipient user IDs (other humans at the table)
+let _ftPollTimer    = null;
+let _ftSeenKeys     = new Set(); // tracks ALL applied state keys (notif IDs + pm seqs)
+let _ftLastNotifId  = null;      // newest notification ID we've applied
+let _ftLastPmSeq    = 0;         // newest pending_move seq we've applied
+let _ftOtherSeats   = []; // recipient user IDs (other humans at the table)
 
 // ── ftStartPolling: no longer polls friend_tables.
 // Game moves now go through friend_notifications (INSERT, not UPDATE),
@@ -6857,8 +6859,9 @@ function ftStartPolling(tableId) {
         const pm = payload.new?.pending_move;
         if (!pm || !pm.state) return;
         if (pm.author === _myGlobalSeat) return;
-        if (pm.seq === _ftLastApplied) return;
-        _ftLastApplied = pm.seq;
+        if (_ftSeenKeys.has('pm:' + pm.seq)) return;
+        _ftSeenKeys.add('pm:' + pm.seq);
+        _ftLastPmSeq = pm.seq;
         ftApplyState(pm.state);
       })
       .subscribe(() => {});
@@ -6899,9 +6902,10 @@ async function ftPollMoves(tableId) {
       .order('created_at', { ascending: true });
     if (!error && data && data.length) {
       for (const row of data) {
-        if (_ftLastApplied === row.id) continue;
+        if (_ftSeenKeys.has(row.id)) continue;
         if (row.sender_id === supaUser.id) continue;
-        _ftLastApplied = row.id;
+        _ftSeenKeys.add(row.id);
+        _ftLastNotifId = row.id;
 
         ftApplyState(row.payload.state);
         return; // applied — done
@@ -6919,8 +6923,9 @@ async function ftPollMoves(tableId) {
     if (error || !row?.pending_move) return;
     const pm = row.pending_move;
     if (!pm.state || pm.author === _myGlobalSeat) return;
-    if (pm.seq === _ftLastApplied) return;
-    _ftLastApplied = pm.seq;
+    if (_ftSeenKeys.has('pm:' + pm.seq)) return;
+    _ftSeenKeys.add('pm:' + pm.seq);
+    _ftLastPmSeq = pm.seq;
 
     ftApplyState(pm.state);
   } catch(e) { console.warn('[FT POLL] exception:', e); }
@@ -6975,7 +6980,7 @@ async function ftPushState() {
       .select('id');
 
     if (!error && inserted && inserted.length) {
-      inserted.forEach(row => { _ftLastApplied = row.id; });
+      inserted.forEach(row => { _ftSeenKeys.add(row.id); _ftLastNotifId = row.id; });
 
       // ALWAYS also write pending_move — this is what the friend_tables realtime sub picks up
       const { error: pmErr } = await supaClient.from('friend_tables')
@@ -7009,20 +7014,27 @@ async function ftPushState() {
       console.error('[FT PUSH] ❌ pending_move: 0 rows — not seated at this table?');
       return;
     }
-    _ftLastApplied = state.seq;
+    _ftSeenKeys.add('pm:' + state.seq);
+    _ftLastPmSeq = state.seq;
 
   } catch(e) {
     console.error('[FT PUSH] ❌ pending_move exception:', e);
   }
 }
 
+let _ftAppliedSeq = 0; // monotonic: reject states older than what we've already applied
+
 // Apply state received from another player
 function ftApplyState(s) {
-  // Allow applying even if gameActive=false — the incoming state may set it true (rejoin edge case)
   const r = _myGlobalSeat;
-  if (r === null || r === undefined) return; // not in a game yet
-  const toLoc = g => (g - r + 4) % 4; // global seat → local index
+  if (r === null || r === undefined) return;
+  if (!s || !s.seq) return;
 
+  // Reject stale states — only ever move time forward
+  if (s.seq <= _ftAppliedSeq) return;
+  _ftAppliedSeq = s.seq;
+
+  const toLoc = g => (g - r + 4) % 4;
 
   // Snapshot what changed so we can show feedback
   const prevLastPlay = lastPlay;
