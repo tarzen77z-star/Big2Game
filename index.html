@@ -3905,32 +3905,16 @@ function updateScoreboard() {
   const displayScores = (mpGameMode === 'vs_human') ? mpSessionScores : scores;
   const scNames = mpScoreboardNames();
 
-  // In FT/MP mode, build scores and wins from session history (same as Room Standing)
-  const wins = [0,0,0,0];
-  if (mpGameMode === 'vs_human' && mpSessionHistory.length) {
-    mpSessionHistory.forEach(g => {
-      if (g.winnerLocalIdx >= 0 && g.winnerLocalIdx < 4) wins[g.winnerLocalIdx]++;
-    });
-  }
-
   ['p1','p2','p3','p4'].forEach((id, i) => {
     const row = document.getElementById('sc-'+id)?.parentElement;
     const el  = document.getElementById('sc-'+id);
     const nm  = document.getElementById('sc-'+id+'-name');
     if (!el) return;
 
-    // Always show all 4 rows — NPCs included, same as Room Standing
     if (row) row.style.display = '';
 
     const v = displayScores[i] || 0;
-    // Show score + wins if in MP mode with history
-    if (mpGameMode === 'vs_human' && mpSessionHistory.length) {
-      const sign = v > 0 ? '+' : '';
-      const winStr = wins[i] ? ` · ${wins[i]}W` : '';
-      el.textContent = sign + v + winStr;
-    } else {
-      el.textContent = (v > 0 ? '+' : '') + v;
-    }
+    el.textContent = (v > 0 ? '+' : '') + v;
     el.style.color = v > 0 ? '#7fffaa' : v < 0 ? '#ff9999' : '';
     if (nm) nm.textContent = scNames[i];
   });
@@ -5331,10 +5315,12 @@ function endGame(winnerIdx) {
     : null;
   // Record in MP session history
   if (mpGameMode === 'vs_human') {
+    const gameSeq = ftNextSeq(); // unique seq for this game result
     mpSessionHistory.push({
       winnerLocalIdx: winnerIdx,
       gameDeltas: gameDeltas.slice(),
-      raw: raw.slice()
+      raw: raw.slice(),
+      seq: gameSeq
     });
     if (!mpSessionNames.length && mpNames) mpSessionNames = mpNames.slice();
     // Accumulate session scores (host-local order)
@@ -7638,7 +7624,8 @@ function ftBuildState() {
     gdc: [...globalDiscardedCards],
     author: r,
     seq: ftNextSeq(),
-    gameId: _ftSeed,  // reject states from previous games
+    gameId: _ftSeed,    // reject states from previous games
+    gameNum: mpSessionHistory.length, // how many games completed so far
     // Include winner info so non-winning players can show the end banner
     winnerGlobal: gameActive ? null : (() => {
       // Find the player with 0 cards — they're the winner
@@ -7791,10 +7778,21 @@ function ftApplyState(s) {
         }
       }
       // Session scores — s.ss is in GLOBAL order; rotate to local perspective
+      // This is the authoritative cumulative total from the winner's endGame
       if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[(li + r) % 4] || 0);
-      // Record in session history (only if not already recorded — prevent double-count on reconnect)
-      const alreadyRecorded = mpSessionHistory.some(h => h.seq === s.seq);
-      if (alreadyRecorded) return;
+      // Prevent double-counting if we already recorded this game locally (e.g. we ran endGame)
+      // Dedup: check by game count (history length should match game number)
+      // Also check by seq for cases where we added locally with a different seq
+      const expectedGameNum = mpSessionHistory.length + 1;
+      const gameNum = s.gameNum || expectedGameNum;
+      const alreadyRecorded = mpSessionHistory.some(h => h.seq === s.seq) ||
+                              (s.gameNum && mpSessionHistory.length >= s.gameNum);
+      if (alreadyRecorded) {
+        // Already recorded — just ensure scores reflect authoritative values
+        if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[(li + r) % 4] || 0);
+        updateScoreboard();
+        return;
+      }
       mpSessionHistory.push({
         winnerLocalIdx: winnerLocal,
         gameDeltas: gameDeltas.slice(),
