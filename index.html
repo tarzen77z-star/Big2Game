@@ -6331,22 +6331,26 @@ function selectAndPlay(mode) {
   }, 120);
 }
 
-// ── Save Friend Table game result to profiles ────────────────
+// ── Save Friend Table game result to profiles (per-mode) ─────
 async function saveFriendGameStats(didWin, pointsDelta) {
   if (!supaClient || !supaUser) return;
+  // Use the current table's mode (selectedMode = beginner/intermediate/hard/pro)
+  const mode = selectedMode || 'beginner';
+  const wCol = 'ft_wins_' + mode;
+  const gCol = 'ft_games_' + mode;
+  const pCol = 'ft_points_' + mode;
   try {
-    // Read current values first (atomic increment via RPC would be ideal,
-    // but simple read+write is fine for this use case)
+    // Read current mode values then increment
     const { data: p } = await supaClient
       .from('profiles')
-      .select('ft_wins, ft_games, ft_points')
+      .select(wCol + ',' + gCol + ',' + pCol)
       .eq('id', supaUser.id)
       .single();
-    const cur = p || { ft_wins: 0, ft_games: 0, ft_points: 0 };
+    const cur = p || {};
     await supaClient.from('profiles').update({
-      ft_wins:   (cur.ft_wins  || 0) + (didWin ? 1 : 0),
-      ft_games:  (cur.ft_games || 0) + 1,
-      ft_points: (cur.ft_points || 0) + (pointsDelta || 0),
+      [wCol]: (cur[wCol] || 0) + (didWin ? 1 : 0),
+      [gCol]: (cur[gCol] || 0) + 1,
+      [pCol]: (cur[pCol] || 0) + (pointsDelta || 0),
     }).eq('id', supaUser.id);
   } catch(e) { console.warn('saveFriendGameStats:', e); }
 }
@@ -6465,26 +6469,28 @@ function friendSubTab(sub) {
 }
 
 // ── Leaderboard ──────────────────────────────────────────────
-// Tabs: Rank Score | Beginner | Intermediate | Hard | Pro | Friend Games
-let _lbCurrentTab = 'rank';
+// 4 tabs: Beginner | Intermediate | Hard | Pro
+// Each shows Friend Room stats for that mode, ranked by wins
+let _lbCurrentTab = 'beginner';
 
 async function loadLeaderboard() {
   const el = document.getElementById('leaderboard-content');
   if (!el || !supaClient) return;
 
   el.innerHTML = `
+    <div style="font-size:0.68rem;color:rgba(140,165,220,0.5);font-family:'Crimson Pro',serif;text-align:center;margin-bottom:10px;letter-spacing:0.06em;">
+      Friend Room · Cumulative across all sessions
+    </div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">
-      <button class="lb-tab active" id="lbtab-rank"         onclick="lbSwitchTab('rank')">✦ Rank</button>
-      <button class="lb-tab"        id="lbtab-beginner"     onclick="lbSwitchTab('beginner')">🌱 Beginner</button>
+      <button class="lb-tab active" id="lbtab-beginner"     onclick="lbSwitchTab('beginner')">🌱 Beginner</button>
       <button class="lb-tab"        id="lbtab-intermediate" onclick="lbSwitchTab('intermediate')">🥉 Inter.</button>
       <button class="lb-tab"        id="lbtab-hard"         onclick="lbSwitchTab('hard')">🥈 Hard</button>
       <button class="lb-tab"        id="lbtab-pro"          onclick="lbSwitchTab('pro')">🥇 Pro</button>
-      <button class="lb-tab"        id="lbtab-friend"       onclick="lbSwitchTab('friend')">🤝 Friends</button>
     </div>
     <div id="lb-rows"></div>
   `;
 
-  // Inject tab button CSS once
+  // Inject tab CSS once
   if (!document.getElementById('lb-tab-style')) {
     const s = document.createElement('style');
     s.id = 'lb-tab-style';
@@ -6494,12 +6500,12 @@ async function loadLeaderboard() {
     document.head.appendChild(s);
   }
 
-  _lbCurrentTab = 'rank';
-  await lbLoad('rank');
+  _lbCurrentTab = 'beginner';
+  await lbLoad('beginner');
 }
 
 function lbSwitchTab(tab) {
-  ['rank','beginner','intermediate','hard','pro','friend'].forEach(t => {
+  ['beginner','intermediate','hard','pro'].forEach(t => {
     document.getElementById('lbtab-'+t)?.classList.toggle('active', t===tab);
   });
   _lbCurrentTab = tab;
@@ -6512,80 +6518,42 @@ async function lbLoad(tab) {
   el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim);font-style:italic;font-size:0.8rem">Loading…</div>';
 
   const myId = supaUser?.id;
+  const wCol = 'ft_wins_' + tab;
+  const gCol = 'ft_games_' + tab;
+  const pCol = 'ft_points_' + tab;
 
   try {
-    if (tab === 'rank') {
-      // Rank Score — from profiles, same across all modes
-      const { data } = await supaClient
-        .from('profiles')
-        .select('id,username,rank_score,is_online')
-        .order('rank_score', { ascending: false })
-        .limit(20);
-      if (!data?.length) { el.innerHTML = lbEmpty(); return; }
-      el.innerHTML = data.map((p, i) => {
-        const rank = rankFromScore(p.rank_score||0);
-        return lbRow(i, p, myId,
-          `${rank.icon} ${rank.name} &nbsp;·&nbsp; <span style="color:var(--gold-light)">✦ ${p.rank_score||0}</span>`,
-          p.is_online
-        );
-      }).join('');
+    const { data } = await supaClient
+      .from('profiles')
+      .select(`id,username,is_online,rank_score,${wCol},${gCol},${pCol}`)
+      .gt(gCol, 0)
+      .order(wCol, { ascending: false })   // rank by wins
+      .order(pCol, { ascending: false })   // tiebreak by points
+      .limit(20);
 
-    } else if (tab === 'friend') {
-      // Friend Games — from profiles ft_ columns
-      const { data } = await supaClient
-        .from('profiles')
-        .select('id,username,is_online,ft_wins,ft_games,ft_points')
-        .gt('ft_games', 0)
-        .order('ft_points', { ascending: false })
-        .limit(20);
-      if (!data?.length) {
-        el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim)">No friend games yet.<br><span style="font-size:0.72rem;opacity:0.6">Play in Friend Room to appear here!</span></div>';
-        return;
-      }
-      el.innerHTML = data.map((p, i) => {
-        const pts = p.ft_points || 0;
-        const ptsColor = pts > 0 ? '#7fffaa' : pts < 0 ? '#ff9999' : 'var(--text-dim)';
-        const wr = p.ft_games ? Math.round(p.ft_wins/p.ft_games*100) : 0;
-        return lbRow(i, p, myId,
-          `🏆 ${p.ft_wins}W / ${p.ft_games}G &nbsp;·&nbsp; ${wr}% &nbsp;·&nbsp; <span style="color:${ptsColor};font-weight:700">${pts>0?'+':''}${pts} pts</span>`,
-          p.is_online
-        );
-      }).join('');
-
-    } else {
-      // Mode tab: beginner / intermediate / hard / pro
-      // Join player_scores with profiles to get username + online status
-      const { data: scores } = await supaClient
-        .from('player_scores')
-        .select('user_id, games_played, mode_best, scores')
-        .eq('mode', tab)
-        .gt('games_played', 0)
-        .order('mode_best', { ascending: false })
-        .limit(20);
-      if (!scores?.length) { el.innerHTML = lbEmpty(); return; }
-
-      // Fetch profile info for these users
-      const uids = scores.map(s => s.user_id);
-      const { data: profiles } = await supaClient
-        .from('profiles')
-        .select('id,username,rank_score,is_online')
-        .in('id', uids);
-      const pMap = Object.fromEntries((profiles||[]).map(p=>[p.id,p]));
-
-      el.innerHTML = scores.map((s, i) => {
-        const p = pMap[s.user_id] || { username: 'Player', is_online: false };
-        p.id = s.user_id;
-        // Calculate win/loss from scores array [you, ai1, ai2, ai3]
-        const sc = Array.isArray(s.scores) ? s.scores : [0,0,0,0];
-        const myPts = sc[0] || 0;
-        const ptsColor = myPts > 0 ? '#7fffaa' : myPts < 0 ? '#ff9999' : 'var(--text-dim)';
-        const rank = rankFromScore(pMap[s.user_id]?.rank_score||0);
-        return lbRow(i, p, myId,
-          `${rank.icon} ${rank.name} &nbsp;·&nbsp; ${s.games_played}G &nbsp;·&nbsp; Best: <span style="color:var(--gold-light)">${s.mode_best||0}pts</span> &nbsp;·&nbsp; <span style="color:${ptsColor};font-weight:700">${myPts>0?'+':''}${myPts}</span>`,
-          p.is_online
-        );
-      }).join('');
+    if (!data?.length) {
+      el.innerHTML = `<div style="text-align:center;padding:22px;color:var(--text-dim)">
+        No Friend Room games yet in this mode.<br>
+        <span style="font-size:0.72rem;opacity:0.6">Play with friends to appear here!</span>
+      </div>`;
+      return;
     }
+
+    el.innerHTML = data.map((p, i) => {
+      const wins   = p[wCol] || 0;
+      const games  = p[gCol] || 0;
+      const pts    = p[pCol] || 0;
+      const ptsColor = pts > 0 ? '#7fffaa' : pts < 0 ? '#ff9999' : 'var(--text-dim)';
+      const ptsStr   = (pts > 0 ? '+' : '') + pts;
+      const rank     = rankFromScore(p.rank_score || 0);
+      return lbRow(i, p, myId,
+        `🏆 ${wins}W / ${games}G` +
+        ` &nbsp;·&nbsp; <span style="color:${ptsColor};font-weight:700">${ptsStr} pts</span>` +
+        ` &nbsp;·&nbsp; ${rank.icon} <span style="color:var(--gold-light)">✦${p.rank_score||0}</span>`,
+        p.is_online
+      );
+    }).join('');
+
   } catch(e) {
     el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim)">Could not load.</div>';
     console.warn('lbLoad:', e);
