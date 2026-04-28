@@ -30,26 +30,30 @@
     font-family: 'Crimson Pro', serif;
     background: #0d2b1a;
     color: var(--text-light);
-    height: 100vh;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    height: 100%;
+    overflow: hidden; /* game screen controls its own overflow */
   }
+  html { height: 100%; }
 
   /* ── SPLASH ── */
   #splash {
     position: fixed; inset: 0;
     background: radial-gradient(ellipse at center, #1e4a2a 0%, #0a1f10 100%);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: flex-start;
+    display: block;          /* block, not flex — lets content grow naturally */
+    overflow-y: scroll;      /* always show scrollbar track, prevents layout jump */
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
     z-index: 100;
-    overflow-y: auto; overflow-x: hidden;
-    -webkit-overflow-scrolling: touch; /* smooth scroll on iOS */
-    padding: 20px 16px 40px;
+  }
+  /* Inner wrapper centers and pads content */
+  #splash-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100%;
+    padding: 20px 16px 50px;
     box-sizing: border-box;
   }
-  /* Never override to center — always scroll from top */
   /* splash h1 moved to rank_css block */
   #splash > p { color: var(--text-dim); font-size: 1.2rem; font-style: italic; display:none; }
   .btn-gold {
@@ -1232,7 +1236,7 @@
 
   /* ── iPhone SE / small phones (≤375px wide or ≤680px tall) ── */
   @media (max-width: 375px), (max-height: 680px) {
-    #splash { padding: 14px 12px 20px; }
+    #splash-inner { padding: 14px 12px 40px; }
 
     #splash-stonybrook { font-size: 0.72rem; margin-bottom: 0.1em; letter-spacing: 0.18em; }
     #splash h1 { font-size: clamp(2.4rem, 11vw, 3.5rem); margin-bottom: 0.05em; }
@@ -2216,6 +2220,7 @@
 
 <!-- SPLASH -->
 <div id="splash">
+<div id="splash-inner">
 
   <!-- ── Floating card decorations ── -->
   <div class="sp-card-deco sp-card-deco-1">A<br>♠</div>
@@ -2333,7 +2338,8 @@
   <button id="btn-start-game" onclick="startGame()" style="display:none"></button>
   <button id="btn-multiplayer" onclick="openMpLobby()" style="display:none"></button>
 
-</div>
+</div><!-- /splash-inner -->
+</div><!-- /splash -->
 
 <!-- Solo Drawer backdrop -->
 <div id="sp-drawer-bg" onclick="toggleSoloDrawer()" style="display:none;position:fixed;inset:0;z-index:98;"></div>
