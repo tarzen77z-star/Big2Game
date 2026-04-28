@@ -4195,7 +4195,7 @@ function forfeitMainMenu() {
   closeModal();
   document.getElementById('game').style.display = 'none';
   clearResumeButton();
-  document.getElementById('splash').style.display = 'flex';
+  document.getElementById('splash').style.display = 'block';
 }
 
 function playerPass() {
@@ -5495,7 +5495,7 @@ function endSessionFinal() {
   document.getElementById('winner-banner').style.display = 'none';
   document.getElementById('game').style.display = 'none';
   clearResumeButton();
-  document.getElementById('splash').style.display = 'flex';
+  document.getElementById('splash').style.display = 'block';
   const btn = document.getElementById('btn-end-session');
   if (btn) { btn.textContent = 'End Session'; btn.onclick = endSession; }
   // In Friend Table mode: null our seat in DB so staying players treat us as NPC
