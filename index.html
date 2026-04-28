@@ -7315,7 +7315,7 @@ async function leaveCurrentTable() {
 
 function cleanupFriendTable() {
   _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; _ftSeats = [];
-  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeq = 0; _ftSeqCounter = 0;
+  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeqMap = {}; _ftSeqCounter = 0;
   ftStopPolling();
   stopTableTimer();
   if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
@@ -7718,7 +7718,9 @@ async function ftPushState() {
   }
 }
 
-let _ftAppliedSeq = 0; // monotonic: reject states older than what we've already applied
+// Per-author last-applied seq: _ftAppliedSeqMap[authorGlobalSeat] = lastSeq
+// This prevents cross-player seq collisions from rejecting valid states
+let _ftAppliedSeqMap = {};
 
 // Apply state received from another player
 function ftApplyState(s) {
@@ -7726,12 +7728,14 @@ function ftApplyState(s) {
   if (r === null || r === undefined) return;
   if (!s || !s.seq) return;
 
-  // Reject states from a different game (previous or future)
+  // Reject states from a different game
   if (s.gameId && s.gameId !== _ftSeed) return;
 
-  // Reject stale states — only ever move time forward
-  if (s.seq <= _ftAppliedSeq) return;
-  _ftAppliedSeq = s.seq;
+  // Reject stale states PER AUTHOR — each player has their own seq space
+  const author = s.author !== undefined ? s.author : -1;
+  const lastSeen = _ftAppliedSeqMap[author] || 0;
+  if (s.seq <= lastSeen) return;
+  _ftAppliedSeqMap[author] = s.seq;
 
   const toLoc = g => (g - r + 4) % 4;
 
@@ -7910,11 +7914,11 @@ async function ftRestartGame() {
         } catch(e) {}
 
         // Reset all sync state for new game
-        _ftAppliedSeq  = 0;
-        _ftSeenKeys    = new Set();
-        _ftLastNotifId = null;
-        _ftLastPmSeq   = 0;
-        _ftSeqCounter  = 0;
+        _ftAppliedSeqMap = {};
+        _ftSeenKeys      = new Set();
+        _ftLastNotifId   = null;
+        _ftLastPmSeq     = 0;
+        _ftSeqCounter    = 0;
 
         await launchFriendTableGame(freshRow);
 
