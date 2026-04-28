@@ -6309,6 +6309,15 @@ function clearConfetti() {
 // ════════════════════════════════════════════════════════════
 
 
+// ── Monotonic state sequence counter ─────────────────────────
+// Prevents same-millisecond timestamps from being rejected as stale
+let _ftSeqCounter = 0;
+function ftNextSeq() {
+  const t = Date.now();
+  _ftSeqCounter = Math.max(_ftSeqCounter + 1, t);
+  return _ftSeqCounter;
+}
+
 // ── Solo play drawer ─────────────────────────────────────────
 function toggleSoloDrawer() {
   const drawer = document.getElementById('sp-solo-drawer');
@@ -7306,7 +7315,7 @@ async function leaveCurrentTable() {
 
 function cleanupFriendTable() {
   _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; _ftSeats = [];
-  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeq = 0;
+  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeq = 0; _ftSeqCounter = 0;
   ftStopPolling();
   stopTableTimer();
   if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
@@ -7628,7 +7637,7 @@ function ftBuildState() {
     ss:  [0,1,2,3].map(g => mpSessionScores[(g - r + 4) % 4] || 0),
     gdc: [...globalDiscardedCards],
     author: r,
-    seq: Date.now(),
+    seq: ftNextSeq(),
     gameId: _ftSeed,  // reject states from previous games
     // Include winner info so non-winning players can show the end banner
     winnerGlobal: gameActive ? null : (() => {
@@ -7826,7 +7835,14 @@ async function ftAfterMove() {
   // If runner and NPC is next, continue chain
   if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
-    setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*500);
+    setTimeout(() => {
+      if (mpTurnToken !== tok) return; // superseded
+      if (!gameActive) return;
+      // Re-verify it's still an NPC's turn (state may have changed via sync)
+      if (mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
+        npcTurn();
+      }
+    }, 900 + Math.random()*500);
   }
 }
 
@@ -7898,6 +7914,7 @@ async function ftRestartGame() {
         _ftSeenKeys    = new Set();
         _ftLastNotifId = null;
         _ftLastPmSeq   = 0;
+        _ftSeqCounter  = 0;
 
         await launchFriendTableGame(freshRow);
 
