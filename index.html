@@ -7768,6 +7768,10 @@ let _ftOtherSeats   = []; // recipient user IDs (other humans at the table)
 // channel handles incoming game_move notifications instantly.
 // We keep a 3s fallback poll that queries friend_notifications directly.
 function ftStartPolling(tableId) {
+  // Use faster poll interval on mobile (realtime less reliable)
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const pollMs = isMobile ? 2000 : 3000;
+
   // Realtime on friend_tables.pending_move — fires when host UPDATEs as fallback
   if (supaClient && !_friendTableGameSub) {
     _friendTableGameSub = supaClient
@@ -7788,7 +7792,7 @@ function ftStartPolling(tableId) {
   }
   // Fallback poll every 3s — catches anything realtime misses
   if (_ftPollTimer) clearInterval(_ftPollTimer);
-  _ftPollTimer = setInterval(() => ftPollMoves(tableId), 1000);
+  _ftPollTimer = setInterval(() => ftPollMoves(tableId), pollMs);
 }
 
 function ftStopPolling() {
@@ -8311,6 +8315,83 @@ function showTableInviteToast(fromName, group, tableId, notifId) {
 
 // ── Realtime: instant notification delivery ───────────────
 // game_move handling merged into subscribeToNotifications above
+
+// ── Mobile: reconnect realtime when tab becomes visible again ─────────────
+// On iOS Safari and Android, WebSocket connections drop when tab is backgrounded.
+// When the user returns, we force-reconnect and poll for any missed states.
+let _lastVisibleAt = Date.now();
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    _lastVisibleAt = Date.now();
+    return;
+  }
+
+  // Tab became visible — reconnect realtime subscriptions
+  const hiddenMs = Date.now() - _lastVisibleAt;
+  console.log('[Mobile] Tab visible after', Math.round(hiddenMs/1000), 's hidden');
+
+  // Reconnect notification subscription if dropped
+  if (supaClient && supaUser) {
+    try {
+      const status = _notifRealtimeSub?.state;
+      if (status !== 'joined' && status !== 'joining') {
+        console.log('[Mobile] Reconnecting notification sub (was:', status, ')');
+        if (_notifRealtimeSub) supaClient.removeChannel(_notifRealtimeSub);
+        _notifRealtimeSub = null;
+        subscribeToNotifications();
+      }
+    } catch(e) {}
+
+    // If in an active FT game, force-poll for any missed moves
+    if (_myTableId && gameActive) {
+      console.log('[Mobile] FT game active — force polling for missed moves');
+      // Reconnect friend_tables realtime if needed
+      if (_friendTableGameSub) {
+        try {
+          const ftStatus = _friendTableGameSub?.state;
+          if (ftStatus !== 'joined' && ftStatus !== 'joining') {
+            supaClient.removeChannel(_friendTableGameSub);
+            _friendTableGameSub = null;
+            ftStartPolling(_myTableId);
+          }
+        } catch(e) {}
+      }
+      // Force-poll immediately for missed notifications
+      setTimeout(() => ftPollMoves(_myTableId), 300);
+      setTimeout(() => ftPollMoves(_myTableId), 1500);
+
+      // If NPC runner and it's an NPC's turn — re-trigger NPC chain
+      // (NPC timers may have been paused while tab was hidden)
+      if (ftAmNpcRunner() && mpNpcSlots[currentPlayer] && gameActive) {
+        console.log('[Mobile] Re-triggering NPC chain after return from background');
+        const tok = ++mpTurnToken;
+        setTimeout(() => {
+          if (mpTurnToken === tok && gameActive && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
+            npcTurn();
+          }
+        }, 1000);
+      }
+    }
+  }
+});
+
+// ── Mobile: periodic connectivity check ───────────────────────────────────
+// Supabase realtime can silently die on mobile. Check every 30s and reconnect.
+setInterval(() => {
+  if (!supaClient || !supaUser || !gameActive || !_myTableId) return;
+  try {
+    const status = _notifRealtimeSub?.state;
+    if (status && status !== 'joined' && status !== 'joining') {
+      console.log('[Mobile] Heartbeat: notif sub dead (', status, '), reconnecting');
+      supaClient.removeChannel(_notifRealtimeSub);
+      _notifRealtimeSub = null;
+      subscribeToNotifications();
+      // Also poll immediately
+      setTimeout(() => ftPollMoves(_myTableId), 500);
+    }
+  } catch(e) {}
+}, 30000);
 
 // ── Heartbeat ─────────────────────────────────────────────
 setInterval(async () => {
