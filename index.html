@@ -7531,7 +7531,7 @@ async function leaveCurrentTable() {
 
 function cleanupFriendTable() {
   _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; _ftSeats = [];
-  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeqMap = {}; _ftSeqCounter = 0;
+  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftAppliedSeqs = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeqMap = {}; _ftSeqCounter = 0;
   ftStopPolling();
   stopTableTimer();
   if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
@@ -7799,12 +7799,12 @@ function ftAmNpcRunner() {
   return _myGlobalSeat === lowestHuman;
 }
 
-// Fallback poll — notifications only, newest one only
-// pending_move is covered by realtime subscription; fetching it here risks applying stale state
+// Fallback poll — fetch all unseen notifications in order
+// Uses _ftSeenKeys (by notification ID) as the dedup, not seq comparison
 async function ftPollMoves(tableId) {
   if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) return;
   try {
-    const since = new Date(Date.now() - 20000).toISOString();
+    const since = new Date(Date.now() - 30000).toISOString();
     const { data, error } = await supaClient
       .from('friend_notifications')
       .select('id,sender_id,payload,created_at')
@@ -7812,15 +7812,19 @@ async function ftPollMoves(tableId) {
       .eq('type', 'game_move')
       .eq('payload->>table_id', _myTableId)
       .gt('created_at', since)
-      .order('created_at', { ascending: false })
-      .limit(1); // only latest — avoids replaying old states
+      .order('created_at', { ascending: true }); // oldest first — apply in order
     if (error || !data?.length) return;
-    const row = data[0];
-    if (_ftSeenKeys.has(row.id)) return;       // already applied
-    if (row.sender_id === supaUser.id) return; // our own
-    _ftSeenKeys.add(row.id);
-    _ftLastNotifId = row.id;
-    ftApplyState(row.payload.state);
+    for (const row of data) {
+      if (_ftSeenKeys.has(row.id)) continue;       // already applied
+      if (row.sender_id === supaUser.id) continue; // our own
+      if (!row.payload?.state) continue;
+      _ftSeenKeys.add(row.id);
+      _ftLastNotifId = row.id;
+      ftApplyState(row.payload.state);
+      // Apply one at a time — ftApplyState updates _ftAppliedSeqMap
+      // Stop after first applied so we don't skip states
+      return;
+    }
   } catch(e) {}
 }
 
@@ -7923,9 +7927,8 @@ async function ftPushState() {
   }
 }
 
-// Per-author last-applied seq: _ftAppliedSeqMap[authorGlobalSeat] = lastSeq
-// This prevents cross-player seq collisions from rejecting valid states
-let _ftAppliedSeqMap = {};
+let _ftAppliedSeqMap = {}; // kept for reset compatibility
+let _ftAppliedSeqs = new Set(); // dedup by state seq — prevents double-apply from dual channels
 
 // Apply state received from another player
 function ftApplyState(s) {
@@ -7936,11 +7939,10 @@ function ftApplyState(s) {
   // Reject states from a different game
   if (s.gameId && s.gameId !== _ftSeed) return;
 
-  // Reject stale states PER AUTHOR — each player has their own seq space
-  const author = s.author !== undefined ? s.author : -1;
-  const lastSeen = _ftAppliedSeqMap[author] || 0;
-  if (s.seq <= lastSeen) return;
-  _ftAppliedSeqMap[author] = s.seq;
+  // Dedup by seq — same state can arrive via notification realtime AND pending_move realtime
+  const seqKey = s.author + ':' + s.seq;
+  if (_ftAppliedSeqs.has(seqKey)) return;
+  _ftAppliedSeqs.add(seqKey);
 
   const toLoc = g => (g - r + 4) % 4;
 
@@ -8133,6 +8135,7 @@ async function ftRestartGame() {
 
         // Reset sync state for new game
         _ftAppliedSeqMap = {};
+        _ftAppliedSeqs   = new Set();
         _ftSeenKeys      = new Set();
         _ftLastNotifId   = null;
         _ftLastPmSeq     = 0;
