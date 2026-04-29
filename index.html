@@ -5509,6 +5509,8 @@ let _ftContinueStarted  = false; // true once any player voted
 // Called when ANY player clicks Continue — starts shared 15s window
 async function ftVoteContinue() {
   if (!_myTableId || !supaClient || !supaUser) return;
+  // Safety: only allow voting when the winner banner is actually showing
+  if (document.getElementById('winner-banner')?.style.display === 'none') return;
 
   // Show waiting state immediately
   const btn   = document.getElementById('btn-continue-playing');
@@ -5576,6 +5578,15 @@ function ftStartContinueWatch() {
       const timedOut  = deadline > 0 && Date.now() >= deadline;
 
       if (allVoted || timedOut) {
+        // Only trigger restart if the winner banner is actually showing on this device
+        // Prevents runner from restarting before their own end-game banner appears
+        const bannerShowing = document.getElementById('winner-banner')?.style.display !== 'none';
+        if (!bannerShowing) {
+          // Banner not shown yet — keep watching, don't restart yet
+          _ftContinueWatch = setTimeout(tick, 500);
+          return;
+        }
+
         _ftContinueWatch = null;
         if (_ftContinueTimer) { clearInterval(_ftContinueTimer); _ftContinueTimer = null; }
 
@@ -7625,10 +7636,10 @@ function watchMyTable(tableId) {
         await launchFriendTableGame(row);
         return;
       }
-      // If game ended and votes are appearing, start the continue watcher
-      // so all players see the countdown without needing to click first
+      // If game ended, banner is showing, and votes are appearing — start continue watcher
       const votes = Array.isArray(row.ready_votes) ? row.ready_votes : [];
-      if (!gameActive && votes.length > 0 && row.payload?.continueDeadline) {
+      const bannerVisible = document.getElementById('winner-banner')?.style.display !== 'none';
+      if (!gameActive && bannerVisible && votes.length > 0 && row.payload?.continueDeadline) {
         if (!_ftContinueWatch) ftStartContinueWatch();
       }
     } catch(e) { console.warn('watchMyTable poll:', e); }
