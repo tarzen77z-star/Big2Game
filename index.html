@@ -7580,9 +7580,9 @@ function watchMyTable(tableId) {
         await launchFriendTableGame(row);
         return;
       }
-      // Only start continue watch when game is over and votes are appearing
+      // Start continue watch when game is over and any votes are present
       const votes = Array.isArray(row.ready_votes) ? row.ready_votes : [];
-      if (!gameActive && votes.length > 0 && row.payload?.continueDeadline) {
+      if (!gameActive && votes.length > 0) {
         if (!_ftContinueWatch) ftStartContinueWatch();
       }
     } catch(e) { console.warn('watchMyTable poll:', e); }
@@ -7756,7 +7756,7 @@ function ftAmNpcRunner() {
   return _myGlobalSeat === lowestHuman;
 }
 
-// Fallback poll — fetch all unseen notifications in order
+// Fallback poll — fetch all unseen notifications in order, plus check pending_move
 // Uses _ftSeenKeys (by notification ID) as the dedup, not seq comparison
 async function ftPollMoves(tableId) {
   if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) return;
@@ -7770,18 +7770,35 @@ async function ftPollMoves(tableId) {
       .eq('payload->>table_id', _myTableId)
       .gt('created_at', since)
       .order('created_at', { ascending: true }); // oldest first — apply in order
-    if (error || !data?.length) return;
-    for (const row of data) {
-      if (_ftSeenKeys.has(row.id)) continue;       // already applied
-      if (row.sender_id === supaUser.id) continue; // our own
-      if (!row.payload?.state) continue;
-      _ftSeenKeys.add(row.id);
-      _ftLastNotifId = row.id;
-      ftApplyState(row.payload.state);
-      // Apply one at a time — ftApplyState updates _ftAppliedSeqMap
-      // Stop after first applied so we don't skip states
-      return;
+    if (!error && data?.length) {
+      // Apply ALL unseen notifications in order — rapidly-fired NPC moves can stack up
+      // and applying only one per poll cycle causes multi-second delays / stuck games
+      for (const row of data) {
+        if (_ftSeenKeys.has(row.id)) continue;       // already applied
+        if (row.sender_id === supaUser.id) continue; // our own
+        if (!row.payload?.state) continue;
+        _ftSeenKeys.add(row.id);
+        _ftLastNotifId = row.id;
+        ftApplyState(row.payload.state);
+      }
     }
+  } catch(e) {}
+
+  // Also check pending_move directly — catches cases where notification INSERT failed
+  // but the pending_move fallback channel wrote state to the table row
+  try {
+    const { data: row } = await supaClient
+      .from('friend_tables')
+      .select('pending_move')
+      .eq('id', _myTableId)
+      .single();
+    if (!row?.pending_move?.state) return;
+    const pm = row.pending_move;
+    if (pm.author === _myGlobalSeat) return;           // our own
+    if (_ftSeenKeys.has('pm:' + pm.seq)) return;       // already applied
+    _ftSeenKeys.add('pm:' + pm.seq);
+    _ftLastPmSeq = pm.seq;
+    ftApplyState(pm.state);
   } catch(e) {}
 }
 
@@ -8001,6 +8018,18 @@ function ftApplyState(s) {
   if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
     setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*500);
+    // Recovery: re-check after a longer delay in case the token was invalidated
+    // but the NPC still needs to play (e.g., due to rapid state updates)
+    setTimeout(() => {
+      if (!gameActive || !ftAmNpcRunner()) return;
+      if (mpNpcSlots[currentPlayer] && !isMyTurn()) {
+        const tok2 = ++mpTurnToken;
+        setTimeout(() => {
+          if (mpTurnToken !== tok2 || !gameActive) return;
+          if (mpNpcSlots[currentPlayer] && ftAmNpcRunner()) npcTurn();
+        }, 300);
+      }
+    }, 3500);
   }
 }
 
@@ -8013,6 +8042,7 @@ async function ftAfterMove() {
   // If runner and NPC is next, continue chain
   if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
+    const cpAtSchedule = currentPlayer;
     setTimeout(() => {
       if (mpTurnToken !== tok) return; // superseded
       if (!gameActive) return;
@@ -8021,6 +8051,18 @@ async function ftAfterMove() {
         npcTurn();
       }
     }, 900 + Math.random()*500);
+    // Recovery fallback: if token was cancelled but NPC still needs to go, re-trigger
+    setTimeout(() => {
+      if (!gameActive || !ftAmNpcRunner()) return;
+      if (mpNpcSlots[currentPlayer] && !isMyTurn()) {
+        // Only re-trigger if no NPC move has happened in a while (token moved on but NPC still waiting)
+        const tok2 = ++mpTurnToken;
+        setTimeout(() => {
+          if (mpTurnToken !== tok2 || !gameActive) return;
+          if (mpNpcSlots[currentPlayer] && ftAmNpcRunner()) npcTurn();
+        }, 300);
+      }
+    }, 3500);
   }
 }
 
