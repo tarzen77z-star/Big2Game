@@ -5538,14 +5538,12 @@ function ftStartContinueWatch() {
   if (_ftContinueWatch) return;
 
   async function tick() {
-    // Stop if game already started (prevents stale tick from relaunching)
     if (gameActive || !_myTableId || !supaClient) return;
     try {
       const { data: row } = await supaClient.from('friend_tables')
         .select('ready_votes, seat_1, seat_2, seat_3, seat_4, payload')
         .eq('id', _myTableId).single();
       if (!row) return;
-      // Stop if game started while we were waiting for DB
       if (gameActive) return;
 
       const votes      = Array.isArray(row.ready_votes) ? row.ready_votes : [];
@@ -5559,7 +5557,7 @@ function ftStartContinueWatch() {
         if (bBtn) bBtn.style.display = 'none';
       }
 
-      // Detect new seed — runner wrote it, ALL players (including runner) launch here
+      // Detect new seed — ALL players (including runner) launch here
       if (row.payload?.seed && row.payload.seed !== _ftSeed) {
         _ftContinueWatch = null;
         if (_ftContinueTimer) { clearInterval(_ftContinueTimer); _ftContinueTimer = null; }
@@ -5568,13 +5566,11 @@ function ftStartContinueWatch() {
         ftResetContinueUI();
         document.getElementById('winner-banner').style.display = 'none';
         if (!iHaveASeat) {
-          // Seat was nulled — player left the room
           cleanupFriendTable(); mpDestroy();
           document.getElementById('splash').style.display = 'block';
           toast('You left the room.');
           return;
         }
-        // Launch new game — stop old polling first so ftStartPolling creates fresh subscriptions
         ftStopPolling();
         _ftAppliedSeqMap = {}; _ftAppliedSeqs = new Set();
         _ftSeenKeys = new Set(); _ftSeqCounter = 0;
@@ -5584,11 +5580,10 @@ function ftStartContinueWatch() {
 
       const allVoted = humanSeats.length > 0 && humanSeats.every(uid => votes.includes(uid));
 
-      // Only start when ALL remaining human players have voted — no timeout
       if (allVoted && ftAmNpcRunner() && !_ftDoRestartLock) {
         _ftDoRestartLock = true;
-
-        // Write new seed — ALL players (including runner) detect it on next tick and launch
+        // Write new seed — do NOT return; let tick reschedule so runner
+        // detects its own seed write and launches via the same path as everyone else
         const newSeed = Math.floor(Math.random() * 0x7fffffff);
         const payload = { ...row.payload, seed: newSeed, started: true };
         delete payload.continueDeadline;
@@ -5603,8 +5598,6 @@ function ftStartContinueWatch() {
             .eq('payload->>table_id', _myTableId);
         } catch(e) {}
         _ftDoRestartLock = false;
-        // NOTE: do NOT return here — let tick reschedule so runner also detects
-        // the new seed and launches via the same code path as everyone else
       }
     } catch(e) { console.warn('ftContinueWatch:', e); }
     _ftContinueWatch = setTimeout(tick, 500);
@@ -6591,7 +6584,7 @@ function openFriendRoom() {
 function closeFriendRoom() {
   document.getElementById('friend-room-overlay').classList.remove('open');
   unsubscribeFromTables();
-  // Don't mark offline if a game is active — player is still playing
+  // Don't mark offline if a game is active
   if (!gameActive && supaClient && supaUser) {
     supaClient.from('profiles')
       .update({ is_online: false, last_active: new Date().toISOString() })
@@ -7580,7 +7573,7 @@ function watchMyTable(tableId) {
         await launchFriendTableGame(row);
         return;
       }
-      // Start continue watch for all players when game is over and any votes appear
+      // Start continue watch for all players when game is over and votes appear
       const votes = Array.isArray(row.ready_votes) ? row.ready_votes : [];
       if (!gameActive && votes.length > 0) {
         if (!_ftContinueWatch) ftStartContinueWatch();
@@ -7591,10 +7584,9 @@ function watchMyTable(tableId) {
 
 // ── Launch game — same for ALL players ───────────────────
 async function launchFriendTableGame(table) {
-  // Always dismiss the Friend Room modal — game may launch from any code path
-  // (watchMyTable, ftStartContinueWatch, etc.) and the modal could be open
+  // Always close the Friend Room modal — game can launch from any code path
   document.getElementById('friend-room-overlay')?.classList.remove('open');
-  unsubscribeFromTables(); // clean up lobby subscription, not game subscriptions
+  unsubscribeFromTables();
 
   _myTableId  = table.id;   // ← CRITICAL: must be set before ftAfterMove/ftPushState run
   const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
@@ -7773,35 +7765,18 @@ async function ftPollMoves(tableId) {
       .eq('payload->>table_id', _myTableId)
       .gt('created_at', since)
       .order('created_at', { ascending: true }); // oldest first — apply in order
-    if (!error && data?.length) {
-      // Apply ALL unseen notifications in order — rapid NPC moves stack up and
-      // applying only one per poll cycle causes multi-second sync delays
-      for (const row of data) {
-        if (_ftSeenKeys.has(row.id)) continue;       // already applied
-        if (row.sender_id === supaUser.id) continue; // our own
-        if (!row.payload?.state) continue;
-        _ftSeenKeys.add(row.id);
-        _ftLastNotifId = row.id;
-        ftApplyState(row.payload.state);
-      }
+    if (error || !data?.length) return;
+    for (const row of data) {
+      if (_ftSeenKeys.has(row.id)) continue;       // already applied
+      if (row.sender_id === supaUser.id) continue; // our own
+      if (!row.payload?.state) continue;
+      _ftSeenKeys.add(row.id);
+      _ftLastNotifId = row.id;
+      ftApplyState(row.payload.state);
+      // Apply one at a time — ftApplyState updates _ftAppliedSeqMap
+      // Stop after first applied so we don't skip states
+      return;
     }
-  } catch(e) {}
-
-  // Also check pending_move directly — catches cases where notification INSERT failed
-  // but the pending_move fallback wrote state to the table row
-  try {
-    const { data: ftRow } = await supaClient
-      .from('friend_tables')
-      .select('pending_move')
-      .eq('id', _myTableId)
-      .single();
-    if (!ftRow?.pending_move?.state) return;
-    const pm = ftRow.pending_move;
-    if (pm.author === _myGlobalSeat) return;           // our own
-    if (_ftSeenKeys.has('pm:' + pm.seq)) return;       // already applied
-    _ftSeenKeys.add('pm:' + pm.seq);
-    _ftLastPmSeq = pm.seq;
-    ftApplyState(pm.state);
   } catch(e) {}
 }
 
@@ -7915,8 +7890,7 @@ function ftApplyState(s) {
   // Reject states from a different game
   if (s.gameId && s.gameId !== _ftSeed) return;
 
-  // Reject stale states — only apply if this seq is newer than the last one we applied
-  // from this author. This prevents poll catch-up from rolling back game state.
+  // Reject stale/out-of-order states — only apply if newer than last seen from this author
   const prevMax = _ftAppliedSeqMap[s.author] || 0;
   if (s.seq <= prevMax) return;
   _ftAppliedSeqMap[s.author] = s.seq;
@@ -8042,7 +8016,10 @@ async function ftAfterMove() {
     setTimeout(() => {
       if (mpTurnToken !== tok) return; // superseded
       if (!gameActive) return;
-      if (mpNpcSlots[currentPlayer] && ftAmNpcRunner()) npcTurn();
+      // Re-verify it's still an NPC's turn (state may have changed via sync)
+      if (mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
+        npcTurn();
+      }
     }, 900 + Math.random()*500);
   }
 }
