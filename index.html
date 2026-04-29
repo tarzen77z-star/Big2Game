@@ -5575,19 +5575,27 @@ function ftStartContinueWatch() {
       const allVoted  = humanSeats.length > 0 && humanSeats.every(uid => votes.includes(uid));
       const timedOut  = deadline > 0 && Date.now() >= deadline;
 
-      if (allVoted) {
-        // All voted — start immediately
+      if (allVoted || timedOut) {
         _ftContinueWatch = null;
         if (_ftContinueTimer) { clearInterval(_ftContinueTimer); _ftContinueTimer = null; }
-        ftDoRestart();
-        return;
-      }
 
-      if (timedOut) {
-        // Timer expired — remove non-voters then start
-        _ftContinueWatch = null;
-        if (_ftContinueTimer) { clearInterval(_ftContinueTimer); _ftContinueTimer = null; }
-        await ftHandleTimeout();
+        // Only the runner does the heavy work (null seats, write new seed)
+        // Non-runners just clean up UI and start polling for the new seed
+        if (ftAmNpcRunner()) {
+          if (timedOut && !allVoted) {
+            await ftHandleTimeout(); // nulls non-voter seats, then calls ftDoRestart
+          } else {
+            await ftDoRestart(); // all voted, start cleanly
+          }
+        } else {
+          // Non-runner: just reset UI and poll for seed change
+          document.getElementById('winner-banner').style.display = 'none';
+          const btn = document.getElementById('btn-continue-playing');
+          const waitEl = document.getElementById('ft-continue-waiting');
+          if (btn) btn.style.display = '';
+          if (waitEl) waitEl.style.display = 'none';
+          ftRestartGame();
+        }
         return;
       }
     } catch(e) {}
