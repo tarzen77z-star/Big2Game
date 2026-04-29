@@ -7900,8 +7900,8 @@ async function ftPushState() {
   }
 }
 
-let _ftAppliedSeqMap = {}; // kept for reset compatibility
-let _ftAppliedSeqs = new Set(); // dedup by state seq — prevents double-apply from dual channels
+let _ftAppliedSeqMap = {}; // highest seq applied per author — rejects stale out-of-order states
+let _ftAppliedSeqs = new Set(); // exact dedup — prevents double-apply from dual channels
 
 // Apply state received from another player
 function ftApplyState(s) {
@@ -7912,7 +7912,13 @@ function ftApplyState(s) {
   // Reject states from a different game
   if (s.gameId && s.gameId !== _ftSeed) return;
 
-  // Dedup by seq — same state can arrive via notification realtime AND pending_move realtime
+  // Reject stale states — only apply if this seq is newer than the last one we applied
+  // from this author. This prevents poll catch-up from rolling back game state.
+  const prevMax = _ftAppliedSeqMap[s.author] || 0;
+  if (s.seq <= prevMax) return;
+  _ftAppliedSeqMap[s.author] = s.seq;
+
+  // Exact dedup — same state can arrive via notification realtime AND pending_move realtime
   const seqKey = s.author + ':' + s.seq;
   if (_ftAppliedSeqs.has(seqKey)) return;
   _ftAppliedSeqs.add(seqKey);
@@ -8018,18 +8024,6 @@ function ftApplyState(s) {
   if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
     setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*500);
-    // Recovery: re-check after a longer delay in case the token was cancelled
-    // by a rapid incoming state update but the NPC still hasn't played
-    setTimeout(() => {
-      if (!gameActive || !ftAmNpcRunner()) return;
-      if (mpNpcSlots[currentPlayer] && !isMyTurn()) {
-        const tok2 = ++mpTurnToken;
-        setTimeout(() => {
-          if (mpTurnToken !== tok2 || !gameActive) return;
-          if (mpNpcSlots[currentPlayer] && ftAmNpcRunner()) npcTurn();
-        }, 300);
-      }
-    }, 3500);
   }
 }
 
@@ -8047,18 +8041,6 @@ async function ftAfterMove() {
       if (!gameActive) return;
       if (mpNpcSlots[currentPlayer] && ftAmNpcRunner()) npcTurn();
     }, 900 + Math.random()*500);
-    // Recovery: if the token gets cancelled by a rapid state update but the NPC
-    // still needs to play, re-trigger after a longer delay
-    setTimeout(() => {
-      if (!gameActive || !ftAmNpcRunner()) return;
-      if (mpNpcSlots[currentPlayer] && !isMyTurn()) {
-        const tok2 = ++mpTurnToken;
-        setTimeout(() => {
-          if (mpTurnToken !== tok2 || !gameActive) return;
-          if (mpNpcSlots[currentPlayer] && ftAmNpcRunner()) npcTurn();
-        }, 300);
-      }
-    }, 3500);
   }
 }
 
