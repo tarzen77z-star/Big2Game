@@ -3015,7 +3015,7 @@
     <div class="modal-buttons" style="margin-top:1.5rem">
       <button class="btn-gold" id="btn-continue-playing" onclick="continueGame()">Continue Playing</button>
       <div id="ft-continue-waiting" style="display:none;text-align:center;color:rgba(201,168,76,0.8);font-family:'Crimson Pro',serif;font-size:0.9rem;padding:8px 0">
-        ⏳ Waiting for others… <span id="ft-continue-countdown">15</span>s
+        ⏳ Waiting for others to continue…
       </div>
       <button class="btn-ghost" id="btn-end-session" onclick="endSession()">End Session</button>
     </div>
@@ -5491,11 +5491,10 @@ let _ftContinueStarted  = false;
 let _ftDoRestartLock    = false; // prevent double restart
 
 // ── Continue Playing flow ─────────────────────────────────────────────────
-// 1. Any player clicks Continue → records vote + sets 15s deadline (first voter only)
-// 2. All players see countdown automatically via watchMyTable
-// 3. All voted → game starts immediately
-// 4. 15s expires → non-voters get seat nulled next game, voters start
-// 5. Leave Room → seat nulled, not in next game
+// 1. Any player clicks Continue → records vote
+// 2. All players see "Waiting for others" UI once any vote exists
+// 3. ALL remaining human players vote → game starts immediately
+// 4. Leave Room → seat nulled, not in next game (remaining players still wait for their votes)
 
 function ftResetContinueUI() {
   const btn    = document.getElementById('btn-continue-playing');
@@ -5523,13 +5522,10 @@ async function ftVoteContinue() {
     const votes = Array.isArray(row.ready_votes) ? [...row.ready_votes] : [];
     if (!votes.includes(supaUser.id)) votes.push(supaUser.id);
 
-    // First voter sets the 15s deadline
-    const existing = row.payload?.continueDeadline || 0;
-    const deadline = existing > Date.now() ? existing : Date.now() + 15000;
-
+    // No deadline — just record vote, no timer
     await supaClient.from('friend_tables').update({
       ready_votes: votes,
-      payload: { ...row.payload, continueDeadline: deadline }
+      payload: { ...row.payload }
     }).eq('id', _myTableId);
   } catch(e) { console.warn('ftVoteContinue:', e); }
 
@@ -5539,15 +5535,6 @@ async function ftVoteContinue() {
 // Poll DB every 500ms — works for ALL players (voters and non-voters)
 function ftStartContinueWatch() {
   if (_ftContinueWatch) return;
-
-  // Use a local interval for smooth countdown display (independent of DB poll)
-  let _localCountdown = 15;
-  if (_ftContinueTimer) clearInterval(_ftContinueTimer);
-  _ftContinueTimer = setInterval(() => {
-    if (_localCountdown > 0) _localCountdown--;
-    const cdEl = document.getElementById('ft-continue-countdown');
-    if (cdEl) cdEl.textContent = _localCountdown;
-  }, 1000);
 
   async function tick() {
     // Stop if game already started (prevents stale tick from relaunching)
@@ -5562,21 +5549,13 @@ function ftStartContinueWatch() {
 
       const votes      = Array.isArray(row.ready_votes) ? row.ready_votes : [];
       const humanSeats = [row.seat_1,row.seat_2,row.seat_3,row.seat_4].filter(Boolean);
-      const deadline   = row.payload?.continueDeadline || 0;
-      const now        = Date.now();
 
-      // Sync local countdown to server deadline
-      if (deadline > 0) {
-        _localCountdown = Math.max(0, Math.ceil((deadline - now) / 1000));
-        const cdEl = document.getElementById('ft-continue-countdown');
-        if (cdEl) cdEl.textContent = _localCountdown;
-        // Show waiting UI for all players once a vote + deadline exists
-        if (votes.length > 0) {
-          const wEl  = document.getElementById('ft-continue-waiting');
-          const bBtn = document.getElementById('btn-continue-playing');
-          if (wEl)  wEl.style.display  = 'block';
-          if (bBtn) bBtn.style.display = 'none';
-        }
+      // Show waiting UI for all players once any vote exists
+      if (votes.length > 0) {
+        const wEl  = document.getElementById('ft-continue-waiting');
+        const bBtn = document.getElementById('btn-continue-playing');
+        if (wEl)  wEl.style.display  = 'block';
+        if (bBtn) bBtn.style.display = 'none';
       }
 
       // Detect new seed — runner wrote it, everyone launches
@@ -5588,10 +5567,10 @@ function ftStartContinueWatch() {
         ftResetContinueUI();
         document.getElementById('winner-banner').style.display = 'none';
         if (!iHaveASeat) {
-          // Seat was nulled — I didn't vote in time
+          // Seat was nulled — I left the room
           cleanupFriendTable(); mpDestroy();
           document.getElementById('splash').style.display = 'block';
-          toast('You did not continue in time.');
+          toast('You left the room.');
           return;
         }
         // Launch new game — stop old polling first so ftStartPolling creates fresh subscriptions
@@ -5603,34 +5582,12 @@ function ftStartContinueWatch() {
       }
 
       const allVoted = humanSeats.length > 0 && humanSeats.every(uid => votes.includes(uid));
-      // timedOut: deadline passed AND at least 2s extra grace so late-clickers get recorded
-      const timedOut = deadline > 0 && now >= deadline + 2000;
 
-      if ((allVoted || timedOut) && ftAmNpcRunner() && !_ftDoRestartLock) {
+      // Only start when ALL remaining human players have voted — no timeout
+      if (allVoted && ftAmNpcRunner() && !_ftDoRestartLock) {
         _ftDoRestartLock = true;
         _ftContinueWatch = null;
         if (_ftContinueTimer) { clearInterval(_ftContinueTimer); _ftContinueTimer = null; }
-
-        // Re-fetch votes one final time to catch any last-second clickers
-        let finalVotes = votes;
-        try {
-          const { data: fresh } = await supaClient.from('friend_tables')
-            .select('ready_votes, seat_1, seat_2, seat_3, seat_4')
-            .eq('id', _myTableId).single();
-          if (fresh) {
-            finalVotes = Array.isArray(fresh.ready_votes) ? fresh.ready_votes : [];
-            // Null non-voter seats only on real timeout (not allVoted)
-            if (timedOut && !allVoted) {
-              const update = {};
-              ['seat_1','seat_2','seat_3','seat_4'].forEach(col => {
-                if (fresh[col] && !finalVotes.includes(fresh[col])) update[col] = null;
-              });
-              if (Object.keys(update).length) {
-                await supaClient.from('friend_tables').update(update).eq('id', _myTableId);
-              }
-            }
-          }
-        } catch(e) {}
 
         // Write new seed — all players detect and launch
         const newSeed = Math.floor(Math.random() * 0x7fffffff);
