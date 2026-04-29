@@ -6678,11 +6678,14 @@ async function loadFriendsList() {
       .from('friend_tables')
       .select('id, table_group, seat_1, seat_2, seat_3, seat_4, status')
       .in('status', ['waiting','playing']);
-    // Build map: userId → { tableGroup, tableNum, status }
+    // Build map: userId → { group, seat, status, tableId, humanCount, npcCount, firstNpcSeat }
     const friendTableMap = {};
     (activeTables||[]).forEach(t => {
       const seats = [t.seat_1, t.seat_2, t.seat_3, t.seat_4];
-      const humanCount = seats.filter(Boolean).length;
+      const humanCount  = seats.filter(Boolean).length;
+      const npcCount    = seats.filter(s => !s).length;
+      const firstNpcIdx = seats.findIndex(s => !s);
+      const firstNpcSeat = firstNpcIdx >= 0 ? firstNpcIdx + 1 : null;
       seats.forEach((uid, i) => {
         if (uid && friendIds.includes(uid)) {
           friendTableMap[uid] = {
@@ -6691,7 +6694,8 @@ async function loadFriendsList() {
             status: t.status,
             tableId: t.id,
             humanCount,
-            npcCount: seats.filter(s=>!s).length
+            npcCount,
+            firstNpcSeat
           };
         }
       });
@@ -6726,17 +6730,18 @@ async function loadFriendsList() {
       // Table status label — only show if player is online (active within 5 min)
       let tableStr = '';
       if (tableInfo && isOnline) {
-        const grpLabel = {beginner:'🌱',intermediate:'🥉',hard:'🥈',pro:'🥇'}[tableInfo.group]||'🃏';
-        const statusLabel = tableInfo.status==='playing' ? '🎮 Playing' : '⏳ Waiting';
-        // Show NPC slots for both waiting and playing — player can reserve a slot for next game
-        const npcLabel = tableInfo.npcCount > 0
-          ? ` · ${tableInfo.npcCount} NPC slot${tableInfo.npcCount>1?'s':''}` : '';
-        tableStr = `<span style="color:rgba(100,220,120,0.9);font-size:0.7rem;margin-left:4px">${grpLabel} ${statusLabel}${npcLabel}</span>`;
+        const grpLabel    = {beginner:'🌱',intermediate:'🥉',hard:'🥈',pro:'🥇'}[tableInfo.group]||'🃏';
+        const statusLabel = tableInfo.status === 'playing' ? '🎮 Playing' : '⏳ Waiting';
+        const slotsLabel  = tableInfo.npcCount > 0
+          ? ` · ${tableInfo.npcCount} open seat${tableInfo.npcCount > 1 ? 's' : ''}`
+          : ' · Full';
+        tableStr = `<span style="color:rgba(100,220,120,0.9);font-size:0.7rem;margin-left:4px">${grpLabel} ${statusLabel}${slotsLabel}</span>`;
       }
 
       const statusHtml = onlineStr + tableStr;
-      const joinBtn = (tableInfo && tableInfo.npcCount>0 && !_myTableId && isOnline)
-        ? `<button class="friend-action-btn accept" onclick="openFriendRoom();friendSwitchTab('tables');" style="white-space:nowrap;font-size:0.7rem;">Join Table</button>`
+      const canJoin = tableInfo && tableInfo.npcCount > 0 && tableInfo.firstNpcSeat && !_myTableId && isOnline;
+      const joinBtn = canJoin
+        ? `<button class="friend-action-btn accept" onclick="directJoinFriendTable('${tableInfo.tableId}',${tableInfo.firstNpcSeat})" style="white-space:nowrap;font-size:0.7rem;">→ Join</button>`
         : '';
       const removeBtn = `<button class="friend-action-btn danger" onclick="removeFriend('${p.id}','${p.username}')">Remove</button>`;
       const btn = joinBtn
@@ -6756,6 +6761,41 @@ async function removeFriend(friendId, friendName) {
     .or('and(user_id.eq.'+supaUser.id+',friend_id.eq.'+friendId+'),and(user_id.eq.'+friendId+',friend_id.eq.'+supaUser.id+')');
   loadFriendsList();
   toast('Removed ' + friendName + ' from friends.');
+}
+
+// ── Direct join from Friends tab ──────────────────────────
+// Calls reserveNpcSeat (playing) or joinTable (waiting) without
+// requiring the user to navigate to the Tables tab first.
+async function directJoinFriendTable(tableId, seatNum) {
+  if (!supaClient || !supaUser) return;
+  if (_myTableId) { toast('You are already seated at a table!'); return; }
+  try {
+    const { data: t, error } = await supaClient
+      .from('friend_tables')
+      .select('id, status, seat_1, seat_2, seat_3, seat_4')
+      .eq('id', tableId)
+      .single();
+    if (error || !t) { toast('Table not found.'); return; }
+    // Make sure the seat we're targeting is still open
+    const seatCol = 'seat_' + seatNum;
+    if (t[seatCol]) {
+      // That seat was just taken — find another open one
+      const seats = [t.seat_1, t.seat_2, t.seat_3, t.seat_4];
+      const openIdx = seats.findIndex(s => !s);
+      if (openIdx < 0) { toast('Table is now full — try another.'); loadFriendsList(); return; }
+      seatNum = openIdx + 1;
+    }
+    if (t.status === 'playing') {
+      await reserveNpcSeat(tableId, seatNum);
+    } else {
+      await joinTable(tableId, seatNum);
+    }
+    // Refresh friends list so the join button disappears
+    loadFriendsList();
+  } catch(e) {
+    console.warn('directJoinFriendTable:', e);
+    toast('Could not join table.');
+  }
 }
 
 // ── Invite Players ────────────────────────────────────────
@@ -7073,7 +7113,8 @@ async function loadTables() {
       .from('friend_tables')
       .select('*')
       .eq('table_group', _currentTableGroup)
-      .eq('status', 'waiting')
+      .in('status', ['waiting', 'playing'])
+      .order('status', { ascending: true })      // 'playing' sorts before 'waiting'
       .order('created_at', { ascending: true });
 
     const rows = tables || [];
@@ -7102,7 +7143,8 @@ function renderTables(tables, nameMap) {
   if (myRow) {
     const occ = [myRow.seat_1,myRow.seat_2,myRow.seat_3,myRow.seat_4].filter(Boolean).length;
     const txt = document.getElementById('my-table-banner-text');
-    if (txt) txt.textContent = 'You are seated · ' + occ + '/4 players';
+    const statusStr = myRow.status === 'playing' ? '🎮 Game in progress' : '⏳ Waiting to start';
+    if (txt) txt.textContent = statusStr + ' · ' + occ + '/4 players';
     if (banner) banner.style.display = 'block';
   } else {
     _myTableId = null; _myTableSeat = null;
@@ -7110,22 +7152,49 @@ function renderTables(tables, nameMap) {
     stopTableTimer();
   }
 
-  // Show occupied tables + 1 empty
-  const occupied = tables.filter(t => t.seat_1||t.seat_2||t.seat_3||t.seat_4);
-  const displayTables = [...occupied];
-  // Add one empty slot
-  displayTables.push(null);
+  // Split into playing vs waiting
+  const playingTables = tables.filter(t => t.status === 'playing');
+  const waitingTables = tables.filter(t => t.status === 'waiting' && (t.seat_1||t.seat_2||t.seat_3||t.seat_4));
 
-  el.innerHTML = displayTables.map((t, idx) => {
-    if (!t) return renderEmptyTableCard(idx + 1);
-    const seats = [t.seat_1,t.seat_2,t.seat_3,t.seat_4];
-    const isMyTable = seats.includes(supaUser.id);
-    return renderTableCard(t, idx + 1, seats, nameMap, isMyTable);
-  }).join('');
+  // Assign display numbers sequentially across both groups
+  let tableNum = 1;
+  const sections = [];
+
+  if (playingTables.length) {
+    sections.push(`<div style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(80,220,120,0.6);margin:0 0 7px 2px;font-family:'Crimson Pro',serif;">🎮 Active Games</div>`);
+    playingTables.forEach(t => {
+      const seats = [t.seat_1,t.seat_2,t.seat_3,t.seat_4];
+      const isMyTable = seats.includes(supaUser.id);
+      sections.push(renderTableCard(t, tableNum++, seats, nameMap, isMyTable));
+    });
+  }
+
+  if (waitingTables.length) {
+    sections.push(`<div style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(120,150,210,0.5);margin:${playingTables.length?'14px':0} 0 7px 2px;font-family:'Crimson Pro',serif;">⏳ Waiting for Players</div>`);
+    waitingTables.forEach(t => {
+      const seats = [t.seat_1,t.seat_2,t.seat_3,t.seat_4];
+      const isMyTable = seats.includes(supaUser.id);
+      sections.push(renderTableCard(t, tableNum++, seats, nameMap, isMyTable));
+    });
+  }
+
+  // Always append one empty new-table card
+  sections.push(`<div style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(120,150,210,0.4);margin:${(playingTables.length||waitingTables.length)?'14px':0} 0 7px 2px;font-family:'Crimson Pro',serif;">＋ New Table</div>`);
+  sections.push(renderEmptyTableCard(tableNum));
+
+  el.innerHTML = sections.join('');
 }
 
 function renderTableCard(t, num, seats, nameMap, isMyTable) {
-  const occ = seats.filter(Boolean).length;
+  const isPlaying = t.status === 'playing';
+  const occ       = seats.filter(Boolean).length;
+  const npcCount  = seats.filter(uid => !uid).length;
+  const statusBadge = isPlaying
+    ? `<span style="font-size:0.68rem;background:rgba(45,138,80,0.2);border:1px solid rgba(45,138,80,0.45);color:rgba(80,220,120,0.9);border-radius:10px;padding:1px 8px;font-family:'Crimson Pro',serif;">🎮 Playing</span>`
+    : `<span style="font-size:0.68rem;background:rgba(60,100,200,0.15);border:1px solid rgba(100,140,255,0.3);color:rgba(140,180,255,0.8);border-radius:10px;padding:1px 8px;font-family:'Crimson Pro',serif;">⏳ Waiting</span>`;
+  const cardStyle = isPlaying
+    ? 'border-left:3px solid rgba(45,138,80,0.55);background:rgba(20,60,30,0.18);'
+    : '';
   const seatHtml = seats.map((uid, i) => {
     const seatNum = i + 1;
     if (uid) {
@@ -7167,10 +7236,13 @@ function renderTableCard(t, num, seats, nameMap, isMyTable) {
     ? `<div class="table-timer" id="table-timer-${t.id}">⏱ 60s · all tap Ready to start</div>`
     : '';
 
-  return `<div class="friend-table-card${isMyTable?' my-table':''}">
+  return `<div class="friend-table-card${isMyTable?' my-table':''}" style="${cardStyle}">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
       <span style="font-size:0.78rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600">Table ${num}</span>
-      <span style="font-size:0.72rem;color:var(--text-dim)">${occ}/4 seated</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        ${statusBadge}
+        <span style="font-size:0.72rem;color:var(--text-dim)">${occ}/4</span>
+      </div>
     </div>
     <div style="display:flex;gap:12px;align-items:flex-start">
       <div class="table-circle">TABLE<br>${num}</div>
@@ -7296,7 +7368,30 @@ async function joinTable(tableId, seatNum) {
   } catch(e) { console.warn('joinTable:', e); toast('Error joining table.'); }
 }
 
-async function leaveCurrentTable() {
+function leaveCurrentTable() {
+  if (!supaClient || !supaUser || !_myTableId) return;
+  // If a game is in progress, show a confirmation — scores will be lost.
+  // If just waiting in the lobby (no active game), leave immediately.
+  if (gameActive) {
+    const overlay = document.getElementById('modal-overlay');
+    const xBtn    = document.getElementById('modal-close-x');
+    xBtn.classList.remove('hidden');
+    xBtn.onclick = closeModal;
+    document.getElementById('modal-title').textContent = '🚪 Leave Table?';
+    document.getElementById('modal-body').innerHTML =
+      `Your session score will be lost.<br><br>` +
+      `<span style="color:var(--text-dim)">Other players will continue — an NPC will take your seat for the rest of this game.</span>`;
+    document.getElementById('modal-buttons').innerHTML = `
+      <button class="btn-gold" style="background:linear-gradient(135deg,#8b1a1a,#c0392b);box-shadow:0 4px 16px rgba(192,57,43,0.4);" onclick="closeModal();confirmLeaveTable()">Leave</button>
+      <button class="btn-ghost" onclick="closeModal()">Stay</button>
+    `;
+    overlay.style.display = 'flex';
+  } else {
+    confirmLeaveTable();
+  }
+}
+
+async function confirmLeaveTable() {
   if (!supaClient || !supaUser || !_myTableId) return;
   try {
     const seatCol = 'seat_' + _myTableSeat;
@@ -7310,12 +7405,13 @@ async function leaveCurrentTable() {
     cleanupFriendTable();
     loadTables();
     toast('Left the table.');
-  } catch(e) { console.warn('leaveCurrentTable:', e); }
+  } catch(e) { console.warn('confirmLeaveTable:', e); }
 }
 
 function cleanupFriendTable() {
   _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; _ftSeats = [];
   _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeq = 0; _ftSeqCounter = 0;
+  _ftJoinedAtGame = 0;  // reset so next table sit-down is treated as fresh
   ftStopPolling();
   stopTableTimer();
   if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
@@ -7355,6 +7451,7 @@ async function timerForceStart(tableId) {
 // ════════════════════════════════════════════════════════════
 
 let _ftSeed        = 0;      // shared random seed for dealing
+let _ftJoinedAtGame = 0;    // mpSessionHistory.length when we first sat down (late-join detection)
 let _ftActedThisRound = new Set(); // local indices that acted since last round clear
 
 // ── Seeded random ─────────────────────────────────────────
@@ -7420,6 +7517,15 @@ async function launchFriendTableGame(table) {
   _myGlobalSeat = seats.indexOf(supaUser.id); // 0-3
   _ftSeed     = table.payload.seed;
 
+  // Record which game number we joined at (used for late-join score isolation).
+  // Only set once per table session — restarts must not overwrite it.
+  if (_ftJoinedAtGame === 0 && mpSessionHistory.length === 0) {
+    _ftJoinedAtGame = 0;           // joined at the very start — normal
+  } else if (_ftJoinedAtGame === 0) {
+    _ftJoinedAtGame = mpSessionHistory.length;  // joining mid-session
+  }
+  // On plain restarts _ftJoinedAtGame is already set and stays unchanged.
+
   // Load usernames
   const humanIds = seats.filter(Boolean);
   let nameMap = {};
@@ -7464,9 +7570,26 @@ async function launchFriendTableGame(table) {
   globalDiscardedCards = new Set();
   selectedCards = [];
   gameActive    = true;
-  // Only reset session scores at start of a NEW session (first game)
-  // On restart, preserve cumulative scores across games
-  if (mpSessionHistory.length === 0) mpSessionScores = [0,0,0,0];
+  // ── Session score initialisation ──────────────────────────────────────────
+  // Three cases, evaluated AFTER the seat-rotation block so mpNpcSlots is
+  // already in local order (index 0 = this player).
+  if (mpSessionHistory.length === 0) {
+    // Case 1: First game of this session — everyone starts from 0.
+    mpSessionScores = [0, 0, 0, 0];
+  } else {
+    // Cases 2 & 3: Continuing session (restart or late join).
+    // • Slot 0 (this player) is always 0 on a fresh join; on a plain restart
+    //   it was already accumulated correctly, so leave it unless we just sat
+    //   down for the first time (detected by _ftJoinedAtGame === mpSessionHistory.length).
+    if (_ftJoinedAtGame === mpSessionHistory.length) {
+      // We haven't played any games at this table yet — late joiner.
+      mpSessionScores[0] = 0;
+    }
+    // Zero out any slot that is currently an NPC (player departed between games).
+    for (let li = 0; li < 4; li++) {
+      if (mpNpcSlots[li]) mpSessionScores[li] = 0;
+    }
+  }
 
   // ── Rotate: put MY seat at index 0 ──
   // This means hands[0] = my hand, hands[1] = right, etc.
@@ -7634,7 +7757,13 @@ function ftBuildState() {
     pc:  passCount,
     ft:  firstTurn,
     ga:  gameActive,
-    ss:  [0,1,2,3].map(g => mpSessionScores[(g - r + 4) % 4] || 0),
+    // ss is in GLOBAL seat order. NPC slots always emit 0 so a departed
+    // player's score never bleeds into the next session via state pushes.
+    ss:  [0,1,2,3].map(g => {
+      const li = (g - r + 4) % 4;   // global → local index
+      if (mpNpcSlots[li]) return 0;  // NPC seat — never carries a score
+      return mpSessionScores[li] || 0;
+    }),
     gdc: [...globalDiscardedCards],
     author: r,
     seq: ftNextSeq(),
