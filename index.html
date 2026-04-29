@@ -6591,7 +6591,8 @@ function openFriendRoom() {
 function closeFriendRoom() {
   document.getElementById('friend-room-overlay').classList.remove('open');
   unsubscribeFromTables();
-  if (supaClient && supaUser) {
+  // Don't mark offline if a game is active — player is still playing
+  if (!gameActive && supaClient && supaUser) {
     supaClient.from('profiles')
       .update({ is_online: false, last_active: new Date().toISOString() })
       .eq('id', supaUser.id).then(()=>{});
@@ -7576,7 +7577,6 @@ function watchMyTable(tableId) {
       if (!row) return;
       if (row.status === 'playing' && row.payload?.seed) {
         clearInterval(_myTableWatchSub); _myTableWatchSub = null;
-        closeFriendRoom();
         await launchFriendTableGame(row);
         return;
       }
@@ -7591,7 +7591,10 @@ function watchMyTable(tableId) {
 
 // ── Launch game — same for ALL players ───────────────────
 async function launchFriendTableGame(table) {
-  // table row already fresh from watchMyTable poll
+  // Always dismiss the Friend Room modal — game may launch from any code path
+  // (watchMyTable, ftStartContinueWatch, etc.) and the modal could be open
+  document.getElementById('friend-room-overlay')?.classList.remove('open');
+  unsubscribeFromTables(); // clean up lobby subscription, not game subscriptions
 
   _myTableId  = table.id;   // ← CRITICAL: must be set before ftAfterMove/ftPushState run
   const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
