@@ -5574,32 +5574,17 @@ function ftStartContinueWatch() {
         if (cdEl) cdEl.textContent = secsLeft;
       }
 
-      const allVoted  = humanSeats.length > 0 && humanSeats.every(uid => votes.includes(uid));
-      const timedOut  = deadline > 0 && Date.now() >= deadline;
+      const allVoted = humanSeats.length > 0 && humanSeats.every(uid => votes.includes(uid));
+      // Only fire timeout AFTER the deadline AND only if runner AND banner is showing
+      const bannerShowing = document.getElementById('winner-banner')?.style.display !== 'none';
+      const timedOut = deadline > 0 && Date.now() >= deadline && bannerShowing;
 
-      if (allVoted || timedOut) {
-        // Only trigger restart if the winner banner is actually showing on this device
-        // Prevents runner from restarting before their own end-game banner appears
-        const bannerShowing = document.getElementById('winner-banner')?.style.display !== 'none';
-        if (!bannerShowing) {
-          // Banner not shown yet — keep watching, don't restart yet
-          _ftContinueWatch = setTimeout(tick, 500);
-          return;
-        }
-
+      if (allVoted) {
+        // All humans voted — start immediately (no seat nulling)
         _ftContinueWatch = null;
-        if (_ftContinueTimer) { clearInterval(_ftContinueTimer); _ftContinueTimer = null; }
-
-        // Only the runner does the heavy work (null seats, write new seed)
-        // Non-runners just clean up UI and start polling for the new seed
         if (ftAmNpcRunner()) {
-          if (timedOut && !allVoted) {
-            await ftHandleTimeout(); // nulls non-voter seats, then calls ftDoRestart
-          } else {
-            await ftDoRestart(); // all voted, start cleanly
-          }
+          await ftDoRestart();
         } else {
-          // Non-runner: just reset UI and poll for seed change
           document.getElementById('winner-banner').style.display = 'none';
           const btn = document.getElementById('btn-continue-playing');
           const waitEl = document.getElementById('ft-continue-waiting');
@@ -5607,6 +5592,16 @@ function ftStartContinueWatch() {
           if (waitEl) waitEl.style.display = 'none';
           ftRestartGame();
         }
+        return;
+      }
+
+      if (timedOut) {
+        // Deadline passed — only runner handles timeout (nulls non-voters)
+        _ftContinueWatch = null;
+        if (ftAmNpcRunner()) {
+          await ftHandleTimeout();
+        }
+        // Non-runner: wait — runner's seed write will trigger their ftRestartGame via watchMyTable
         return;
       }
     } catch(e) {}
@@ -8133,14 +8128,19 @@ async function ftRestartGame() {
           if (fr) freshRow = fr;
         } catch(e) {}
 
-        // If this player's own seat was nulled (they didn't vote in time), leave
+        // If this player's own seat was nulled (timed out), return to main screen
         const myCol = 'seat_' + _myTableSeat;
         if (freshRow[myCol] !== supaUser.id) {
-          toast('⏱ You were removed — took too long to continue.');
+          // Reset continue UI first
+          const contBtn2 = document.getElementById('btn-continue-playing');
+          const waitEl2  = document.getElementById('ft-continue-waiting');
+          if (contBtn2) contBtn2.style.display = '';
+          if (waitEl2)  waitEl2.style.display  = 'none';
           cleanupFriendTable();
           mpDestroy();
           document.getElementById('winner-banner').style.display = 'none';
           document.getElementById('splash').style.display = 'block';
+          toast('You did not continue in time. Returning to main screen.');
           return;
         }
 
