@@ -7752,13 +7752,12 @@ function ftAmNpcRunner() {
   return _myGlobalSeat === lowestHuman;
 }
 
-// Fallback poll — checks BOTH friend_notifications AND pending_move
+// Fallback poll — notifications only, newest one only
+// pending_move is covered by realtime subscription; fetching it here risks applying stale state
 async function ftPollMoves(tableId) {
   if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) return;
-
-  // Path A: friend_notifications (if RLS allows SELECT)
   try {
-    const since = new Date(Date.now() - 30000).toISOString();
+    const since = new Date(Date.now() - 20000).toISOString();
     const { data, error } = await supaClient
       .from('friend_notifications')
       .select('id,sender_id,payload,created_at')
@@ -7766,36 +7765,16 @@ async function ftPollMoves(tableId) {
       .eq('type', 'game_move')
       .eq('payload->>table_id', _myTableId)
       .gt('created_at', since)
-      .order('created_at', { ascending: true });
-    if (!error && data && data.length) {
-      for (const row of data) {
-        if (_ftSeenKeys.has(row.id)) continue;
-        if (row.sender_id === supaUser.id) continue;
-        _ftSeenKeys.add(row.id);
-        _ftLastNotifId = row.id;
-
-        ftApplyState(row.payload.state);
-        return; // applied — done
-      }
-    }
+      .order('created_at', { ascending: false })
+      .limit(1); // only latest — avoids replaying old states
+    if (error || !data?.length) return;
+    const row = data[0];
+    if (_ftSeenKeys.has(row.id)) return;       // already applied
+    if (row.sender_id === supaUser.id) return; // our own
+    _ftSeenKeys.add(row.id);
+    _ftLastNotifId = row.id;
+    ftApplyState(row.payload.state);
   } catch(e) {}
-
-  // Path B: friend_tables.pending_move (always readable — ft_select allows all authenticated)
-  try {
-    const { data: row, error } = await supaClient
-      .from('friend_tables')
-      .select('pending_move')
-      .eq('id', _myTableId)
-      .single();
-    if (error || !row?.pending_move) return;
-    const pm = row.pending_move;
-    if (!pm.state || pm.author === _myGlobalSeat) return;
-    if (_ftSeenKeys.has('pm:' + pm.seq)) return;
-    _ftSeenKeys.add('pm:' + pm.seq);
-    _ftLastPmSeq = pm.seq;
-
-    ftApplyState(pm.state);
-  } catch(e) { console.warn('[FT POLL] exception:', e); }
 }
 
 // Build the global-order state snapshot every player can remap locally
