@@ -117,6 +117,7 @@
     pointer-events: none;
   }
 
+
   /* ── DRAGON WATERMARK ── */
   #dragon-bg {
     position: absolute;
@@ -737,15 +738,7 @@
   #game-commentary strong { color: var(--text-light); font-style: normal; }
   #game-commentary em { color: var(--gold-light); }
   #score-summary { margin: 1rem 0; }
-  .score-line {
-    display: grid;
-    grid-template-columns: 1fr 90px 100px;
-    align-items: center;
-    padding: 5px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.07);
-  }
-  .score-line span:nth-child(2) { text-align: right; font-weight: 700; }
-  .score-line span:nth-child(3) { text-align: right; padding-right: 4px; }
+  .score-line { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
 
   /* ════════════════════════════════════════════
      IPHONE PORTRAIT  ≤ 500px
@@ -1474,28 +1467,24 @@
   #winner-room-standing { display: none; }
   #winner-room-standing.visible { display: block; }
   .room-standing-row {
-    display: grid;
-    grid-template-columns: 1fr 80px 70px;
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    padding: 5px 8px;
+    padding: 4px 8px;
     border-bottom: 1px solid rgba(255,255,255,0.05);
     font-size: 0.85rem;
   }
-  .room-standing-row span:nth-child(2) { text-align: right; }
-  .room-standing-row span:nth-child(3) { text-align: right; }
   .room-standing-row:last-child { border-bottom: none; }
   .room-standing-header {
-    display: grid;
-    grid-template-columns: 1fr 80px 70px;
     color: var(--gold);
     font-size: 0.75rem;
     font-weight: 700;
     padding: 4px 8px;
     border-bottom: 1px solid rgba(201,168,76,0.3);
     margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
   }
-  .room-standing-header span:nth-child(2) { text-align: right; }
-  .room-standing-header span:nth-child(3) { text-align: right; }
 
   /* ── ACCOUNT BAR ── */
   #account-bar {
@@ -1824,6 +1813,7 @@
   .splash-btn-row { display: flex; gap: 6px; width: 100%; max-width: 340px; }
   .splash-half-btn { flex: 1; margin-top: 0 !important; }
 
+
   /* ── Win celebration overlay ── */
   #win-celebration {
     display: none;
@@ -2084,51 +2074,28 @@
   }
   /* Leaderboard */
   .lb-row {
-    display: grid;
-    grid-template-columns: 28px 38px 1fr;
+    display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 9px 12px;
+    gap: 10px;
+    padding: 8px 12px;
     border-radius: 10px;
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.05);
     margin-bottom: 5px;
   }
-  .lb-rank { font-size: 1rem; text-align: center; }
+  .lb-rank { font-size: 1rem; width: 24px; text-align: center; flex-shrink: 0; }
   .lb-avatar {
-    width: 36px; height: 36px;
+    width: 34px; height: 34px;
     border-radius: 50%;
     background: rgba(60,100,200,0.4);
     border: 1.5px solid rgba(100,140,255,0.3);
     display: flex; align-items: center; justify-content: center;
-    font-size: 0.82rem; font-weight: 700; color: rgba(180,210,255,0.9);
+    font-size: 0.8rem; font-weight: 700; color: rgba(180,210,255,0.9);
     font-family: 'Crimson Pro', serif;
+    flex-shrink: 0;
   }
-  .lb-info { min-width: 0; }
-  .lb-name { font-size: 0.9rem; color: var(--text-light); font-weight: 600; font-family: 'Crimson Pro', serif; margin-bottom: 4px; }
-  .lb-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
-    gap: 2px;
-  }
-  .lb-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .lb-stat-val {
-    font-size: 0.85rem;
-    font-weight: 700;
-    font-family: 'Crimson Pro', serif;
-    line-height: 1.2;
-  }
-  .lb-stat-lbl {
-    font-size: 0.58rem;
-    color: rgba(140,165,220,0.5);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    line-height: 1;
-  }
+  .lb-info { flex: 1; min-width: 0; }
+  .lb-name { font-size: 0.88rem; color: var(--text-light); font-weight: 600; font-family: 'Crimson Pro', serif; }
   .lb-score { font-size: 0.7rem; color: var(--gold-light); }
   .lb-me { background: rgba(60,100,200,0.12); border-color: rgba(100,160,255,0.25); }
   .friend-feature-item {
@@ -2380,6 +2347,7 @@
 <!-- Solo Drawer backdrop -->
 <div id="sp-drawer-bg" onclick="toggleSoloDrawer()" style="display:none;position:fixed;inset:0;z-index:98;"></div>
 
+
 <!-- FRIEND ROOM MODAL -->
 <div id="friend-room-overlay">
   <div id="friend-room-box">
@@ -2553,6 +2521,8 @@
     </div>
   </div>
 </div>
+
+
 
 <!-- AUTH MODAL -->
 <div id="auth-overlay">
@@ -2909,6 +2879,7 @@
     </svg>
   </div>
 
+
   <!-- Turn -->
   <div id="turn-indicator">Waiting to start…</div>
 
@@ -2932,6 +2903,7 @@
     <div class="npc-score-label" id="score-p3" style="display:none;font-size:0.65rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600;margin-top:-4px;text-align:center;">✦ 0</div>
     <div class="npc-cards" id="cards-p3"></div>
   </div>
+
 
   <!-- Play-by-play message below NPC 3 -->
   <div id="last-play-info"></div>
@@ -2980,6 +2952,7 @@
     </div>
   </div>
 
+
 </div>
 
 <!-- Win Celebration Overlay -->
@@ -3013,10 +2986,7 @@
     </div>
     <div id="winner-room-standing"></div>
     <div class="modal-buttons" style="margin-top:1.5rem">
-      <button class="btn-gold" id="btn-continue-playing" onclick="continueGame()">Continue Playing</button>
-      <div id="ft-continue-waiting" style="display:none;text-align:center;color:rgba(201,168,76,0.8);font-family:'Crimson Pro',serif;font-size:0.9rem;padding:8px 0">
-        ⏳ Waiting for others… <span id="ft-continue-countdown">15</span>s
-      </div>
+      <button class="btn-gold" onclick="continueGame()">Continue Playing</button>
       <button class="btn-ghost" id="btn-end-session" onclick="endSession()">End Session</button>
     </div>
   </div>
@@ -3649,6 +3619,7 @@ function renderNpc(idx, zoneId, cardsId, countId, nameId) {
   }
 }
 
+
 // ── Card zoom: toggle button, double-click, and pinch-to-zoom ──
 function toggleHandZoom(forceState) {
   handZoomed = (forceState !== undefined) ? forceState : !handZoomed;
@@ -3934,16 +3905,32 @@ function updateScoreboard() {
   const displayScores = (mpGameMode === 'vs_human') ? mpSessionScores : scores;
   const scNames = mpScoreboardNames();
 
+  // In FT/MP mode, build scores and wins from session history (same as Room Standing)
+  const wins = [0,0,0,0];
+  if (mpGameMode === 'vs_human' && mpSessionHistory.length) {
+    mpSessionHistory.forEach(g => {
+      if (g.winnerLocalIdx >= 0 && g.winnerLocalIdx < 4) wins[g.winnerLocalIdx]++;
+    });
+  }
+
   ['p1','p2','p3','p4'].forEach((id, i) => {
     const row = document.getElementById('sc-'+id)?.parentElement;
     const el  = document.getElementById('sc-'+id);
     const nm  = document.getElementById('sc-'+id+'-name');
     if (!el) return;
 
+    // Always show all 4 rows — NPCs included, same as Room Standing
     if (row) row.style.display = '';
 
     const v = displayScores[i] || 0;
-    el.textContent = (v > 0 ? '+' : '') + v;
+    // Show score + wins if in MP mode with history
+    if (mpGameMode === 'vs_human' && mpSessionHistory.length) {
+      const sign = v > 0 ? '+' : '';
+      const winStr = wins[i] ? ` · ${wins[i]}W` : '';
+      el.textContent = sign + v + winStr;
+    } else {
+      el.textContent = (v > 0 ? '+' : '') + v;
+    }
     el.style.color = v > 0 ? '#7fffaa' : v < 0 ? '#ff9999' : '';
     if (nm) nm.textContent = scNames[i];
   });
@@ -3991,6 +3978,7 @@ function clearSelection() {
   selectedCards = [];
   renderHand();
 }
+
 
 function groupByFive() {
   // Find the best 5-card groups in hand and move them to front
@@ -4054,6 +4042,7 @@ function setPlayerControls(enabled) {
   document.getElementById('player-area').classList.toggle('your-turn', enabled);
   document.getElementById('player-name-label').classList.toggle('active', enabled);
 }
+
 
 // ── Last-card rule ─────────────────────────────────────────
 // Returns the index of the next active player after playerIdx, or -1 if none.
@@ -4243,6 +4232,7 @@ function subtypeLabel(subtype) {
     royal_flush:   'Royal Flush'
   }[subtype] || (subtype ? subtype.replace(/_/g,' ') : '');
 }
+
 
 // ── Power Play Rule ──────────────────────────────────────
 // Certain plays force all others to auto-pass, giving the
@@ -4482,6 +4472,7 @@ function isMyTurn() {
   return currentPlayer === 0;
 }
 
+
 function npcTurn() {
   if (!gameActive) return;
   // In PeerJS MP: guests never run NPC AI
@@ -4570,6 +4561,7 @@ function hasFollowUp(play, hand) {
   return true; // for triples/quads/five-cards, always consider having a follow-up
 }
 
+
 // ── Hard mode: detect if hand is "small-card heavy" ──────────
 // Returns true if hand has 8+ small cards (3,4,5,6,7,8,9,10)
 const SMALL_RANKS = new Set(['3','4','5','6','7','8','9','10']);
@@ -4608,6 +4600,7 @@ function bestPlayForSmallHeavy(plays) {
   scored.sort((a,b) => b.bigUsed - a.bigUsed || a.play.key - b.play.key);
   return scored[0].play;
 }
+
 
 // ── Hard mode: "big-card heavy" hand (5+ Aces and 2s) ────────
 // This profile: control with singles, hold sets, finish with sets after final big card
@@ -5113,6 +5106,7 @@ function combinations(arr, k) {
   return [...withFirst, ...withoutFirst];
 }
 
+
 // ════════════════════════════════════════
 //  GAME COMMENTARY
 // ════════════════════════════════════════
@@ -5337,12 +5331,10 @@ function endGame(winnerIdx) {
     : null;
   // Record in MP session history
   if (mpGameMode === 'vs_human') {
-    const gameSeq = ftNextSeq(); // unique seq for this game result
     mpSessionHistory.push({
       winnerLocalIdx: winnerIdx,
       gameDeltas: gameDeltas.slice(),
-      raw: raw.slice(),
-      seq: gameSeq
+      raw: raw.slice()
     });
     if (!mpSessionNames.length && mpNames) mpSessionNames = mpNames.slice();
     // Accumulate session scores (host-local order)
@@ -5477,192 +5469,12 @@ function buildMpRoomStanding() {
 }
 
 function continueGame() {
+  document.getElementById('winner-banner').style.display = 'none';
   if (_myTableId) {
-    ftVoteContinue(); // FT: vote then wait for all players
+    ftRestartGame(); // works for ALL players — runner writes seed, others poll
   } else {
-    document.getElementById('winner-banner').style.display = 'none';
     startGame();
   }
-}
-
-let _ftContinueTimer    = null;
-let _ftContinueWatch    = null;
-let _ftContinueStarted  = false;
-let _ftDoRestartLock    = false; // prevent double restart
-
-// ── Continue Playing flow ─────────────────────────────────────────────────
-// 1. Any player clicks Continue → records vote + sets 15s deadline (first voter only)
-// 2. All players see countdown automatically via watchMyTable
-// 3. All voted → game starts immediately
-// 4. 15s expires → non-voters get seat nulled next game, voters start
-// 5. Leave Room → seat nulled, not in next game
-
-function ftResetContinueUI() {
-  const btn    = document.getElementById('btn-continue-playing');
-  const waitEl = document.getElementById('ft-continue-waiting');
-  if (btn)    { btn.style.display = ''; btn.disabled = false; }
-  if (waitEl) waitEl.style.display = 'none';
-}
-
-async function ftVoteContinue() {
-  if (!_myTableId || !supaClient || !supaUser) return;
-  if (document.getElementById('winner-banner')?.style.display === 'none') return;
-
-  // Immediately show waiting UI
-  const btn    = document.getElementById('btn-continue-playing');
-  const waitEl = document.getElementById('ft-continue-waiting');
-  if (btn)    btn.style.display    = 'none';
-  if (waitEl) waitEl.style.display = 'block';
-
-  try {
-    const { data: row } = await supaClient.from('friend_tables')
-      .select('ready_votes, payload')
-      .eq('id', _myTableId).single();
-    if (!row) return;
-
-    const votes = Array.isArray(row.ready_votes) ? [...row.ready_votes] : [];
-    if (!votes.includes(supaUser.id)) votes.push(supaUser.id);
-
-    // First voter sets the 15s deadline
-    const existing = row.payload?.continueDeadline || 0;
-    const deadline = existing > Date.now() ? existing : Date.now() + 15000;
-
-    await supaClient.from('friend_tables').update({
-      ready_votes: votes,
-      payload: { ...row.payload, continueDeadline: deadline }
-    }).eq('id', _myTableId);
-  } catch(e) { console.warn('ftVoteContinue:', e); }
-
-  ftStartContinueWatch();
-}
-
-// Poll DB every 500ms — works for ALL players (voters and non-voters)
-function ftStartContinueWatch() {
-  if (_ftContinueWatch) return;
-
-  // Use a local interval for smooth countdown display (independent of DB poll)
-  let _localCountdown = 15;
-  if (_ftContinueTimer) clearInterval(_ftContinueTimer);
-  _ftContinueTimer = setInterval(() => {
-    if (_localCountdown > 0) _localCountdown--;
-    const cdEl = document.getElementById('ft-continue-countdown');
-    if (cdEl) cdEl.textContent = _localCountdown;
-  }, 1000);
-
-  async function tick() {
-    // Stop if game already started (prevents stale tick from relaunching)
-    if (gameActive || !_myTableId || !supaClient) return;
-    try {
-      const { data: row } = await supaClient.from('friend_tables')
-        .select('ready_votes, seat_1, seat_2, seat_3, seat_4, payload')
-        .eq('id', _myTableId).single();
-      if (!row) return;
-      // Stop if game started while we were waiting for DB
-      if (gameActive) return;
-
-      const votes      = Array.isArray(row.ready_votes) ? row.ready_votes : [];
-      const humanSeats = [row.seat_1,row.seat_2,row.seat_3,row.seat_4].filter(Boolean);
-      const deadline   = row.payload?.continueDeadline || 0;
-      const now        = Date.now();
-
-      // Sync local countdown to server deadline
-      if (deadline > 0) {
-        _localCountdown = Math.max(0, Math.ceil((deadline - now) / 1000));
-        const cdEl = document.getElementById('ft-continue-countdown');
-        if (cdEl) cdEl.textContent = _localCountdown;
-        // Show waiting UI for all players once a vote + deadline exists
-        if (votes.length > 0) {
-          const wEl  = document.getElementById('ft-continue-waiting');
-          const bBtn = document.getElementById('btn-continue-playing');
-          if (wEl)  wEl.style.display  = 'block';
-          if (bBtn) bBtn.style.display = 'none';
-        }
-      }
-
-      // Detect new seed — runner wrote it, everyone launches
-      if (row.payload?.seed && row.payload.seed !== _ftSeed) {
-        _ftContinueWatch = null;
-        if (_ftContinueTimer) { clearInterval(_ftContinueTimer); _ftContinueTimer = null; }
-        const myCol      = 'seat_' + _myTableSeat;
-        const iHaveASeat = _myTableSeat && row[myCol] === supaUser?.id;
-        ftResetContinueUI();
-        document.getElementById('winner-banner').style.display = 'none';
-        if (!iHaveASeat) {
-          // Seat was nulled — I didn't vote in time
-          cleanupFriendTable(); mpDestroy();
-          document.getElementById('splash').style.display = 'block';
-          toast('You did not continue in time.');
-          return;
-        }
-        // Launch new game — stop old polling first so ftStartPolling creates fresh subscriptions
-        ftStopPolling();
-        _ftAppliedSeqMap = {}; _ftAppliedSeqs = new Set();
-        _ftSeenKeys = new Set(); _ftSeqCounter = 0;
-        await launchFriendTableGame(row);
-        return;
-      }
-
-      const allVoted = humanSeats.length > 0 && humanSeats.every(uid => votes.includes(uid));
-      // timedOut: deadline passed AND at least 2s extra grace so late-clickers get recorded
-      const timedOut = deadline > 0 && now >= deadline + 2000;
-
-      if ((allVoted || timedOut) && ftAmNpcRunner() && !_ftDoRestartLock) {
-        _ftDoRestartLock = true;
-        _ftContinueWatch = null;
-        if (_ftContinueTimer) { clearInterval(_ftContinueTimer); _ftContinueTimer = null; }
-
-        // Re-fetch votes one final time to catch any last-second clickers
-        let finalVotes = votes;
-        try {
-          const { data: fresh } = await supaClient.from('friend_tables')
-            .select('ready_votes, seat_1, seat_2, seat_3, seat_4')
-            .eq('id', _myTableId).single();
-          if (fresh) {
-            finalVotes = Array.isArray(fresh.ready_votes) ? fresh.ready_votes : [];
-            // Null non-voter seats only on real timeout (not allVoted)
-            if (timedOut && !allVoted) {
-              const update = {};
-              ['seat_1','seat_2','seat_3','seat_4'].forEach(col => {
-                if (fresh[col] && !finalVotes.includes(fresh[col])) update[col] = null;
-              });
-              if (Object.keys(update).length) {
-                await supaClient.from('friend_tables').update(update).eq('id', _myTableId);
-              }
-            }
-          }
-        } catch(e) {}
-
-        // Write new seed — all players detect and launch
-        const newSeed = Math.floor(Math.random() * 0x7fffffff);
-        const payload = { ...row.payload, seed: newSeed, started: true };
-        delete payload.continueDeadline;
-        await supaClient.from('friend_tables')
-          .update({ ready_votes: [], payload, pending_move: null })
-          .eq('id', _myTableId);
-        try {
-          await supaClient.from('friend_notifications')
-            .delete()
-            .in('recipient_id', _ftOtherSeats.concat([supaUser.id]))
-            .eq('type', 'game_move')
-            .eq('payload->>table_id', _myTableId);
-        } catch(e) {}
-        _ftDoRestartLock = false;
-        return;
-      }
-    } catch(e) { console.warn('ftContinueWatch:', e); }
-    _ftContinueWatch = setTimeout(tick, 500);
-  }
-  tick();
-}
-
-// ftHandleTimeout and ftDoRestart replaced by inline logic above
-async function ftDoRestart() {
-  // Legacy — now handled inside ftStartContinueWatch tick
-  // Just reset UI and call ftRestartGame for backward compat
-  ftResetContinueUI();
-  document.getElementById('winner-banner').style.display = 'none';
-
-  ftRestartGame();
 }
 
 function endSession() {
@@ -5683,15 +5495,6 @@ function endSession() {
 }
 
 function endSessionFinal() {
-  // Clean up any pending continue timers
-  if (_ftContinueTimer) { clearInterval(_ftContinueTimer); _ftContinueTimer = null; }
-  if (_ftContinueWatch) { clearTimeout(_ftContinueWatch); _ftContinueWatch = null; }
-  _ftContinueStarted = false; _ftDoRestartLock = false;
-  // Reset continue button state
-  const contBtn = document.getElementById('btn-continue-playing');
-  const waitEl = document.getElementById('ft-continue-waiting');
-  if (contBtn) contBtn.style.display = '';
-  if (waitEl) waitEl.style.display = 'none';
   document.getElementById('winner-banner').style.display = 'none';
   document.getElementById('game').style.display = 'none';
   clearResumeButton();
@@ -5855,6 +5658,7 @@ function playerName(idx) {
   }
   return [playerCustomName,'Ace','Rex','Ivy'][idx];
 }
+
 
 // ════════════════════════════════════════════════════════════
 //  FEATS SYSTEM
@@ -6055,6 +5859,7 @@ function checkWinFeats(winnerIdx, rawCards) {
   if (_roundsWonByHuman === _roundsPlayed && _roundsPlayed > 0) awardFeat('clean_sweep');
 }
 
+
 // ════════════════════════════════════════════════════════════
 //  SUPABASE AUTH + CLOUD SYNC
 // ════════════════════════════════════════════════════════════
@@ -6063,6 +5868,7 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 
 let supaClient = null;
 let supaUser   = null;  // null = guest
+
 
 function guestHasProgress() {
   // Check if guest has any meaningful data worth importing
@@ -6443,6 +6249,9 @@ async function saveCloudData() {
   } catch(e) { console.warn('Cloud save error:', e); }
 }
 
+
+
+
 // ── Win celebration before result screen ────────────────
 function showWinCelebration(winnerLocalIdx, names, callback) {
   const isHuman = winnerLocalIdx === 0;
@@ -6494,9 +6303,11 @@ function clearConfetti() {
   _confettiPieces.length = 0;
 }
 
+
 // ════════════════════════════════════════════════════════════
 //  FRIEND ROOM — PHASE 1: Friends, Invite, Requests
 // ════════════════════════════════════════════════════════════
+
 
 // ── Monotonic state sequence counter ─────────────────────────
 // Prevents same-millisecond timestamps from being rejected as stale
@@ -6744,28 +6555,15 @@ async function lbLoad(tab) {
       const wins   = p[wCol] || 0;
       const games  = p[gCol] || 0;
       const pts    = p[pCol] || 0;
-      const ptsColor = pts > 0 ? '#7fffaa' : pts < 0 ? '#ff9999' : 'rgba(140,165,220,0.6)';
+      const ptsColor = pts > 0 ? '#7fffaa' : pts < 0 ? '#ff9999' : 'var(--text-dim)';
       const ptsStr   = (pts > 0 ? '+' : '') + pts;
       const rank     = rankFromScore(p.rank_score || 0);
-      const statsHtml = `<div class="lb-stats">
-        <div class="lb-stat">
-          <div class="lb-stat-val" style="color:#f0c040">🏆 ${wins}</div>
-          <div class="lb-stat-lbl">Wins</div>
-        </div>
-        <div class="lb-stat">
-          <div class="lb-stat-val" style="color:rgba(180,210,255,0.8)">${games}</div>
-          <div class="lb-stat-lbl">Games</div>
-        </div>
-        <div class="lb-stat">
-          <div class="lb-stat-val" style="color:${ptsColor}">${ptsStr}</div>
-          <div class="lb-stat-lbl">Points</div>
-        </div>
-        <div class="lb-stat">
-          <div class="lb-stat-val" style="color:var(--gold-light)">${rank.icon} ${p.rank_score||0}</div>
-          <div class="lb-stat-lbl">Rank ✦</div>
-        </div>
-      </div>`;
-      return lbRow(i, p, myId, statsHtml, p.is_online);
+      return lbRow(i, p, myId,
+        `🏆 ${wins}W / ${games}G` +
+        ` &nbsp;·&nbsp; <span style="color:${ptsColor};font-weight:700">${ptsStr} pts</span>` +
+        ` &nbsp;·&nbsp; ${rank.icon} <span style="color:var(--gold-light)">✦${p.rank_score||0}</span>`,
+        p.is_online
+      );
     }).join('');
 
   } catch(e) {
@@ -6775,18 +6573,16 @@ async function lbLoad(tab) {
 }
 
 function lbRow(i, p, myId, metaHtml, isOnline) {
-  const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:var(--text-dim);font-size:0.82rem">${i+1}</span>`;
+  const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span style="color:var(--text-dim);font-size:0.78rem">${i+1}</span>`;
   const isMe = p.id === myId;
-  const dot = isOnline ? '<span style="color:#6edf9e;font-size:0.58rem">● </span>' : '';
-  const youLabel = isMe ? ' <span style="color:rgba(120,160,255,0.55);font-size:0.62rem">(you)</span>' : '';
-  // Detect if metaHtml is a stats grid (contains lb-stats) or plain text
-  const isGrid = metaHtml.includes('lb-stats');
+  const dot = isOnline ? '<span style="color:#6edf9e;font-size:0.6rem">● </span>' : '';
+  const youLabel = isMe ? ' <span style="color:rgba(120,160,255,0.6);font-size:0.65rem">(you)</span>' : '';
   return `<div class="lb-row${isMe?' lb-me':''}">
     <div class="lb-rank">${medal}</div>
     <div class="lb-avatar">${initials(p.username)}</div>
     <div class="lb-info">
       <div class="lb-name">${dot}${p.username||'Player'}${youLabel}</div>
-      ${isGrid ? metaHtml : `<div class="lb-score">${metaHtml}</div>`}
+      <div class="lb-score">${metaHtml}</div>
     </div>
   </div>`;
 }
@@ -7134,6 +6930,7 @@ setInterval(() => {
   }
 }, 60000);
 
+
 // ── Realtime: instant notification delivery ──────────────
 let _notifRealtimeSub = null;
 
@@ -7190,6 +6987,7 @@ function subscribeToNotifications() {
     });
 }
 
+
 // ── Heartbeat: update last_active every 2 minutes ────────
 setInterval(async () => {
   if (supaUser && supaClient) {
@@ -7228,6 +7026,7 @@ setInterval(() => { if (supaUser && supaClient) pollFriendNotifications(); }, 10
 // Initial poll after sign-in settled
 setTimeout(() => { if (supaUser && supaClient) pollFriendNotifications(); }, 3000);
 
+
 // ════════════════════════════════════════════════════════════
 //  FRIEND TABLES — PHASE 2 (Clean Supabase-only implementation)
 // ════════════════════════════════════════════════════════════
@@ -7265,16 +7064,6 @@ function updateTableGroupLocks() {
 }
 
 // ── Load and render tables ────────────────────────────────
-// Track ready-voted table IDs locally so re-renders don't flash the button back
-const _myReadyVotedTables = new Set();
-
-// Debounced loadTables — prevents flash from rapid realtime fires
-let _loadTablesTimer = null;
-function loadTablesDebounced() {
-  if (_loadTablesTimer) clearTimeout(_loadTablesTimer);
-  _loadTablesTimer = setTimeout(() => { _loadTablesTimer = null; loadTables(); }, 200);
-}
-
 async function loadTables() {
   if (!supaClient || !supaUser) return;
   const el = document.getElementById('tables-list-content');
@@ -7365,9 +7154,7 @@ function renderTableCard(t, num, seats, nameMap, isMyTable) {
           <span>Click to sit</span></div>`;
   }).join('');
 
-  // Check local voted state first (beats DB race condition that causes flash)
-  const myVoted = (isMyTable && _myReadyVotedTables.has(t.id)) ||
-                  (isMyTable && Array.isArray(t.ready_votes) && t.ready_votes.includes(supaUser?.id));
+  const myVoted = isMyTable && Array.isArray(t.ready_votes) && t.ready_votes.includes(supaUser?.id);
   // Only show Ready button when table is waiting (not mid-game)
   const readyBtn = (isMyTable && t.status === 'waiting')
     ? myVoted
@@ -7511,7 +7298,6 @@ async function joinTable(tableId, seatNum) {
 
 async function leaveCurrentTable() {
   if (!supaClient || !supaUser || !_myTableId) return;
-  _myReadyVotedTables.clear();
   try {
     const seatCol = 'seat_' + _myTableSeat;
     const { data: t } = await supaClient.from('friend_tables').select('*').eq('id', _myTableId).single();
@@ -7529,7 +7315,7 @@ async function leaveCurrentTable() {
 
 function cleanupFriendTable() {
   _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; _ftSeats = [];
-  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftAppliedSeqs = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeqMap = {}; _ftSeqCounter = 0; _ftDoRestartLock = false;
+  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeq = 0; _ftSeqCounter = 0;
   ftStopPolling();
   stopTableTimer();
   if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
@@ -7538,8 +7324,6 @@ function cleanupFriendTable() {
 // ── Ready voting ──────────────────────────────────────────
 async function voteReady(tableId) {
   if (!supaClient || !supaUser) return;
-  // Mark locally BEFORE DB write so re-renders show Waiting immediately
-  _myReadyVotedTables.add(tableId);
   const btn = document.getElementById('ready-btn-' + tableId);
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Waiting…'; }
   try {
@@ -7621,12 +7405,6 @@ function watchMyTable(tableId) {
         clearInterval(_myTableWatchSub); _myTableWatchSub = null;
         closeFriendRoom();
         await launchFriendTableGame(row);
-        return;
-      }
-      // Only start continue watch when game is over and votes are appearing
-      const votes = Array.isArray(row.ready_votes) ? row.ready_votes : [];
-      if (!gameActive && votes.length > 0 && row.payload?.continueDeadline) {
-        if (!_ftContinueWatch) ftStartContinueWatch();
       }
     } catch(e) { console.warn('watchMyTable poll:', e); }
   }, 1000);
@@ -7662,6 +7440,7 @@ async function launchFriendTableGame(table) {
   mpSeats      = seats.map((uid, i) => ({ name: seatNames[i], conn: null }));
   // Other human player UIDs — we INSERT game_move notifications to these
   _ftOtherSeats = seats.filter(uid => uid && uid !== supaUser.id);
+
 
   // ── Show game screen ──
   document.getElementById('splash').style.display = 'none';
@@ -7758,10 +7537,6 @@ let _ftOtherSeats   = []; // recipient user IDs (other humans at the table)
 // channel handles incoming game_move notifications instantly.
 // We keep a 3s fallback poll that queries friend_notifications directly.
 function ftStartPolling(tableId) {
-  // Use faster poll interval on mobile (realtime less reliable)
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const pollMs = isMobile ? 2000 : 3000;
-
   // Realtime on friend_tables.pending_move — fires when host UPDATEs as fallback
   if (supaClient && !_friendTableGameSub) {
     _friendTableGameSub = supaClient
@@ -7782,7 +7557,7 @@ function ftStartPolling(tableId) {
   }
   // Fallback poll every 3s — catches anything realtime misses
   if (_ftPollTimer) clearInterval(_ftPollTimer);
-  _ftPollTimer = setInterval(() => ftPollMoves(tableId), pollMs);
+  _ftPollTimer = setInterval(() => ftPollMoves(tableId), 1000);
 }
 
 function ftStopPolling() {
@@ -7799,10 +7574,11 @@ function ftAmNpcRunner() {
   return _myGlobalSeat === lowestHuman;
 }
 
-// Fallback poll — fetch all unseen notifications in order
-// Uses _ftSeenKeys (by notification ID) as the dedup, not seq comparison
+// Fallback poll — checks BOTH friend_notifications AND pending_move
 async function ftPollMoves(tableId) {
   if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) return;
+
+  // Path A: friend_notifications (if RLS allows SELECT)
   try {
     const since = new Date(Date.now() - 30000).toISOString();
     const { data, error } = await supaClient
@@ -7812,20 +7588,36 @@ async function ftPollMoves(tableId) {
       .eq('type', 'game_move')
       .eq('payload->>table_id', _myTableId)
       .gt('created_at', since)
-      .order('created_at', { ascending: true }); // oldest first — apply in order
-    if (error || !data?.length) return;
-    for (const row of data) {
-      if (_ftSeenKeys.has(row.id)) continue;       // already applied
-      if (row.sender_id === supaUser.id) continue; // our own
-      if (!row.payload?.state) continue;
-      _ftSeenKeys.add(row.id);
-      _ftLastNotifId = row.id;
-      ftApplyState(row.payload.state);
-      // Apply one at a time — ftApplyState updates _ftAppliedSeqMap
-      // Stop after first applied so we don't skip states
-      return;
+      .order('created_at', { ascending: true });
+    if (!error && data && data.length) {
+      for (const row of data) {
+        if (_ftSeenKeys.has(row.id)) continue;
+        if (row.sender_id === supaUser.id) continue;
+        _ftSeenKeys.add(row.id);
+        _ftLastNotifId = row.id;
+
+        ftApplyState(row.payload.state);
+        return; // applied — done
+      }
     }
   } catch(e) {}
+
+  // Path B: friend_tables.pending_move (always readable — ft_select allows all authenticated)
+  try {
+    const { data: row, error } = await supaClient
+      .from('friend_tables')
+      .select('pending_move')
+      .eq('id', _myTableId)
+      .single();
+    if (error || !row?.pending_move) return;
+    const pm = row.pending_move;
+    if (!pm.state || pm.author === _myGlobalSeat) return;
+    if (_ftSeenKeys.has('pm:' + pm.seq)) return;
+    _ftSeenKeys.add('pm:' + pm.seq);
+    _ftLastPmSeq = pm.seq;
+
+    ftApplyState(pm.state);
+  } catch(e) { console.warn('[FT POLL] exception:', e); }
 }
 
 // Build the global-order state snapshot every player can remap locally
@@ -7846,8 +7638,7 @@ function ftBuildState() {
     gdc: [...globalDiscardedCards],
     author: r,
     seq: ftNextSeq(),
-    gameId: _ftSeed,    // reject states from previous games
-    gameNum: mpSessionHistory.length, // how many games completed so far
+    gameId: _ftSeed,  // reject states from previous games
     // Include winner info so non-winning players can show the end banner
     winnerGlobal: gameActive ? null : (() => {
       // Find the player with 0 cards — they're the winner
@@ -7867,6 +7658,7 @@ async function ftPushState() {
 
   const r = _myGlobalSeat;
   const state = ftBuildState();
+
 
   // ── PRIMARY: friend_notifications INSERT ──────────────────────
   const rows = _ftOtherSeats.map(uid => ({
@@ -7926,8 +7718,7 @@ async function ftPushState() {
   }
 }
 
-let _ftAppliedSeqMap = {}; // kept for reset compatibility
-let _ftAppliedSeqs = new Set(); // dedup by state seq — prevents double-apply from dual channels
+let _ftAppliedSeq = 0; // monotonic: reject states older than what we've already applied
 
 // Apply state received from another player
 function ftApplyState(s) {
@@ -7935,13 +7726,12 @@ function ftApplyState(s) {
   if (r === null || r === undefined) return;
   if (!s || !s.seq) return;
 
-  // Reject states from a different game
+  // Reject states from a different game (previous or future)
   if (s.gameId && s.gameId !== _ftSeed) return;
 
-  // Dedup by seq — same state can arrive via notification realtime AND pending_move realtime
-  const seqKey = s.author + ':' + s.seq;
-  if (_ftAppliedSeqs.has(seqKey)) return;
-  _ftAppliedSeqs.add(seqKey);
+  // Reject stale states — only ever move time forward
+  if (s.seq <= _ftAppliedSeq) return;
+  _ftAppliedSeq = s.seq;
 
   const toLoc = g => (g - r + 4) % 4;
 
@@ -7997,21 +7787,10 @@ function ftApplyState(s) {
         }
       }
       // Session scores — s.ss is in GLOBAL order; rotate to local perspective
-      // This is the authoritative cumulative total from the winner's endGame
       if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[(li + r) % 4] || 0);
-      // Prevent double-counting if we already recorded this game locally (e.g. we ran endGame)
-      // Dedup: check by game count (history length should match game number)
-      // Also check by seq for cases where we added locally with a different seq
-      const expectedGameNum = mpSessionHistory.length + 1;
-      const gameNum = s.gameNum || expectedGameNum;
-      const alreadyRecorded = mpSessionHistory.some(h => h.seq === s.seq) ||
-                              (s.gameNum && mpSessionHistory.length >= s.gameNum);
-      if (alreadyRecorded) {
-        // Already recorded — just ensure scores reflect authoritative values
-        if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[(li + r) % 4] || 0);
-        updateScoreboard();
-        return;
-      }
+      // Record in session history (only if not already recorded — prevent double-count on reconnect)
+      const alreadyRecorded = mpSessionHistory.some(h => h.seq === s.seq);
+      if (alreadyRecorded) return;
       mpSessionHistory.push({
         winnerLocalIdx: winnerLocal,
         gameDeltas: gameDeltas.slice(),
@@ -8082,8 +7861,8 @@ async function ftRestartGame() {
 
   const oldSeed = _ftSeed;
 
-  // Runner writes new seed (lowest seated human)
   if (ftAmNpcRunner()) {
+    // Runner writes new seed right away
     const newSeed = Math.floor(Math.random() * 0x7fffffff);
     await supaClient.from('friend_tables')
       .update({ payload: { seed: newSeed, started: true }, pending_move: null })
@@ -8098,22 +7877,31 @@ async function ftRestartGame() {
     } catch(e) {}
   }
 
-  // Poll until seed changes then launch
+  // Show a "waiting" indicator while polling
+  toast('⏳ Starting new game…');
+
+  // Poll indefinitely (every 1s) until the seed changes — no timeout.
+  // This means a player can click Continue 60s late and still rejoin.
   let _waitTimer = null;
   async function checkForNewGame() {
-    if (!_myTableId) return;
     try {
       const { data: row } = await supaClient.from('friend_tables')
         .select('*').eq('id', _myTableId).single();
 
-      if (!row) { toast('Table no longer exists.'); endSessionFinal(); return; }
+      if (!row) {
+        // Table was deleted — go back to lobby
+        toast('Table no longer exists.');
+        endSessionFinal();
+        return;
+      }
 
       const newSeed = row.payload?.seed;
       if (newSeed && newSeed !== oldSeed) {
-        if (_waitTimer) { clearTimeout(_waitTimer); _waitTimer = null; }
+        if (_waitTimer) { clearInterval(_waitTimer); _waitTimer = null; }
 
-        // Re-fetch to get freshest seat configuration (any nulled seats from timeout)
-        await new Promise(r => setTimeout(r, 800));
+        // Wait 1.5s for any leaving players to null their seats in DB,
+        // then re-fetch the freshest row before launching
+        await new Promise(r => setTimeout(r, 1500));
         let freshRow = row;
         try {
           const { data: fr } = await supaClient.from('friend_tables')
@@ -8121,20 +7909,20 @@ async function ftRestartGame() {
           if (fr) freshRow = fr;
         } catch(e) {}
 
-        // Reset sync state for new game
-        _ftAppliedSeqMap = {};
-        _ftAppliedSeqs   = new Set();
-        _ftSeenKeys      = new Set();
-        _ftLastNotifId   = null;
-        _ftLastPmSeq     = 0;
-        _ftSeqCounter    = 0;
+        // Reset all sync state for new game
+        _ftAppliedSeq  = 0;
+        _ftSeenKeys    = new Set();
+        _ftLastNotifId = null;
+        _ftLastPmSeq   = 0;
+        _ftSeqCounter  = 0;
 
         await launchFriendTableGame(freshRow);
 
-        // Sync to current state if game already started
+        // Late joiner: sync to current state via pending_move
         if (freshRow.pending_move?.state && freshRow.pending_move.state.gameId === newSeed) {
           const pm = freshRow.pending_move;
           if (pm.author !== _myGlobalSeat) {
+            _ftAppliedSeq = pm.state.seq;
             _ftSeenKeys.add('pm:' + pm.state.seq);
             ftApplyState(pm.state);
           }
@@ -8143,9 +7931,11 @@ async function ftRestartGame() {
       }
     } catch(e) { console.warn('ftRestartGame poll:', e); }
 
+    // Seed not yet changed — poll again in 1s
     _waitTimer = setTimeout(checkForNewGame, 1000);
   }
 
+  // Start checking immediately
   checkForNewGame();
 }
 // ── Override playerPlay/playerPass for friend table ───────
@@ -8209,7 +7999,7 @@ function subscribeToTables() {
     .on('postgres_changes', {
       event: '*', schema: 'public', table: 'friend_tables',
       filter: 'table_group=eq.' + _currentTableGroup
-    }, () => { loadTablesDebounced(); })
+    }, () => { loadTables(); })
     .subscribe(s => console.log('Tables lobby sub:', s));
 }
 
@@ -8288,78 +8078,6 @@ function showTableInviteToast(fromName, group, tableId, notifId) {
 
 // ── Realtime: instant notification delivery ───────────────
 // game_move handling merged into subscribeToNotifications above
-
-// ── Mobile: reconnect realtime when tab becomes visible again ─────────────
-// On iOS Safari and Android, WebSocket connections drop when tab is backgrounded.
-// When the user returns, we force-reconnect and poll for any missed states.
-let _lastVisibleAt = Date.now();
-
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    _lastVisibleAt = Date.now();
-    return;
-  }
-
-  // Tab became visible — reconnect realtime subscriptions
-  const hiddenMs = Date.now() - _lastVisibleAt;
-
-  // Reconnect notification subscription if dropped
-  if (supaClient && supaUser) {
-    try {
-      const status = _notifRealtimeSub?.state;
-      if (status !== 'joined' && status !== 'joining') {
-        if (_notifRealtimeSub) supaClient.removeChannel(_notifRealtimeSub);
-        _notifRealtimeSub = null;
-        subscribeToNotifications();
-      }
-    } catch(e) {}
-
-    // If in an active FT game, force-poll for any missed moves
-    if (_myTableId && gameActive) {
-      // Reconnect friend_tables realtime if needed
-      if (_friendTableGameSub) {
-        try {
-          const ftStatus = _friendTableGameSub?.state;
-          if (ftStatus !== 'joined' && ftStatus !== 'joining') {
-            supaClient.removeChannel(_friendTableGameSub);
-            _friendTableGameSub = null;
-            ftStartPolling(_myTableId);
-          }
-        } catch(e) {}
-      }
-      // Force-poll immediately for missed notifications
-      setTimeout(() => ftPollMoves(_myTableId), 300);
-      setTimeout(() => ftPollMoves(_myTableId), 1500);
-
-      // If NPC runner and it's an NPC's turn — re-trigger NPC chain
-      // (NPC timers may have been paused while tab was hidden)
-      if (ftAmNpcRunner() && mpNpcSlots[currentPlayer] && gameActive) {
-        const tok = ++mpTurnToken;
-        setTimeout(() => {
-          if (mpTurnToken === tok && gameActive && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
-            npcTurn();
-          }
-        }, 1000);
-      }
-    }
-  }
-});
-
-// ── Mobile: periodic connectivity check ───────────────────────────────────
-// Supabase realtime can silently die on mobile. Check every 30s and reconnect.
-setInterval(() => {
-  if (!supaClient || !supaUser || !gameActive || !_myTableId) return;
-  try {
-    const status = _notifRealtimeSub?.state;
-    if (status && status !== 'joined' && status !== 'joining') {
-      supaClient.removeChannel(_notifRealtimeSub);
-      _notifRealtimeSub = null;
-      subscribeToNotifications();
-      // Also poll immediately
-      setTimeout(() => ftPollMoves(_myTableId), 500);
-    }
-  } catch(e) {}
-}, 30000);
 
 // ── Heartbeat ─────────────────────────────────────────────
 setInterval(async () => {
@@ -8720,6 +8438,7 @@ function mpSaveResumeState(){
   };
   localStorage.setItem('mp_resume_host',JSON.stringify(state));
 }
+
 
 function mpSendRejoinSync(conn, guestSeat) {
   // guestSeat = global seat index of the rejoining guest
