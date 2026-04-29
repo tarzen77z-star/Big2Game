@@ -117,7 +117,6 @@
     pointer-events: none;
   }
 
-
   /* ── DRAGON WATERMARK ── */
   #dragon-bg {
     position: absolute;
@@ -1825,7 +1824,6 @@
   .splash-btn-row { display: flex; gap: 6px; width: 100%; max-width: 340px; }
   .splash-half-btn { flex: 1; margin-top: 0 !important; }
 
-
   /* ── Win celebration overlay ── */
   #win-celebration {
     display: none;
@@ -2382,7 +2380,6 @@
 <!-- Solo Drawer backdrop -->
 <div id="sp-drawer-bg" onclick="toggleSoloDrawer()" style="display:none;position:fixed;inset:0;z-index:98;"></div>
 
-
 <!-- FRIEND ROOM MODAL -->
 <div id="friend-room-overlay">
   <div id="friend-room-box">
@@ -2556,8 +2553,6 @@
     </div>
   </div>
 </div>
-
-
 
 <!-- AUTH MODAL -->
 <div id="auth-overlay">
@@ -2914,7 +2909,6 @@
     </svg>
   </div>
 
-
   <!-- Turn -->
   <div id="turn-indicator">Waiting to start…</div>
 
@@ -2938,7 +2932,6 @@
     <div class="npc-score-label" id="score-p3" style="display:none;font-size:0.65rem;color:var(--gold-light);font-family:'Crimson Pro',serif;font-weight:600;margin-top:-4px;text-align:center;">✦ 0</div>
     <div class="npc-cards" id="cards-p3"></div>
   </div>
-
 
   <!-- Play-by-play message below NPC 3 -->
   <div id="last-play-info"></div>
@@ -2986,7 +2979,6 @@
       <div id="hand-container"></div>
     </div>
   </div>
-
 
 </div>
 
@@ -3657,7 +3649,6 @@ function renderNpc(idx, zoneId, cardsId, countId, nameId) {
   }
 }
 
-
 // ── Card zoom: toggle button, double-click, and pinch-to-zoom ──
 function toggleHandZoom(forceState) {
   handZoomed = (forceState !== undefined) ? forceState : !handZoomed;
@@ -4001,7 +3992,6 @@ function clearSelection() {
   renderHand();
 }
 
-
 function groupByFive() {
   // Find the best 5-card groups in hand and move them to front
   const hand = hands[0];
@@ -4064,7 +4054,6 @@ function setPlayerControls(enabled) {
   document.getElementById('player-area').classList.toggle('your-turn', enabled);
   document.getElementById('player-name-label').classList.toggle('active', enabled);
 }
-
 
 // ── Last-card rule ─────────────────────────────────────────
 // Returns the index of the next active player after playerIdx, or -1 if none.
@@ -4254,7 +4243,6 @@ function subtypeLabel(subtype) {
     royal_flush:   'Royal Flush'
   }[subtype] || (subtype ? subtype.replace(/_/g,' ') : '');
 }
-
 
 // ── Power Play Rule ──────────────────────────────────────
 // Certain plays force all others to auto-pass, giving the
@@ -4494,7 +4482,6 @@ function isMyTurn() {
   return currentPlayer === 0;
 }
 
-
 function npcTurn() {
   if (!gameActive) return;
   // In PeerJS MP: guests never run NPC AI
@@ -4583,7 +4570,6 @@ function hasFollowUp(play, hand) {
   return true; // for triples/quads/five-cards, always consider having a follow-up
 }
 
-
 // ── Hard mode: detect if hand is "small-card heavy" ──────────
 // Returns true if hand has 8+ small cards (3,4,5,6,7,8,9,10)
 const SMALL_RANKS = new Set(['3','4','5','6','7','8','9','10']);
@@ -4622,7 +4608,6 @@ function bestPlayForSmallHeavy(plays) {
   scored.sort((a,b) => b.bigUsed - a.bigUsed || a.play.key - b.play.key);
   return scored[0].play;
 }
-
 
 // ── Hard mode: "big-card heavy" hand (5+ Aces and 2s) ────────
 // This profile: control with singles, hold sets, finish with sets after final big card
@@ -5128,7 +5113,6 @@ function combinations(arr, k) {
   return [...withFirst, ...withoutFirst];
 }
 
-
 // ════════════════════════════════════════
 //  GAME COMMENTARY
 // ════════════════════════════════════════
@@ -5607,7 +5591,8 @@ function ftStartContinueWatch() {
           toast('You did not continue in time.');
           return;
         }
-        // Launch new game
+        // Launch new game — stop old polling first so ftStartPolling creates fresh subscriptions
+        ftStopPolling();
         _ftAppliedSeqMap = {}; _ftAppliedSeqs = new Set();
         _ftSeenKeys = new Set(); _ftSeqCounter = 0;
         await launchFriendTableGame(row);
@@ -5868,7 +5853,6 @@ function playerName(idx) {
   return [playerCustomName,'Ace','Rex','Ivy'][idx];
 }
 
-
 // ════════════════════════════════════════════════════════════
 //  FEATS SYSTEM
 // ════════════════════════════════════════════════════════════
@@ -6068,7 +6052,6 @@ function checkWinFeats(winnerIdx, rawCards) {
   if (_roundsWonByHuman === _roundsPlayed && _roundsPlayed > 0) awardFeat('clean_sweep');
 }
 
-
 // ════════════════════════════════════════════════════════════
 //  SUPABASE AUTH + CLOUD SYNC
 // ════════════════════════════════════════════════════════════
@@ -6077,7 +6060,6 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 
 let supaClient = null;
 let supaUser   = null;  // null = guest
-
 
 function guestHasProgress() {
   // Check if guest has any meaningful data worth importing
@@ -6458,9 +6440,6 @@ async function saveCloudData() {
   } catch(e) { console.warn('Cloud save error:', e); }
 }
 
-
-
-
 // ── Win celebration before result screen ────────────────
 function showWinCelebration(winnerLocalIdx, names, callback) {
   const isHuman = winnerLocalIdx === 0;
@@ -6512,11 +6491,9 @@ function clearConfetti() {
   _confettiPieces.length = 0;
 }
 
-
 // ════════════════════════════════════════════════════════════
 //  FRIEND ROOM — PHASE 1: Friends, Invite, Requests
 // ════════════════════════════════════════════════════════════
-
 
 // ── Monotonic state sequence counter ─────────────────────────
 // Prevents same-millisecond timestamps from being rejected as stale
@@ -7154,7 +7131,6 @@ setInterval(() => {
   }
 }, 60000);
 
-
 // ── Realtime: instant notification delivery ──────────────
 let _notifRealtimeSub = null;
 
@@ -7211,7 +7187,6 @@ function subscribeToNotifications() {
     });
 }
 
-
 // ── Heartbeat: update last_active every 2 minutes ────────
 setInterval(async () => {
   if (supaUser && supaClient) {
@@ -7249,7 +7224,6 @@ window.addEventListener('beforeunload', () => {
 setInterval(() => { if (supaUser && supaClient) pollFriendNotifications(); }, 10000);
 // Initial poll after sign-in settled
 setTimeout(() => { if (supaUser && supaClient) pollFriendNotifications(); }, 3000);
-
 
 // ════════════════════════════════════════════════════════════
 //  FRIEND TABLES — PHASE 2 (Clean Supabase-only implementation)
@@ -7687,7 +7661,6 @@ async function launchFriendTableGame(table) {
   // Other human player UIDs — we INSERT game_move notifications to these
   _ftOtherSeats = seats.filter(uid => uid && uid !== supaUser.id);
 
-
   // ── Show game screen ──
   document.getElementById('splash').style.display = 'none';
   document.getElementById('game').style.display   = 'block';
@@ -7892,7 +7865,6 @@ async function ftPushState() {
 
   const r = _myGlobalSeat;
   const state = ftBuildState();
-
 
   // ── PRIMARY: friend_notifications INSERT ──────────────────────
   const rows = _ftOtherSeats.map(uid => ({
@@ -8328,14 +8300,12 @@ document.addEventListener('visibilitychange', () => {
 
   // Tab became visible — reconnect realtime subscriptions
   const hiddenMs = Date.now() - _lastVisibleAt;
-  console.log('[Mobile] Tab visible after', Math.round(hiddenMs/1000), 's hidden');
 
   // Reconnect notification subscription if dropped
   if (supaClient && supaUser) {
     try {
       const status = _notifRealtimeSub?.state;
       if (status !== 'joined' && status !== 'joining') {
-        console.log('[Mobile] Reconnecting notification sub (was:', status, ')');
         if (_notifRealtimeSub) supaClient.removeChannel(_notifRealtimeSub);
         _notifRealtimeSub = null;
         subscribeToNotifications();
@@ -8344,7 +8314,6 @@ document.addEventListener('visibilitychange', () => {
 
     // If in an active FT game, force-poll for any missed moves
     if (_myTableId && gameActive) {
-      console.log('[Mobile] FT game active — force polling for missed moves');
       // Reconnect friend_tables realtime if needed
       if (_friendTableGameSub) {
         try {
@@ -8363,7 +8332,6 @@ document.addEventListener('visibilitychange', () => {
       // If NPC runner and it's an NPC's turn — re-trigger NPC chain
       // (NPC timers may have been paused while tab was hidden)
       if (ftAmNpcRunner() && mpNpcSlots[currentPlayer] && gameActive) {
-        console.log('[Mobile] Re-triggering NPC chain after return from background');
         const tok = ++mpTurnToken;
         setTimeout(() => {
           if (mpTurnToken === tok && gameActive && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
@@ -8382,7 +8350,6 @@ setInterval(() => {
   try {
     const status = _notifRealtimeSub?.state;
     if (status && status !== 'joined' && status !== 'joining') {
-      console.log('[Mobile] Heartbeat: notif sub dead (', status, '), reconnecting');
       supaClient.removeChannel(_notifRealtimeSub);
       _notifRealtimeSub = null;
       subscribeToNotifications();
@@ -8751,7 +8718,6 @@ function mpSaveResumeState(){
   };
   localStorage.setItem('mp_resume_host',JSON.stringify(state));
 }
-
 
 function mpSendRejoinSync(conn, guestSeat) {
   // guestSeat = global seat index of the rejoining guest
