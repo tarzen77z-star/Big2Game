@@ -7204,7 +7204,7 @@ function renderTables(tables, nameMap) {
     sections.push(`<div style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(80,220,120,0.6);margin:0 0 7px 2px;font-family:'Crimson Pro',serif;">🎮 Active Games</div>`);
     playingTables.forEach(t => {
       const seats = [t.seat_1,t.seat_2,t.seat_3,t.seat_4];
-      const isMyTable = seats.includes(supaUser.id);
+      const isMyTable = seats.includes(supaUser.id) && (!_myTableId || t.id === _myTableId);
       sections.push(renderTableCard(t, tableNum++, seats, nameMap, isMyTable));
     });
   }
@@ -7213,7 +7213,7 @@ function renderTables(tables, nameMap) {
     sections.push(`<div style="font-size:0.68rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(120,150,210,0.5);margin:${playingTables.length?'14px':0} 0 7px 2px;font-family:'Crimson Pro',serif;">⏳ Waiting for Players</div>`);
     waitingTables.forEach(t => {
       const seats = [t.seat_1,t.seat_2,t.seat_3,t.seat_4];
-      const isMyTable = seats.includes(supaUser.id);
+      const isMyTable = seats.includes(supaUser.id) && (!_myTableId || t.id === _myTableId);
       sections.push(renderTableCard(t, tableNum++, seats, nameMap, isMyTable));
     });
   }
@@ -7270,7 +7270,7 @@ function renderTableCard(t, num, seats, nameMap, isMyTable) {
       ? `<button class="btn-table-start" id="ready-btn-${t.id}" disabled style="opacity:0.6;cursor:default">⏳ Waiting…</button>`
       : `<button class="btn-table-start" id="ready-btn-${t.id}" onclick="voteReady('${t.id}')">✓ Ready</button>`
     : (isMyTable && t.status === 'playing')
-      ? `<div style="font-size:0.75rem;color:rgba(100,220,120,0.7);text-align:center;padding:4px">🎮 Game in progress — you'll join next round</div>`
+      ? `<div style="font-size:0.75rem;color:rgba(100,220,120,0.7);text-align:center;padding:4px">🎮 Game in progress — you'll join next game</div>`
       : '';
   const timer = (isMyTable && t.status === 'waiting')
     ? `<div class="table-timer" id="table-timer-${t.id}">⏱ 60s · all tap Ready to start</div>`
