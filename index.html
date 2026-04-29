@@ -7215,8 +7215,12 @@ function renderTables(tables, nameMap) {
     stopTableTimer();
   }
 
-  // Split into playing vs waiting
-  const playingTables = tables.filter(t => t.status === 'playing');
+  // Split into playing vs waiting.
+  // Exclude all-NPC playing tables — no humans means no game worth showing.
+  const playingTables = tables.filter(t =>
+    t.status === 'playing' &&
+    [t.seat_1, t.seat_2, t.seat_3, t.seat_4].some(Boolean)
+  );
   const waitingTables = tables.filter(t => t.status === 'waiting' && (t.seat_1||t.seat_2||t.seat_3||t.seat_4));
 
   // Assign display numbers sequentially across both groups
@@ -7249,9 +7253,10 @@ function renderTables(tables, nameMap) {
 }
 
 function renderTableCard(t, num, seats, nameMap, isMyTable) {
-  const isPlaying = t.status === 'playing';
-  const occ       = seats.filter(Boolean).length;
-  const npcCount  = seats.filter(uid => !uid).length;
+  const isPlaying   = t.status === 'playing';
+  const occ         = seats.filter(Boolean).length;          // total humans (null = NPC)
+  const npcCount    = seats.filter(uid => !uid).length;      // empty (NPC) seats
+  const otherHumans = seats.filter(uid => uid && uid !== supaUser.id).length; // humans besides me
   const statusBadge = isPlaying
     ? `<span style="font-size:0.68rem;background:rgba(45,138,80,0.2);border:1px solid rgba(45,138,80,0.45);color:rgba(80,220,120,0.9);border-radius:10px;padding:1px 8px;font-family:'Crimson Pro',serif;">🎮 Playing</span>`
     : `<span style="font-size:0.68rem;background:rgba(60,100,200,0.15);border:1px solid rgba(100,140,255,0.3);color:rgba(140,180,255,0.8);border-radius:10px;padding:1px 8px;font-family:'Crimson Pro',serif;">⏳ Waiting</span>`;
@@ -7275,12 +7280,13 @@ function renderTableCard(t, num, seats, nameMap, isMyTable) {
             <div class="seat-avatar" style="background:rgba(100,100,100,0.2);color:rgba(150,150,150,0.5)">—</div>
             <span>NPC</span></div>`;
     }
-    // Game in progress — clicking reserves the NPC seat for the next game
-    if (t.status === 'playing') {
+    // Game in progress — only offer "join next game" if real humans are playing
+    if (t.status === 'playing' && otherHumans > 0) {
       return `<div class="table-seat empty" onclick="reserveNpcSeat('${t.id}',${seatNum})" style="cursor:pointer;border:1px dashed rgba(100,220,120,0.4)">
             <div class="seat-avatar" style="background:rgba(100,220,120,0.15);color:rgba(100,220,120,0.7)">+</div>
             <span style="color:rgba(100,220,120,0.8);font-size:0.72rem">Join next game</span></div>`;
     }
+    // Waiting table or all-NPC playing table — sit down normally
     return `<div class="table-seat empty" onclick="joinTable('${t.id}',${seatNum})">
           <div class="seat-avatar" style="background:rgba(100,160,255,0.2);color:rgba(100,160,255,0.6)">+</div>
           <span>Click to sit</span></div>`;
@@ -7292,7 +7298,7 @@ function renderTableCard(t, num, seats, nameMap, isMyTable) {
     ? myVoted
       ? `<button class="btn-table-start" id="ready-btn-${t.id}" disabled style="opacity:0.6;cursor:default">⏳ Waiting…</button>`
       : `<button class="btn-table-start" id="ready-btn-${t.id}" onclick="voteReady('${t.id}')">✓ Ready</button>`
-    : (isMyTable && t.status === 'playing' && occ > 1)
+    : (isMyTable && t.status === 'playing' && otherHumans > 0)
       ? `<div style="font-size:0.75rem;color:rgba(100,220,120,0.7);text-align:center;padding:4px">🎮 Game in progress — you'll join next game</div>`
       : '';
   const timer = (isMyTable && t.status === 'waiting')
