@@ -5947,6 +5947,7 @@ function initSupabase() {
         loadCloudData();
         subscribeToNotifications();
         pingOnline();
+        cleanupStaleSeats(); // evict zombie seats from any crashed previous session
       } else {
         updateAccountBar(false);
       }
@@ -6436,6 +6437,8 @@ function openFriendRoom() {
   friendSwitchTab('friends');
   loadFriendsList();
   loadPendingRequests();
+  // Evict any zombie seats from crashed/closed previous sessions
+  cleanupStaleSeats();
   if (supaClient && supaUser) {
     supaClient.from('profiles').update({ is_online: true, last_active: new Date().toISOString() })
       .eq('id', supaUser.id).then(()=>{});
@@ -7103,12 +7106,49 @@ function updateTableGroupLocks() {
   });
 }
 
+// ── Zombie-row cleanup ────────────────────────────────────
+// If this user's ID is still sitting in a table row that isn't _myTableId
+// (e.g. browser was closed mid-game last session), null it out now.
+// Also handles the case where a user somehow ended up in multiple rows.
+async function cleanupStaleSeats() {
+  if (!supaClient || !supaUser) return;
+  try {
+    const { data: stale } = await supaClient
+      .from('friend_tables')
+      .select('id, seat_1, seat_2, seat_3, seat_4')
+      .or('seat_1.eq.' + supaUser.id + ',seat_2.eq.' + supaUser.id + ',seat_3.eq.' + supaUser.id + ',seat_4.eq.' + supaUser.id);
+    if (!stale || !stale.length) return;
+    for (const t of stale) {
+      // Skip the table we are legitimately seated at right now
+      if (_myTableId && t.id === _myTableId) continue;
+      // Null out every seat that holds our ID in this stale row
+      const patch = {};
+      ['seat_1','seat_2','seat_3','seat_4'].forEach(col => {
+        if (t[col] === supaUser.id) patch[col] = null;
+      });
+      if (Object.keys(patch).length) {
+        // Apply the nulls
+        await supaClient.from('friend_tables').update(patch).eq('id', t.id);
+        // If that was the last human, delete the whole row
+        const remaining = ['seat_1','seat_2','seat_3','seat_4']
+          .filter(col => !patch[col] && t[col] && t[col] !== supaUser.id);
+        if (remaining.length === 0) {
+          await supaClient.from('friend_tables').delete().eq('id', t.id);
+        }
+      }
+    }
+  } catch(e) { console.warn('cleanupStaleSeats:', e); }
+}
+
 // ── Load and render tables ────────────────────────────────
 async function loadTables() {
   if (!supaClient || !supaUser) return;
   const el = document.getElementById('tables-list-content');
   if (el) el.innerHTML = '<div class="friend-status-msg">Loading tables…</div>';
   try {
+    // Evict ourselves from any zombie rows before fetching the table list
+    await cleanupStaleSeats();
+
     const { data: tables } = await supaClient
       .from('friend_tables')
       .select('*')
