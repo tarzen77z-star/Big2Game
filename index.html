@@ -7107,54 +7107,82 @@ function updateTableGroupLocks() {
 }
 
 // ── Zombie-row cleanup ────────────────────────────────────
-// 1. Nulls this user's seat out of any table that isn't _myTableId.
-// 2. Deletes any 'playing' table that ends up with zero humans.
-// Pauses the realtime subscription during cleanup to prevent
-// the subscription from re-triggering loadTables() on our own writes.
+// Eviction rules:
+// 1. This user's own ID in any table that isn't _myTableId → null it out.
+// 2. Any OTHER seated user who has been offline >5 min → null out their seat.
+//    Online users are never touched — they are legitimately playing.
+// 3. Any table left with zero humans → delete it.
+// Pauses realtime during writes to prevent recursive loadTables() calls.
 async function cleanupStaleSeats() {
   if (!supaClient || !supaUser) return;
   try {
-    // Pause realtime so our cleanup writes don't trigger loadTables() recursively
+    // Pause realtime so our writes don't trigger loadTables() recursively
     if (_tableRealtimeSub) {
       supaClient.removeChannel(_tableRealtimeSub);
       _tableRealtimeSub = null;
     }
 
-    // ── Step 1: evict our own ID from stale rows ──────────────
-    const { data: stale } = await supaClient
+    // Fetch all active tables with seat info
+    const { data: allTables } = await supaClient
       .from('friend_tables')
-      .select('id, seat_1, seat_2, seat_3, seat_4')
-      .or('seat_1.eq.' + supaUser.id + ',seat_2.eq.' + supaUser.id + ',seat_3.eq.' + supaUser.id + ',seat_4.eq.' + supaUser.id);
+      .select('id, status, seat_1, seat_2, seat_3, seat_4')
+      .in('status', ['waiting', 'playing']);
 
-    const toDelete = new Set();
+    const rows = allTables || [];
+    if (!rows.length) return;
 
-    for (const t of (stale || [])) {
-      if (_myTableId && t.id === _myTableId) continue; // legitimately seated here
-      const patch = {};
+    // Collect all unique OTHER human user IDs seated across all tables
+    const otherUids = new Set();
+    for (const t of rows) {
       ['seat_1','seat_2','seat_3','seat_4'].forEach(col => {
-        if (t[col] === supaUser.id) patch[col] = null;
+        if (t[col] && t[col] !== supaUser.id) otherUids.add(t[col]);
       });
+    }
+
+    // Look up their last_active in one query to find who is offline
+    const offlineIds = new Set();
+    if (otherUids.size > 0) {
+      const { data: profiles } = await supaClient
+        .from('profiles')
+        .select('id, last_active')
+        .in('id', [...otherUids]);
+      const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+      (profiles || []).forEach(p => {
+        const lastActive = p.last_active ? new Date(p.last_active).getTime() : 0;
+        if (lastActive < fiveMinAgo) offlineIds.add(p.id);
+      });
+    }
+
+    // Build patches: null seats of offline users + our own stale seats
+    const patches = {}; // tableId → { col: null, ... }
+    for (const t of rows) {
+      ['seat_1','seat_2','seat_3','seat_4'].forEach(col => {
+        const uid = t[col];
+        if (!uid) return;
+        const isMeStale  = uid === supaUser.id && (!_myTableId || t.id !== _myTableId);
+        const isOffline  = uid !== supaUser.id && offlineIds.has(uid);
+        if (isMeStale || isOffline) {
+          if (!patches[t.id]) patches[t.id] = {};
+          patches[t.id][col] = null;
+        }
+      });
+    }
+
+    // Apply patches
+    for (const [tableId, patch] of Object.entries(patches)) {
       if (!Object.keys(patch).length) continue;
-      await supaClient.from('friend_tables').update(patch).eq('id', t.id);
-      // If no other humans remain, schedule for deletion
-      const othersRemain = ['seat_1','seat_2','seat_3','seat_4']
-        .some(col => !patch[col] && t[col] && t[col] !== supaUser.id);
-      if (!othersRemain) toDelete.add(t.id);
+      await supaClient.from('friend_tables').update(patch).eq('id', tableId);
     }
 
-    // ── Step 2: delete all-NPC 'playing' tables (everyone disconnected) ──
-    const { data: allPlaying } = await supaClient
-      .from('friend_tables')
-      .select('id, seat_1, seat_2, seat_3, seat_4')
-      .eq('status', 'playing');
-
-    for (const t of (allPlaying || [])) {
+    // Delete tables that now have zero humans remaining
+    const toDelete = [];
+    for (const t of rows) {
       if (_myTableId && t.id === _myTableId) continue;
-      const hasHuman = [t.seat_1, t.seat_2, t.seat_3, t.seat_4].some(Boolean);
-      if (!hasHuman) toDelete.add(t.id);
+      const appliedPatch = patches[t.id] || {};
+      const hasHuman = ['seat_1','seat_2','seat_3','seat_4']
+        .some(col => col in appliedPatch ? appliedPatch[col] : t[col]);
+      if (!hasHuman) toDelete.push(t.id);
     }
-
-    // Delete all condemned rows in one pass
     for (const id of toDelete) {
       await supaClient.from('friend_tables').delete().eq('id', id);
     }
