@@ -7221,14 +7221,14 @@ async function loadTables() {
   const el = document.getElementById('tables-list-content');
   if (el) el.innerHTML = '<div class="friend-status-msg">Loading tables…</div>';
   try {
-    // On first load after tab opens: clean up stale seats and evict inactive players.
-    // On subsequent calls (realtime-triggered): skip cleanup to avoid recursive loops.
+    // Clean up stale own seats on first load; evict inactive players every load.
     if (!_evictionDoneForSession) {
       _evictionDoneForSession = true;
       await cleanupStaleSeats();
       subscribeToTables();
-      await evictInactiveSeats();
     }
+    // Always evict inactive players — runs every loadTables() call
+    await evictInactiveSeats();
 
     const { data: tables } = await supaClient
       .from('friend_tables')
@@ -7240,22 +7240,30 @@ async function loadTables() {
 
     const rows = tables || [];
 
-    // Load seat usernames
+    // Load seat usernames + online status
     const uids = new Set();
     rows.forEach(t => [t.seat_1,t.seat_2,t.seat_3,t.seat_4].forEach(u => u && uids.add(u)));
     let nameMap = {};
+    let onlineMap = {}; // uid → true if active
     if (uids.size > 0) {
-      const { data: p } = await supaClient.from('profiles').select('id,username').in('id',[...uids]);
-      (p||[]).forEach(x => nameMap[x.id] = x.username);
+      const { data: p } = await supaClient.from('profiles')
+        .select('id, username, is_online, last_active').in('id',[...uids]);
+      const threeMinAgo = Date.now() - 3 * 60 * 1000;
+      (p||[]).forEach(x => {
+        nameMap[x.id] = x.username;
+        const lastActive = x.last_active ? new Date(x.last_active).getTime() : 0;
+        onlineMap[x.id] = x.is_online && lastActive > threeMinAgo;
+      });
     }
-    renderTables(rows, nameMap);
+    renderTables(rows, nameMap, onlineMap);
   } catch(e) {
     console.warn('loadTables:', e);
     if (el) el.innerHTML = '<div class="friend-status-msg">Error loading tables.</div>';
   }
 }
 
-function renderTables(tables, nameMap) {
+function renderTables(tables, nameMap, onlineMap) {
+  onlineMap = onlineMap || {};
   const el = document.getElementById('tables-list-content');
   if (!el) return;
 
@@ -7291,7 +7299,7 @@ function renderTables(tables, nameMap) {
     playingTables.forEach(t => {
       const seats = [t.seat_1,t.seat_2,t.seat_3,t.seat_4];
       const isMyTable = seats.includes(supaUser.id) && (!_myTableId || t.id === _myTableId);
-      sections.push(renderTableCard(t, tableNum++, seats, nameMap, isMyTable));
+      sections.push(renderTableCard(t, tableNum++, seats, nameMap, isMyTable, onlineMap));
     });
   }
 
@@ -7300,7 +7308,7 @@ function renderTables(tables, nameMap) {
     waitingTables.forEach(t => {
       const seats = [t.seat_1,t.seat_2,t.seat_3,t.seat_4];
       const isMyTable = seats.includes(supaUser.id) && (!_myTableId || t.id === _myTableId);
-      sections.push(renderTableCard(t, tableNum++, seats, nameMap, isMyTable));
+      sections.push(renderTableCard(t, tableNum++, seats, nameMap, isMyTable, onlineMap));
     });
   }
 
@@ -7311,18 +7319,25 @@ function renderTables(tables, nameMap) {
   el.innerHTML = sections.join('');
 }
 
-function renderTableCard(t, num, seats, nameMap, isMyTable) {
+function renderTableCard(t, num, seats, nameMap, isMyTable, onlineMap) {
+  onlineMap = onlineMap || {};
+  // Treat offline seated players as NPC visually (eviction will clean DB async)
+  const effectiveSeats = seats.map(uid => {
+    if (!uid) return null;
+    if (uid === supaUser.id) return uid; // always show ourselves
+    return onlineMap[uid] ? uid : null;  // offline → treat as NPC slot
+  });
   const isPlaying   = t.status === 'playing';
-  const occ         = seats.filter(Boolean).length;          // total humans (null = NPC)
-  const npcCount    = seats.filter(uid => !uid).length;      // empty (NPC) seats
-  const otherHumans = seats.filter(uid => uid && uid !== supaUser.id).length; // humans besides me
+  const occ         = effectiveSeats.filter(Boolean).length;
+  const npcCount    = effectiveSeats.filter(uid => !uid).length;
+  const otherHumans = effectiveSeats.filter(uid => uid && uid !== supaUser.id).length;
   const statusBadge = isPlaying
     ? `<span style="font-size:0.68rem;background:rgba(45,138,80,0.2);border:1px solid rgba(45,138,80,0.45);color:rgba(80,220,120,0.9);border-radius:10px;padding:1px 8px;font-family:'Crimson Pro',serif;">🎮 Playing</span>`
     : `<span style="font-size:0.68rem;background:rgba(60,100,200,0.15);border:1px solid rgba(100,140,255,0.3);color:rgba(140,180,255,0.8);border-radius:10px;padding:1px 8px;font-family:'Crimson Pro',serif;">⏳ Waiting</span>`;
   const cardStyle = isPlaying
     ? 'border-left:3px solid rgba(45,138,80,0.55);background:rgba(20,60,30,0.18);'
     : '';
-  const seatHtml = seats.map((uid, i) => {
+  const seatHtml = effectiveSeats.map((uid, i) => {
     const seatNum = i + 1;
     if (uid) {
       const name = nameMap[uid] || 'Player';
@@ -7333,7 +7348,7 @@ function renderTableCard(t, num, seats, nameMap, isMyTable) {
       </div>`;
     }
     // Don't show join option if player is already seated at this table
-    const alreadySeated = supaUser && [t.seat_1,t.seat_2,t.seat_3,t.seat_4].includes(supaUser.id);
+    const alreadySeated = supaUser && effectiveSeats.includes(supaUser.id);
     if (alreadySeated) {
       return `<div class="table-seat empty" style="opacity:0.3;cursor:default">
             <div class="seat-avatar" style="background:rgba(100,100,100,0.2);color:rgba(150,150,150,0.5)">—</div>
