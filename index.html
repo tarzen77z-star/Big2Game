@@ -7137,10 +7137,10 @@ async function cleanupStaleSeats() {
       });
       if (!Object.keys(patch).length) continue;
       await supaClient.from('friend_tables').update(patch).eq('id', t.id);
-      // Schedule deletion if no other humans remain
-      const othersRemain = ['seat_1','seat_2','seat_3','seat_4']
-        .some(col => !patch[col] && t[col] && t[col] !== supaUser.id);
-      if (!othersRemain) toDelete.push(t.id);
+      // Only delete if no other humans survive after nulling our seat
+      const humanSurvives = ['seat_1','seat_2','seat_3','seat_4']
+        .some(col => t[col] && t[col] !== supaUser.id && !(col in patch));
+      if (!humanSurvives) toDelete.push(t.id);
     }
     for (const id of toDelete) {
       await supaClient.from('friend_tables').delete().eq('id', id);
@@ -7224,9 +7224,11 @@ async function evictInactiveSeats() {
       if (!Object.keys(patch).length) continue;
       didChange = true;
       await supaClient.from('friend_tables').update(patch).eq('id', t.id);
-      const othersRemain = ['seat_1','seat_2','seat_3','seat_4']
-        .some(col => !patch[col] && t[col]);
-      if (!othersRemain) toDelete.push(t.id);
+      // Only delete the table if zero humans remain after the patch
+      // A seat "survives" if it has a uid AND is not being nulled out
+      const humanSurvives = ['seat_1','seat_2','seat_3','seat_4']
+        .some(col => t[col] && !(col in patch));
+      if (!humanSurvives) toDelete.push(t.id);
     }
     for (const id of toDelete) {
       await supaClient.from('friend_tables').delete().eq('id', id);
@@ -7745,26 +7747,6 @@ async function launchFriendTableGame(table) {
   globalDiscardedCards = new Set();
   selectedCards = [];
   gameActive    = true;
-  // ── Session score initialisation ──────────────────────────────────────────
-  // Three cases, evaluated AFTER the seat-rotation block so mpNpcSlots is
-  // already in local order (index 0 = this player).
-  if (mpSessionHistory.length === 0) {
-    // Case 1: First game of this session — everyone starts from 0.
-    mpSessionScores = [0, 0, 0, 0];
-  } else {
-    // Cases 2 & 3: Continuing session (restart or late join).
-    // • Slot 0 (this player) is always 0 on a fresh join; on a plain restart
-    //   it was already accumulated correctly, so leave it unless we just sat
-    //   down for the first time (detected by _ftJoinedAtGame === mpSessionHistory.length).
-    if (_ftJoinedAtGame === mpSessionHistory.length) {
-      // We haven't played any games at this table yet — late joiner.
-      mpSessionScores[0] = 0;
-    }
-    // Zero out any slot that is currently an NPC (player departed between games).
-    for (let li = 0; li < 4; li++) {
-      if (mpNpcSlots[li]) mpSessionScores[li] = 0;
-    }
-  }
 
   // ── Rotate: put MY seat at index 0 ──
   // This means hands[0] = my hand, hands[1] = right, etc.
@@ -7775,6 +7757,22 @@ async function launchFriendTableGame(table) {
     openingPlayer = (openingPlayer - r + 4) % 4;
     mpNpcSlots    = [0,1,2,3].map(li => npcSlots[(r+li)%4]);
     mpSeats       = [0,1,2,3].map(li => ({ name: seatNames[(r+li)%4], conn: null }));
+  }
+
+  // ── Session score initialisation ──────────────────────────────────────────
+  // Evaluated AFTER rotation so mpNpcSlots is in local order (index 0 = me).
+  if (mpSessionHistory.length === 0) {
+    // Case 1: First game of this session — everyone starts from 0.
+    mpSessionScores = [0, 0, 0, 0];
+  } else {
+    // Cases 2 & 3: Continuing session (restart or late join).
+    if (_ftJoinedAtGame === mpSessionHistory.length) {
+      // Late joiner — haven't played any games at this table yet.
+      // Only zero our own slot; NPC slots keep their inherited scores.
+      mpSessionScores[0] = 0;
+    }
+    // NPC slots inherit the departed player's score — do NOT zero them.
+    // The score belongs to the seat, not the person.
   }
 
   // ── Determine who runs NPCs (lowest-numbered human seat) ──
@@ -7932,11 +7930,10 @@ function ftBuildState() {
     pc:  passCount,
     ft:  firstTurn,
     ga:  gameActive,
-    // ss is in GLOBAL seat order. NPC slots always emit 0 so a departed
-    // player's score never bleeds into the next session via state pushes.
+    // ss is in GLOBAL seat order. NPC slots carry the departed player's
+    // inherited score — the seat score continues regardless of who's sitting.
     ss:  [0,1,2,3].map(g => {
       const li = (g - r + 4) % 4;   // global → local index
-      if (mpNpcSlots[li]) return 0;  // NPC seat — never carries a score
       return mpSessionScores[li] || 0;
     }),
     gdc: [...globalDiscardedCards],
