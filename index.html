@@ -7659,7 +7659,26 @@ function watchMyTable(tableId, waitForNewSeed) {
       if (row.status === 'playing') {
         clearInterval(_myTableWatchSub); _myTableWatchSub = null;
         closeFriendRoom();
+
+        // Reset sync state before launching
+        _ftAppliedSeq  = 0;
+        _ftSeenKeys    = new Set();
+        _ftLastNotifId = null;
+        _ftLastPmSeq   = 0;
+        _ftSeqCounter  = 0;
+
         await launchFriendTableGame(row);
+
+        // Sync to current game state via pending_move, same as ftRestartGame does
+        // This catches up a late joiner to wherever the game currently is
+        if (row.pending_move?.state && row.pending_move.state.gameId === row.payload?.seed) {
+          const pm = row.pending_move;
+          if (pm.author !== _myGlobalSeat) {
+            _ftAppliedSeq = pm.state.seq;
+            _ftSeenKeys.add('pm:' + pm.state.seq);
+            ftApplyState(pm.state);
+          }
+        }
       }
     } catch(e) { console.warn('watchMyTable poll:', e); }
   }, 1000);
@@ -7669,11 +7688,20 @@ function watchMyTable(tableId, waitForNewSeed) {
 async function launchFriendTableGame(table) {
   // table row already fresh from watchMyTable poll
 
-  _myTableId  = table.id;   // ← CRITICAL: must be set before ftAfterMove/ftPushState run
+  _myTableId  = table.id;
   const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
   _ftSeats    = seats;
-  _myGlobalSeat = seats.indexOf(supaUser.id); // 0-3
-  _ftSeed     = table.payload.seed;
+
+  // Use _myTableSeat (set when sitting down) as the authoritative seat.
+  // Fall back to indexOf only if not already set — avoids rotation errors
+  // if the DB row is fetched at a moment of minor inconsistency.
+  if (_myTableSeat) {
+    _myGlobalSeat = _myTableSeat - 1; // seat 1-4 → index 0-3
+  } else {
+    _myGlobalSeat = seats.indexOf(supaUser.id);
+    _myTableSeat  = _myGlobalSeat + 1;
+  }
+  _ftSeed = table.payload.seed;
 
   // Record which game number we joined at (used for late-join score isolation).
   // Only set once per table session — restarts must not overwrite it.
