@@ -7146,25 +7146,14 @@ async function cleanupStaleSeats() {
   } catch(e) { console.warn('cleanupStaleSeats:', e); }
 }
 
-// ── Inactive seat eviction (runs on a timer) ──────────────
-// Checks all seated players' last_active. Anyone offline >7 min
-// (missed ~3 heartbeats) gets evicted and their table deleted if empty.
-// Only runs when the Tables tab is open — no need to do DB writes otherwise.
-async function evictInactiveSeats() {
-  if (!supaClient || !supaUser) return;
-  // Only run when the Tables tab is visible
-  const tabEl = document.getElementById('fsec-tables');
-  if (!tabEl || !tabEl.classList.contains('active')) return;
-
+// ── Inactive seat eviction ────────────────────────────────
+// Called on every loadTables(). Uses is_online from profiles — set to false
+// immediately on page close via sendBeacon. No time threshold needed.
+// Returns true if any rows were changed (so loadTables can re-fetch).
+async function evictInactiveSeats(rows) {
+  if (!supaClient || !supaUser) return false;
+  if (!rows || !rows.length) return false;
   try {
-    const { data: allTables } = await supaClient
-      .from('friend_tables')
-      .select('id, seat_1, seat_2, seat_3, seat_4')
-      .in('status', ['waiting', 'playing']);
-
-    const rows = allTables || [];
-    if (!rows.length) return;
-
     // Collect all seated user IDs except our own
     const seatedUids = new Set();
     for (const t of rows) {
@@ -7172,23 +7161,24 @@ async function evictInactiveSeats() {
         if (t[col] && t[col] !== supaUser.id) seatedUids.add(t[col]);
       });
     }
-    if (!seatedUids.size) return;
+    if (!seatedUids.size) return false;
 
-    // Check their last_active
+    // Check is_online — set to false immediately when player closes the page
     const { data: profiles } = await supaClient
       .from('profiles')
-      .select('id, last_active')
+      .select('id, is_online')
       .in('id', [...seatedUids]);
 
-    const sevenMinAgo = Date.now() - 7 * 60 * 1000;
     const inactiveIds = new Set(
       (profiles || [])
-        .filter(p => (p.last_active ? new Date(p.last_active).getTime() : 0) < sevenMinAgo)
+        .filter(p => !p.is_online)
         .map(p => p.id)
     );
-    if (!inactiveIds.size) return;
+    if (!inactiveIds.size) return false;
 
-    let didChange = toDelete.length > 0;
+    // Null out inactive seats and delete empty tables
+    let didChange = false;
+    const toDelete = [];
     for (const t of rows) {
       if (_myTableId && t.id === _myTableId) continue;
       const patch = {};
@@ -7205,14 +7195,9 @@ async function evictInactiveSeats() {
     for (const id of toDelete) {
       await supaClient.from('friend_tables').delete().eq('id', id);
     }
-
-    // Refresh the table list if anything changed
-    if (didChange) loadTables();
-  } catch(e) { console.warn('evictInactiveSeats:', e); }
+    return didChange;
+  } catch(e) { console.warn('evictInactiveSeats:', e); return false; }
 }
-
-// Run eviction every 3 minutes (heartbeat is every 2 min, so 7 min = ~3 missed pings)
-setInterval(evictInactiveSeats, 3 * 60 * 1000);
 
 // ── Load and render tables ────────────────────────────────
 async function loadTables() {
@@ -7234,6 +7219,30 @@ async function loadTables() {
       .order('created_at', { ascending: true });
 
     const rows = tables || [];
+
+    // Evict inactive players immediately. If anything was deleted, re-fetch
+    // so we never render a table that was just cleaned up.
+    const evicted = await evictInactiveSeats(rows);
+    if (evicted) {
+      const { data: fresh } = await supaClient
+        .from('friend_tables')
+        .select('*')
+        .eq('table_group', _currentTableGroup)
+        .in('status', ['waiting', 'playing'])
+        .order('status', { ascending: true })
+        .order('created_at', { ascending: true });
+      const freshRows = fresh || [];
+      const uids2 = new Set();
+      freshRows.forEach(t => [t.seat_1,t.seat_2,t.seat_3,t.seat_4].forEach(u => u && uids2.add(u)));
+      let nameMap2 = {};
+      if (uids2.size > 0) {
+        const { data: p2 } = await supaClient.from('profiles').select('id,username').in('id',[...uids2]);
+        (p2||[]).forEach(x => nameMap2[x.id] = x.username);
+      }
+      renderTables(freshRows, nameMap2);
+      return;
+    }
+
     // Load seat usernames
     const uids = new Set();
     rows.forEach(t => [t.seat_1,t.seat_2,t.seat_3,t.seat_4].forEach(u => u && uids.add(u)));
@@ -7561,6 +7570,14 @@ async function voteReady(tableId) {
 
 async function timerForceStart(tableId) {
   if (!supaClient || !supaUser || !_ftIsHost) return;
+  // Don't force-start unless at least 2 humans are seated
+  const { data: t } = await supaClient.from('friend_tables').select('seat_1,seat_2,seat_3,seat_4').eq('id', tableId).single();
+  if (!t) return;
+  const humanCount = [t.seat_1, t.seat_2, t.seat_3, t.seat_4].filter(Boolean).length;
+  if (humanCount < 2) {
+    toast('Need at least 2 players to start.');
+    return;
+  }
   await startTableGame(tableId);
 }
 
