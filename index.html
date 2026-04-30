@@ -6601,15 +6601,17 @@ async function loadSplashLeaderboard() {
   try {
     const { data } = await supaClient
       .from('profiles')
-      .select('id, username, rank_score, is_online')
+      .select('id, username, rank_score, last_active')
       .order('rank_score', { ascending: false })
       .limit(5);
     if (!data?.length) { el.innerHTML = '<div class="splash-lb-loading">No data yet</div>'; return; }
     const myId = supaUser?.id;
     const medals = ['🥇','🥈','🥉','4','5'];
+    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
     el.innerHTML = data.map((p, i) => {
       const isMe = p.id === myId;
-      const dot = p.is_online ? '<span style="color:#6edf9e;font-size:0.6rem;margin-right:2px">●</span>' : '';
+      const isOnline = p.last_active && new Date(p.last_active).getTime() > fiveMinAgo;
+      const dot = isOnline ? '<span style="color:#6edf9e;font-size:0.6rem;margin-right:2px">●</span>' : '';
       const pos = i < 3 ? medals[i] : `<span style="color:var(--text-dim);font-size:0.7rem">${i+1}</span>`;
       return `<div class="splash-lb-row">
         <div class="splash-lb-pos">${pos}</div>
@@ -7147,13 +7149,20 @@ async function cleanupStaleSeats() {
 }
 
 // ── Inactive seat eviction ────────────────────────────────
-// Called on every loadTables(). Uses is_online from profiles — set to false
-// immediately on page close via sendBeacon. No time threshold needed.
-// Returns true if any rows were changed (so loadTables can re-fetch).
-async function evictInactiveSeats(rows) {
+// Fetches ALL tables across all groups, evicts inactive/duplicate players.
+// Called on every loadTables(). Returns true if anything changed.
+async function evictInactiveSeats() {
   if (!supaClient || !supaUser) return false;
-  if (!rows || !rows.length) return false;
   try {
+    // Fetch ALL active tables across ALL groups (not just current group)
+    const { data: allTables } = await supaClient
+      .from('friend_tables')
+      .select('id, seat_1, seat_2, seat_3, seat_4')
+      .in('status', ['waiting', 'playing']);
+
+    const rows = allTables || [];
+    if (!rows.length) return false;
+
     // Collect all seated user IDs except our own
     const seatedUids = new Set();
     for (const t of rows) {
@@ -7247,9 +7256,9 @@ async function loadTables() {
 
     const rows = tables || [];
 
-    // Evict inactive players immediately. If anything was deleted, re-fetch
-    // so we never render a table that was just cleaned up.
-    const evicted = await evictInactiveSeats(rows);
+    // Evict inactive/duplicate players across all groups immediately.
+    // If anything changed, re-fetch so we never render stale data.
+    const evicted = await evictInactiveSeats();
     if (evicted) {
       const { data: fresh } = await supaClient
         .from('friend_tables')
