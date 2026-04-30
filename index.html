@@ -7832,7 +7832,7 @@ function ftAmNpcRunner() {
 async function ftPollMoves(tableId) {
   if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) return;
 
-  // Path A: friend_notifications (if RLS allows SELECT)
+  // Path A: friend_notifications — apply ALL unseen moves in seq order
   try {
     const since = new Date(Date.now() - 30000).toISOString();
     const { data, error } = await supaClient
@@ -7844,15 +7844,18 @@ async function ftPollMoves(tableId) {
       .gt('created_at', since)
       .order('created_at', { ascending: true });
     if (!error && data && data.length) {
-      for (const row of data) {
-        if (_ftSeenKeys.has(row.id)) continue;
-        if (row.sender_id === supaUser.id) continue;
-        _ftSeenKeys.add(row.id);
-        _ftLastNotifId = row.id;
-
-        ftApplyState(row.payload.state);
-        return; // applied — done
+      // Collect all unseen states, sort by seq, apply in order
+      const unseen = data
+        .filter(row => !_ftSeenKeys.has(row.id) && row.sender_id !== supaUser.id)
+        .map(row => ({ id: row.id, state: row.payload?.state }))
+        .filter(x => x.state)
+        .sort((a, b) => (a.state.seq || 0) - (b.state.seq || 0));
+      for (const { id, state } of unseen) {
+        _ftSeenKeys.add(id);
+        _ftLastNotifId = id;
+        ftApplyState(state);
       }
+      if (unseen.length) return; // handled via notifications
     }
   } catch(e) {}
 
@@ -7913,14 +7916,16 @@ function ftBuildState() {
 //           Used if friend_notifications RLS blocks the INSERT.
 async function ftPushState() {
   if (!supaClient || !_myTableId || !supaUser) return;
-  if (!_ftOtherSeats || !_ftOtherSeats.length) return;
 
   const r = _myGlobalSeat;
   const state = ftBuildState();
 
+  // Derive recipients fresh from _ftSeats — handles mid-session joins correctly
+  const recipients = _ftSeats.filter(uid => uid && uid !== supaUser.id);
+  if (!recipients.length) return;
 
   // ── PRIMARY: friend_notifications INSERT ──────────────────────
-  const rows = _ftOtherSeats.map(uid => ({
+  const rows = recipients.map(uid => ({
     sender_id:    supaUser.id,
     recipient_id: uid,
     type:         'game_move',
