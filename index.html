@@ -6448,6 +6448,7 @@ function openFriendRoom() {
 function closeFriendRoom() {
   document.getElementById('friend-room-overlay').classList.remove('open');
   unsubscribeFromTables();
+  _evictionDoneForSession = false;
   if (supaClient && supaUser) {
     supaClient.from('profiles')
       .update({ is_online: false, last_active: new Date().toISOString() })
@@ -6462,6 +6463,7 @@ function friendSwitchTab(tab) {
   });
   if (tab === 'tables') {
     updateTableGroupLocks();
+    _evictionDoneForSession = false; // reset so cleanup runs on this tab open
     loadTables();
     subscribeToTables();
   }
@@ -7082,6 +7084,7 @@ let _myTableSeat        = null;   // 1-4 (global seat number)
 let _myGlobalSeat       = null;   // 0-3 index
 let _tableTimerInterval = null;
 let _tableRealtimeSub   = null;
+let _evictionDoneForSession = false; // eviction runs once per tab-open, not on every loadTables()
 let _myTableWatchSub    = null;
 let _friendTableGameSub = null;
 let _ftIsHost           = false;  // am I the host of this table?
@@ -7172,16 +7175,18 @@ async function evictInactiveSeats() {
     }
     if (!seatedUids.size) return false;
 
-    // Evict if is_online=false OR last_active > 5 min ago (covers crashes)
+    // Evict if is_online=false (set immediately on page close via sendBeacon)
+    // OR last_active is stale by >3 min (covers hard crashes where sendBeacon didn't fire).
+    // The heartbeat pings every 2 min, so 3 min means at least 1 missed ping.
     const { data: profiles } = await supaClient
       .from('profiles')
       .select('id, is_online, last_active')
       .in('id', [...seatedUids]);
 
-    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+    const threeMinAgo = Date.now() - 3 * 60 * 1000;
     const inactiveIds = new Set(
       (profiles || [])
-        .filter(p => !p.is_online || (p.last_active ? new Date(p.last_active).getTime() : 0) < fiveMinAgo)
+        .filter(p => !p.is_online || (p.last_active ? new Date(p.last_active).getTime() : 0) < threeMinAgo)
         .map(p => p.id)
     );
     if (!inactiveIds.size) return false;
@@ -7243,10 +7248,14 @@ async function loadTables() {
   const el = document.getElementById('tables-list-content');
   if (el) el.innerHTML = '<div class="friend-status-msg">Loading tables…</div>';
   try {
-    // Evict ourselves from any zombie rows before fetching the table list.
-    // cleanupStaleSeats() pauses the realtime sub; re-subscribe after it finishes.
-    await cleanupStaleSeats();
-    subscribeToTables(); // re-attach now that data is clean
+    // On first load after tab opens: clean up stale seats and evict inactive players.
+    // On subsequent calls (realtime-triggered): skip cleanup to avoid recursive loops.
+    if (!_evictionDoneForSession) {
+      _evictionDoneForSession = true;
+      await cleanupStaleSeats();
+      subscribeToTables();
+      await evictInactiveSeats();
+    }
 
     const { data: tables } = await supaClient
       .from('friend_tables')
@@ -7257,29 +7266,6 @@ async function loadTables() {
       .order('created_at', { ascending: true });
 
     const rows = tables || [];
-
-    // Evict inactive/duplicate players across all groups immediately.
-    // If anything changed, re-fetch so we never render stale data.
-    const evicted = await evictInactiveSeats();
-    if (evicted) {
-      const { data: fresh } = await supaClient
-        .from('friend_tables')
-        .select('*')
-        .eq('table_group', _currentTableGroup)
-        .in('status', ['waiting', 'playing'])
-        .order('status', { ascending: true })
-        .order('created_at', { ascending: true });
-      const freshRows = fresh || [];
-      const uids2 = new Set();
-      freshRows.forEach(t => [t.seat_1,t.seat_2,t.seat_3,t.seat_4].forEach(u => u && uids2.add(u)));
-      let nameMap2 = {};
-      if (uids2.size > 0) {
-        const { data: p2 } = await supaClient.from('profiles').select('id,username').in('id',[...uids2]);
-        (p2||[]).forEach(x => nameMap2[x.id] = x.username);
-      }
-      renderTables(freshRows, nameMap2);
-      return;
-    }
 
     // Load seat usernames
     const uids = new Set();
