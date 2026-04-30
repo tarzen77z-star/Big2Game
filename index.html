@@ -7152,18 +7152,19 @@ async function cleanupStaleSeats() {
 }
 
 // ── Inactive seat eviction ────────────────────────────────
-// Fetches ALL tables across all groups, evicts inactive/duplicate players.
-// Called on every loadTables(). Returns true if anything changed.
+// Only cleans up WAITING tables with inactive players.
+// PLAYING tables are never touched — active games are self-managing.
+// Returns true if anything changed.
 async function evictInactiveSeats() {
   if (!supaClient || !supaUser) return false;
   try {
-    // Fetch ALL active tables across ALL groups (not just current group)
-    const { data: allTables } = await supaClient
+    // Only look at WAITING tables — never evict from a playing game
+    const { data: waitingTables } = await supaClient
       .from('friend_tables')
       .select('id, seat_1, seat_2, seat_3, seat_4')
-      .in('status', ['waiting', 'playing']);
+      .eq('status', 'waiting');
 
-    const rows = allTables || [];
+    const rows = waitingTables || [];
     if (!rows.length) return false;
 
     // Collect all seated user IDs except our own
@@ -7175,9 +7176,7 @@ async function evictInactiveSeats() {
     }
     if (!seatedUids.size) return false;
 
-    // Evict if is_online=false (set immediately on page close via sendBeacon)
-    // OR last_active is stale by >3 min (covers hard crashes where sendBeacon didn't fire).
-    // The heartbeat pings every 2 min, so 3 min means at least 1 missed ping.
+    // Evict if is_online=false OR last_active stale by >3 min
     const { data: profiles } = await supaClient
       .from('profiles')
       .select('id, is_online, last_active')
@@ -7191,46 +7190,19 @@ async function evictInactiveSeats() {
     );
     if (!inactiveIds.size) return false;
 
-    // Also find users who appear in multiple tables — keep newest, evict the rest
-    const userTableMap = {}; // uid → [tableIds sorted newest first]
-    for (const t of rows) {
-      ['seat_1','seat_2','seat_3','seat_4'].forEach(col => {
-        const uid = t[col];
-        if (!uid || uid === supaUser.id) return;
-        if (!userTableMap[uid]) userTableMap[uid] = [];
-        userTableMap[uid].push(t.id);
-      });
-    }
-    // Build set of (uid, tableId) pairs to evict due to duplication
-    const dupEvict = new Map(); // tableId → Set of uids to null out
-    for (const [uid, tableIds] of Object.entries(userTableMap)) {
-      if (tableIds.length <= 1) continue;
-      // Keep only the last table in the list (latest created_at, since rows are ordered asc)
-      const keepId = tableIds[tableIds.length - 1];
-      for (const tid of tableIds) {
-        if (tid === keepId) continue;
-        if (!dupEvict.has(tid)) dupEvict.set(tid, new Set());
-        dupEvict.get(tid).add(uid);
-      }
-    }
-
-    // Null out inactive seats AND duplicate seats, then delete empty tables
+    // Null out inactive seats, delete empty tables
     let didChange = false;
     const toDelete = [];
     for (const t of rows) {
       if (_myTableId && t.id === _myTableId) continue;
       const patch = {};
-      const dupUids = dupEvict.get(t.id) || new Set();
       ['seat_1','seat_2','seat_3','seat_4'].forEach(col => {
         const uid = t[col];
-        if (!uid) return;
-        if (inactiveIds.has(uid) || dupUids.has(uid)) patch[col] = null;
+        if (uid && inactiveIds.has(uid)) patch[col] = null;
       });
       if (!Object.keys(patch).length) continue;
       didChange = true;
       await supaClient.from('friend_tables').update(patch).eq('id', t.id);
-      // Only delete the table if zero humans remain after the patch
-      // A seat "survives" if it has a uid AND is not being nulled out
       const humanSurvives = ['seat_1','seat_2','seat_3','seat_4']
         .some(col => t[col] && !(col in patch));
       if (!humanSurvives) toDelete.push(t.id);
