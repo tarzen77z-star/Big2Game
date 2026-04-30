@@ -7152,19 +7152,19 @@ async function cleanupStaleSeats() {
 }
 
 // ── Inactive seat eviction ────────────────────────────────
-// Only cleans up WAITING tables with inactive players.
-// PLAYING tables are never touched — active games are self-managing.
+// Evicts offline players from ALL tables (waiting and playing).
+// - waiting tables with no survivors → deleted
+// - playing tables → offline seats nulled to NPC, table is NEVER deleted
 // Returns true if anything changed.
 async function evictInactiveSeats() {
   if (!supaClient || !supaUser) return false;
   try {
-    // Only look at WAITING tables — never evict from a playing game
-    const { data: waitingTables } = await supaClient
+    const { data: allTables } = await supaClient
       .from('friend_tables')
-      .select('id, seat_1, seat_2, seat_3, seat_4')
-      .eq('status', 'waiting');
+      .select('id, status, seat_1, seat_2, seat_3, seat_4')
+      .in('status', ['waiting', 'playing']);
 
-    const rows = waitingTables || [];
+    const rows = allTables || [];
     if (!rows.length) return false;
 
     // Collect all seated user IDs except our own
@@ -7190,7 +7190,6 @@ async function evictInactiveSeats() {
     );
     if (!inactiveIds.size) return false;
 
-    // Null out inactive seats, delete empty tables
     let didChange = false;
     const toDelete = [];
     for (const t of rows) {
@@ -7203,6 +7202,8 @@ async function evictInactiveSeats() {
       if (!Object.keys(patch).length) continue;
       didChange = true;
       await supaClient.from('friend_tables').update(patch).eq('id', t.id);
+      // Only delete waiting tables with no survivors — never delete playing tables
+      if (t.status === 'playing') continue;
       const humanSurvives = ['seat_1','seat_2','seat_3','seat_4']
         .some(col => t[col] && !(col in patch));
       if (!humanSurvives) toDelete.push(t.id);
