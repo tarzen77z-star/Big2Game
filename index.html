@@ -8159,9 +8159,11 @@ function ftApplyState(s) {
   // Reject states from a different game (previous or future)
   if (s.gameId && s.gameId !== _ftSeed) return;
 
-  // If we're seated at the table but not yet in this game (gameActive=false for us),
-  // only process game-over states (ga=false in the incoming state) — not mid-game moves.
-  // This prevents Fatpika's lobby screen from re-rendering on every move while she waits.
+  // If the new game is already running, reject game-over states from the previous game
+  // (late retry pushes arriving after the new game has launched)
+  if (gameActive && s.ga === false) return;
+
+  // If seated but not yet in this game, only process game-over states
   if (!gameActive && s.ga !== false) return;
 
   // Reject stale states — only ever move time forward
@@ -8320,14 +8322,20 @@ async function ftAfterMove() {
   }
   // Game-over retry: push again at +2s and +5s so other players reliably get
   // the result banner even if the first push is dropped.
+  // Snapshot the seed — if it changes (new game started), retries are cancelled.
   if (!gameActive) {
     const tableIdSnap = _myTableId;
+    const seedSnap    = _ftSeed;
     setTimeout(async () => {
       if (!tableIdSnap || _myTableId !== tableIdSnap) return;
+      if (_ftSeed !== seedSnap) return; // new game started — don't push old state
+      if (gameActive) return;           // new game already active
       await ftPushState();
     }, 2000);
     setTimeout(async () => {
       if (!tableIdSnap || _myTableId !== tableIdSnap) return;
+      if (_ftSeed !== seedSnap) return;
+      if (gameActive) return;
       await ftPushState();
     }, 5000);
     return; // game over — no human-turn or ghost-pass logic needed
