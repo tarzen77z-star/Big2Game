@@ -8233,10 +8233,10 @@ function ftApplyState(s) {
   renderAll();
 
   if (!gameActive) {
-    // Game over — stop the 1s poll timer (but keep _friendTableGameSub alive to catch game_result).
-    // _friendTableGameSub fires when winner writes game_result → ftShowGameResultBanner.
-    if (_ftGameOverHandled) return;
-    _ftGameOverHandled = true;
+    // Game over — stop the 1s poll timer but do NOT set _ftGameOverHandled yet.
+    // _friendTableGameSub is still alive and will fire when winner writes game_result.
+    // That handler sets _ftGameOverHandled = true and calls ftShowGameResultBanner.
+    if (_ftGameOverHandled) return; // already handled (winner's own endGame set this)
     if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
     return;
   }
