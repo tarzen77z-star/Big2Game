@@ -7474,10 +7474,9 @@ async function reserveNpcSeat(tableId, seatNum) {
     _myGlobalSeat = seatNum - 1;
     _ftIsHost    = current.host_id === supaUser.id;
 
-    // Pass both current seed and started_at so watchMyTable waits for a genuinely NEW game.
+    // Pass current seed so watchMyTable waits until the seed changes (new game).
     const currentSeed = current.payload?.seed || 'none';
-    const currentStartedAt = current.started_at || 'none';
-    watchMyTable(tableId, currentSeed, currentStartedAt);
+    watchMyTable(tableId, currentSeed);
     loadTables();
     toast('✅ Reserved! You will join when the current game ends.');
   } catch(e) { console.warn('reserveNpcSeat:', e); toast('❌ Could not reserve seat: ' + e.message); }
@@ -7649,9 +7648,8 @@ async function startTableGame(tableId) {
 }
 
 // ── watchMyTable — polls until game (re)starts ───────────
-// waitForNewSeed / waitForNewStartedAt: captured by reserveNpcSeat.
-// Only launches when BOTH seed AND started_at differ — guarantees a new game.
-function watchMyTable(tableId, waitForNewSeed, waitForNewStartedAt) {
+// waitForNewSeed: captured by reserveNpcSeat. Waits until seed changes = new game started.
+function watchMyTable(tableId, waitForNewSeed) {
   if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
   _myTableWatchSub = setInterval(async () => {
     if (gameActive) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; return; }
@@ -7661,10 +7659,9 @@ function watchMyTable(tableId, waitForNewSeed, waitForNewStartedAt) {
       if (!row) return;
       const seed = row.payload?.seed;
       if (!seed) return;
-      // If waiting for next game: both seed AND started_at must be different
+      // If waiting for next game: wait until the seed changes (new game issued)
       if (waitForNewSeed !== undefined) {
-        const startedAt = row.started_at || 'none';
-        if (seed === waitForNewSeed || startedAt === waitForNewStartedAt) return;
+        if (seed === waitForNewSeed) return; // same seed = same game, keep waiting
       }
       if (row.status === 'playing') {
         clearInterval(_myTableWatchSub); _myTableWatchSub = null;
@@ -8224,7 +8221,7 @@ async function ftRestartGame() {
     // Runner writes new seed right away
     const newSeed = Math.floor(Math.random() * 0x7fffffff);
     await supaClient.from('friend_tables')
-      .update({ payload: { seed: newSeed, started: true }, pending_move: null, started_at: new Date().toISOString() })
+      .update({ payload: { seed: newSeed, started: true }, pending_move: null })
       .eq('id', _myTableId);
     // Clean up old game_move notifications (best-effort)
     try {
