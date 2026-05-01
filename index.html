@@ -7261,10 +7261,12 @@ async function evictInactiveSeats() {
 }
 
 // ── Load and render tables ────────────────────────────────
-async function loadTables() {
+async function loadTables(silent = false) {
   if (!supaClient || !supaUser) return;
   const el = document.getElementById('tables-list-content');
-  if (el) el.innerHTML = '<div class="friend-status-msg">Loading tables…</div>';
+  // Only show "Loading…" on explicit user-triggered loads (silent=false).
+  // Realtime-triggered refreshes pass silent=true so other players never see a flash.
+  if (el && !silent) el.innerHTML = '<div class="friend-status-msg">Loading tables…</div>';
   try {
     // Clean up stale own seats on first load; evict inactive players every load.
     if (!_evictionDoneForSession) {
@@ -8496,14 +8498,14 @@ function subscribeToTables() {
       filter: 'table_group=eq.' + _currentTableGroup
     }, (payload) => {
       // DELETE or missing row → always reload
-      if (payload.eventType === 'DELETE' || !payload.new) { loadTables(); return; }
+      if (payload.eventType === 'DELETE' || !payload.new) { loadTables(true); return; }
       const row = payload.new;
       // Skip reload when ONLY pending_move changed (card plays every second).
       // That column is irrelevant to the lobby UI — ignoring it stops the flash.
       const fp = _tableLobbyFingerprint(row);
       if (_tableFingerprints[row.id] === fp) return;
       _tableFingerprints[row.id] = fp;
-      loadTables();
+      loadTables(true); // silent — background refresh, no flash
     })
     .subscribe(s => console.log('Tables lobby sub:', s));
 }
