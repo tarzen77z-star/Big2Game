@@ -7474,8 +7474,9 @@ async function reserveNpcSeat(tableId, seatNum) {
     _myGlobalSeat = seatNum - 1;
     _ftIsHost    = current.host_id === supaUser.id;
 
-    // Pass the current seed so watchMyTable waits for a NEW seed (next game)
-    const currentSeed = current.payload?.seed || null;
+    // Pass the current seed so watchMyTable waits for a NEW seed (next game).
+    // If no seed exists yet, pass a sentinel so we still wait for the first new seed.
+    const currentSeed = current.payload?.seed || 'none';
     watchMyTable(tableId, currentSeed);
     loadTables();
     toast('✅ Reserved! You will join when the current game ends.');
@@ -7660,8 +7661,9 @@ function watchMyTable(tableId, waitForNewSeed) {
       if (!row) return;
       const seed = row.payload?.seed;
       if (!seed) return;
-      // If waiting for a new seed: only launch when seed differs from the one we saw on join
-      if (waitForNewSeed && seed === waitForNewSeed) return;
+      // If waitForNewSeed is set, block until seed changes (player joining mid-game)
+      // 'none' means no seed existed at join time — any real seed is the new game
+      if (waitForNewSeed !== undefined && seed === waitForNewSeed) return;
       if (row.status === 'playing') {
         clearInterval(_myTableWatchSub); _myTableWatchSub = null;
         closeFriendRoom();
