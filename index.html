@@ -5471,6 +5471,8 @@ function buildMpRoomStanding() {
 function continueGame() {
   document.getElementById('winner-banner').style.display = 'none';
   if (_myTableId) {
+    // Clear the watchMyTable safety-net — ftRestartGame has its own polling loop
+    if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
     ftRestartGame(); // works for ALL players — runner writes seed, others poll
   } else {
     startGame();
@@ -8096,6 +8098,10 @@ function ftApplyState(s) {
 
   if (!gameActive) {
     ftStopPolling();
+    // Start watching for the next game — so this player can rejoin even if they
+    // miss the banner or the Continue button doesn't fire (race condition safety net).
+    // watchMyTable will launch launchFriendTableGame when the seed changes.
+    if (_myTableId) watchMyTable(_myTableId, _ftSeed);
     // Show end-game banner for non-winning players who received this via sync
     // (The winning player already called endGame() locally)
     if (s.winnerGlobal !== null && s.winnerGlobal !== undefined) {
@@ -8133,11 +8139,17 @@ function ftApplyState(s) {
       const names = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
       showWinCelebration(winnerLocal, names, () => {
         mpShowEndBanner(winnerLocal, rawLocal, mults, gameDeltas, names);
-        // Set up Continue button for Friend Table — all players can trigger restart
-        const btn = document.getElementById('btn-end-session');
-        if (btn) {
-          btn.textContent = '🏠 Leave Room';
-          btn.onclick = endSessionFinal;
+        // Set up buttons for Friend Table — Continue restarts, Leave exits
+        const endBtn = document.getElementById('btn-end-session');
+        if (endBtn) {
+          endBtn.textContent = '🏠 Leave Room';
+          endBtn.onclick = endSessionFinal;
+        }
+        // Ensure Continue Playing button works (it calls continueGame → ftRestartGame)
+        const contBtn = document.querySelector('#winner-banner .btn-gold');
+        if (contBtn) {
+          contBtn.textContent = 'Continue Playing';
+          contBtn.onclick = continueGame;
         }
       });
     }
@@ -8214,6 +8226,8 @@ async function ftRestartGame() {
 
   // Stop old game polling — stale states must not re-apply
   ftStopPolling();
+  // Also clear watchMyTable safety-net to prevent double-launch
+  if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
 
   const oldSeed = _ftSeed;
 
