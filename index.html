@@ -8055,7 +8055,12 @@ function ftApplyState(s) {
   if (s.gameId && s.gameId !== _ftSeed) return;
 
   // Reject stale states — only ever move time forward
-  if (s.seq <= _ftAppliedSeq) return;
+  if (s.seq <= _ftAppliedSeq) {
+    // Even on stale seq, refresh controls so a stuck human player can recover
+    setPlayerControls(isMyTurn());
+    updateTurnIndicator();
+    return;
+  }
   _ftAppliedSeq = s.seq;
 
   const toLoc = g => (g - r + 4) % 4;
@@ -8148,6 +8153,14 @@ function ftApplyState(s) {
   if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
     setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 900 + Math.random()*500);
+  }
+  // Safety-net: if it's this player's turn but controls appear disabled, force re-enable.
+  // This catches the case where a push was dropped mid-round and the player's screen froze.
+  if (isMyTurn() && gameActive) {
+    const playBtn = document.getElementById('btn-play');
+    if (playBtn && playBtn.disabled) {
+      setTimeout(() => { if (isMyTurn() && gameActive) setPlayerControls(true); }, 300);
+    }
   }
 }
 
