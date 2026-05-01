@@ -7474,10 +7474,10 @@ async function reserveNpcSeat(tableId, seatNum) {
     _myGlobalSeat = seatNum - 1;
     _ftIsHost    = current.host_id === supaUser.id;
 
-    // Pass the current seed so watchMyTable waits for a NEW seed (next game).
-    // If no seed exists yet, pass a sentinel so we still wait for the first new seed.
+    // Pass both current seed and started_at so watchMyTable waits for a genuinely NEW game.
     const currentSeed = current.payload?.seed || 'none';
-    watchMyTable(tableId, currentSeed);
+    const currentStartedAt = current.started_at || 'none';
+    watchMyTable(tableId, currentSeed, currentStartedAt);
     loadTables();
     toast('✅ Reserved! You will join when the current game ends.');
   } catch(e) { console.warn('reserveNpcSeat:', e); toast('❌ Could not reserve seat: ' + e.message); }
@@ -7649,9 +7649,9 @@ async function startTableGame(tableId) {
 }
 
 // ── watchMyTable — polls until game (re)starts ───────────
-// waitForNewSeed: if set, only launch when the seed CHANGES from this value.
-// Used by reserveNpcSeat so a mid-game joiner waits for the next deal.
-function watchMyTable(tableId, waitForNewSeed) {
+// waitForNewSeed / waitForNewStartedAt: captured by reserveNpcSeat.
+// Only launches when BOTH seed AND started_at differ — guarantees a new game.
+function watchMyTable(tableId, waitForNewSeed, waitForNewStartedAt) {
   if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
   _myTableWatchSub = setInterval(async () => {
     if (gameActive) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; return; }
@@ -7661,9 +7661,11 @@ function watchMyTable(tableId, waitForNewSeed) {
       if (!row) return;
       const seed = row.payload?.seed;
       if (!seed) return;
-      // If waitForNewSeed is set, block until seed changes (player joining mid-game)
-      // 'none' means no seed existed at join time — any real seed is the new game
-      if (waitForNewSeed !== undefined && seed === waitForNewSeed) return;
+      // If waiting for next game: both seed AND started_at must be different
+      if (waitForNewSeed !== undefined) {
+        const startedAt = row.started_at || 'none';
+        if (seed === waitForNewSeed || startedAt === waitForNewStartedAt) return;
+      }
       if (row.status === 'playing') {
         clearInterval(_myTableWatchSub); _myTableWatchSub = null;
         closeFriendRoom();
@@ -7700,14 +7702,14 @@ async function launchFriendTableGame(table) {
   const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
   _ftSeats    = seats;
 
-  // Use _myTableSeat (set when sitting down) as the authoritative seat.
-  // Fall back to indexOf only if not already set — avoids rotation errors
-  // if the DB row is fetched at a moment of minor inconsistency.
-  if (_myTableSeat) {
-    _myGlobalSeat = _myTableSeat - 1; // seat 1-4 → index 0-3
-  } else {
-    _myGlobalSeat = seats.indexOf(supaUser.id);
-    _myTableSeat  = _myGlobalSeat + 1;
+  // Derive global seat from the DB row — source of truth.
+  // Fall back to _myTableSeat if our ID isn't in the row yet (timing edge case).
+  const idxInRow = seats.indexOf(supaUser.id);
+  if (idxInRow >= 0) {
+    _myGlobalSeat = idxInRow;
+    _myTableSeat  = idxInRow + 1;
+  } else if (_myTableSeat) {
+    _myGlobalSeat = _myTableSeat - 1;
   }
   _ftSeed = table.payload.seed;
 
