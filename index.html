@@ -8347,14 +8347,22 @@ async function ftAfterMove() {
     }, 5000);
     return; // game over — no human-turn or ghost-pass logic needed
   }
-  // Retry push for human-turn hand-offs
+  // Retry push for human-turn hand-offs.
+  // Snapshot currentPlayer — if it changes (they played/passed), cancel the retry.
+  // This prevents a stale retry from overwriting a play the next human just made.
   if (!isMyTurn() && !mpNpcSlots[currentPlayer]) {
+    const retryPlayer = currentPlayer;
+    const retrySeed   = _ftSeed;
     setTimeout(async () => {
       if (!_myTableId || !gameActive) return;
+      if (_ftSeed !== retrySeed) return;       // new game
+      if (currentPlayer !== retryPlayer) return; // player already acted — cancel
       await ftPushState();
     }, 3000);
     setTimeout(async () => {
       if (!_myTableId || !gameActive) return;
+      if (_ftSeed !== retrySeed) return;
+      if (currentPlayer !== retryPlayer) return;
       await ftPushState();
     }, 7000);
     // Ghost-pass: force-pass for a disconnected human after 45s
