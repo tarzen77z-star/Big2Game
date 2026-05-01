@@ -8186,6 +8186,22 @@ async function ftAfterMove() {
       if (!_myTableId || !gameActive) return;
       await ftPushState();
     }, 7000);
+    // Ghost-pass safety: if a human player is disconnected or stuck in lobby,
+    // the NPC runner force-passes for them after 45s to prevent the game freezing.
+    // Token snapshot ensures this only fires if currentPlayer hasn't changed.
+    if (ftAmNpcRunner()) {
+      const ghostTok = ++mpTurnToken;
+      const ghostPlayer = currentPlayer;
+      setTimeout(() => {
+        if (mpTurnToken !== ghostTok) return; // player acted — cancel
+        if (!gameActive || !_myTableId) return;
+        if (currentPlayer !== ghostPlayer) return; // turn already moved on
+        if (mpNpcSlots[currentPlayer]) return; // now an NPC slot — let npcTurn handle it
+        // Still the same human player's turn after 45s — force pass for them
+        toast('⏱ ' + playerName(currentPlayer) + ' timed out — auto-pass');
+        doPass(currentPlayer);
+      }, 45000);
+    }
   }
 }
 
@@ -8208,7 +8224,7 @@ async function ftRestartGame() {
     // Runner writes new seed right away
     const newSeed = Math.floor(Math.random() * 0x7fffffff);
     await supaClient.from('friend_tables')
-      .update({ payload: { seed: newSeed, started: true }, pending_move: null })
+      .update({ payload: { seed: newSeed, started: true }, pending_move: null, started_at: new Date().toISOString() })
       .eq('id', _myTableId);
     // Clean up old game_move notifications (best-effort)
     try {
