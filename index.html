@@ -7562,7 +7562,7 @@ async function confirmLeaveTable() {
 
 function cleanupFriendTable() {
   _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; _ftSeats = [];
-  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeq = 0; _ftSeqCounter = 0;
+  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeq = 0; _ftSeqCounter = 0; _ftGameOverHandled = false;
   _ftJoinedAtGame = 0;  // reset so next table sit-down is treated as fresh
   ftStopPolling();
   stopTableTimer();
@@ -7677,11 +7677,12 @@ function watchMyTable(tableId, waitForNewSeed) {
         closeFriendRoom();
 
         // Reset sync state before launching
-        _ftAppliedSeq  = 0;
-        _ftSeenKeys    = new Set();
-        _ftLastNotifId = null;
-        _ftLastPmSeq   = 0;
-        _ftSeqCounter  = 0;
+        _ftAppliedSeq       = 0;
+        _ftSeenKeys         = new Set();
+        _ftLastNotifId      = null;
+        _ftLastPmSeq        = 0;
+        _ftSeqCounter       = 0;
+        _ftGameOverHandled  = false;
 
         await launchFriendTableGame(row);
 
@@ -8048,7 +8049,8 @@ async function ftPushState() {
   }
 }
 
-let _ftAppliedSeq = 0; // monotonic: reject states older than what we've already applied
+let _ftAppliedSeq = 0;      // monotonic: reject states older than what we've already applied
+let _ftGameOverHandled = false; // true once end-game banner has been shown — blocks retries
 
 // Apply state received from another player
 function ftApplyState(s) {
@@ -8104,6 +8106,10 @@ function ftApplyState(s) {
 
   if (!gameActive) {
     ftStopPolling();
+    // If we already showed the end-game banner, ignore further game-over pushes
+    // (retries from the winner at +2s/+5s must not reset the banner)
+    if (_ftGameOverHandled) return;
+    _ftGameOverHandled = true;
     // Show end-game banner for non-winning players who received this via sync
     // (The winning player already called endGame() locally)
     if (s.winnerGlobal !== null && s.winnerGlobal !== undefined) {
