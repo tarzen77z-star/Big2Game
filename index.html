@@ -8351,6 +8351,16 @@ async function notifyFriendsTableStarted(tableId) {
 }
 
 // ── Table subscriptions ───────────────────────────────────
+// Fingerprint of lobby-relevant fields per table row.
+// Used to skip loadTables() when only pending_move changed (card plays).
+let _tableFingerprints = {};
+function _tableLobbyFingerprint(row) {
+  return [row.seat_1,row.seat_2,row.seat_3,row.seat_4,
+          row.status,row.started_at,
+          JSON.stringify(row.ready_votes),
+          row.payload?.seed].join('|');
+}
+
 function subscribeToTables() {
   if (!supaClient || _tableRealtimeSub) return;
   _tableRealtimeSub = supaClient
@@ -8358,7 +8368,17 @@ function subscribeToTables() {
     .on('postgres_changes', {
       event: '*', schema: 'public', table: 'friend_tables',
       filter: 'table_group=eq.' + _currentTableGroup
-    }, () => { loadTables(); })
+    }, (payload) => {
+      // DELETE or missing row → always reload
+      if (payload.eventType === 'DELETE' || !payload.new) { loadTables(); return; }
+      const row = payload.new;
+      // Skip reload when ONLY pending_move changed (card plays every second).
+      // That column is irrelevant to the lobby UI — ignoring it stops the flash.
+      const fp = _tableLobbyFingerprint(row);
+      if (_tableFingerprints[row.id] === fp) return;
+      _tableFingerprints[row.id] = fp;
+      loadTables();
+    })
     .subscribe(s => console.log('Tables lobby sub:', s));
 }
 
