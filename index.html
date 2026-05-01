@@ -8166,10 +8166,6 @@ function ftApplyState(s) {
   // Reject states from a different game (previous or future)
   if (s.gameId && s.gameId !== _ftSeed) return;
 
-  // If the new game is already running, reject game-over states from the previous game
-  // (late retry pushes arriving after the new game has launched)
-  if (gameActive && s.ga === false) return;
-
   // If seated but not yet in this game, only process game-over states
   if (!gameActive && s.ga !== false) return;
 
