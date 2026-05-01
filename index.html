@@ -7923,6 +7923,14 @@ function ftStartPolling(tableId) {
 
 function ftStopPolling() {
   if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
+  // Do NOT remove _friendTableGameSub here — keep it alive to catch the game_result
+  // UPDATE that the winner writes just after the ga:false notification.
+  // It gets cleaned up in ftShowGameResultBanner → ftStopPollingFull(), or
+  // when a new game starts via ftStartPolling which replaces the channel.
+}
+
+function ftStopPollingFull() {
+  if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
   if (_friendTableGameSub && supaClient) {
     supaClient.removeChannel(_friendTableGameSub);
     _friendTableGameSub = null;
@@ -8021,7 +8029,7 @@ function ftShowGameResultBanner(gr) {
   const names = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
 
   gameActive = false;
-  ftStopPolling();
+  ftStopPollingFull();
   saveFriendGameStats(winnerLocal === 0, gameDeltas[0]);
 
   showWinCelebration(winnerLocal, names, () => {
@@ -8225,33 +8233,11 @@ function ftApplyState(s) {
   renderAll();
 
   if (!gameActive) {
-    // Game over. Stop polling and show the result banner.
-    // Single authoritative path: always use game_result from the DB via ftShowGameResultBanner.
-    // This avoids race conditions between the ga:false notification and the game_result write.
+    // Game over — stop the 1s poll timer (but keep _friendTableGameSub alive to catch game_result).
+    // _friendTableGameSub fires when winner writes game_result → ftShowGameResultBanner.
     if (_ftGameOverHandled) return;
     _ftGameOverHandled = true;
-    ftStopPolling();
-
-    // Poll for game_result — retry until it appears (winner writes it just before pushing)
-    const seedSnap = _ftSeed;
-    const tableSnap = _myTableId;
-    function pollForResult(attempt) {
-      if (!supaClient || !tableSnap) return;
-      supaClient.from('friend_tables')
-        .select('game_result')
-        .eq('id', tableSnap)
-        .single()
-        .then(({ data: row }) => {
-          const gr = row?.game_result;
-          if (gr && gr.seed === seedSnap) {
-            ftShowGameResultBanner(gr);
-          } else if (attempt < 10) {
-            // game_result not written yet — retry in 500ms (winner writes it just before notification)
-            setTimeout(() => pollForResult(attempt + 1), 500);
-          }
-        });
-    }
-    pollForResult(0);
+    if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
     return;
   }
 
