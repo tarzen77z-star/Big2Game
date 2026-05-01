@@ -8054,6 +8054,11 @@ function ftApplyState(s) {
   // Reject states from a different game (previous or future)
   if (s.gameId && s.gameId !== _ftSeed) return;
 
+  // If we're seated at the table but not yet in this game (gameActive=false for us),
+  // only process game-over states (ga=false in the incoming state) — not mid-game moves.
+  // This prevents Fatpika's lobby screen from re-rendering on every move while she waits.
+  if (!gameActive && s.ga !== false) return;
+
   // Reject stale states — only ever move time forward
   if (s.seq <= _ftAppliedSeq) return;
   _ftAppliedSeq = s.seq;
