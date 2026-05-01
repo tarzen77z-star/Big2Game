@@ -8169,8 +8169,25 @@ function ftApplyState(s) {
   // Snapshot what changed so we can show feedback
   const prevLastPlay = lastPlay;
 
-  // Reconstruct local state from global state
-  hands             = [0,1,2,3].map(li => s.h[(li + r) % 4]);
+  // Reconstruct local state from global state.
+  // IMPORTANT: preserve hands[0] (this player's own hand) to keep their sort order.
+  // The state's version of our hand is authoritative for card count but may be in a
+  // different order (the sender rotated it). We only replace hands[0] if the count
+  // changed (i.e. we played cards) — detected by comparing card keys.
+  const incomingMyHand = s.h[r];     // global index r = this player's global seat
+  const myHandKeys     = new Set(hands[0].map(c => c.rank + c.suit));
+  const incomingKeys   = new Set(incomingMyHand.map(c => c.rank + c.suit));
+  const myHandChanged  = myHandKeys.size !== incomingKeys.size ||
+                         [...myHandKeys].some(k => !incomingKeys.has(k));
+  if (myHandChanged) {
+    // Our hand changed (we played) — take the incoming version then re-sort to match
+    // the current sort order (compareCards = rank+suit ascending, same as initial deal)
+    hands[0] = incomingMyHand.slice().sort(compareCards);
+  }
+  // Always update opponent hands (indices 1-3) from the state
+  hands[1] = s.h[(r + 1) % 4];
+  hands[2] = s.h[(r + 2) % 4];
+  hands[3] = s.h[(r + 3) % 4];
   currentPlayer     = toLoc(s.cp);
   openingPlayer     = toLoc(s.op);
   lastPlay          = s.lp ? {...s.lp, playerIdx: toLoc(s.lp.pi)} : null;
