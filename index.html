@@ -8098,10 +8098,6 @@ function ftApplyState(s) {
 
   if (!gameActive) {
     ftStopPolling();
-    // Start watching for the next game — so this player can rejoin even if they
-    // miss the banner or the Continue button doesn't fire (race condition safety net).
-    // watchMyTable will launch launchFriendTableGame when the seed changes.
-    if (_myTableId) watchMyTable(_myTableId, _ftSeed);
     // Show end-game banner for non-winning players who received this via sync
     // (The winning player already called endGame() locally)
     if (s.winnerGlobal !== null && s.winnerGlobal !== undefined) {
