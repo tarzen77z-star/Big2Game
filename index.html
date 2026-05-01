@@ -5358,6 +5358,13 @@ function endGame(winnerIdx) {
       ss:     [0,1,2,3].map(g => mpSessionScores[(g - r + 4) % 4]),
       seed:   _ftSeed,   // so players can reject stale results from previous games
     };
+    // Clear last-play state before pushing the game-over notification.
+    // If the game ended on a power play, lastPlay/discardPile still hold the
+    // winning card. Other clients must not receive and apply that stale state.
+    lastPlay = null;
+    passCount = 0;
+    currentRoundPlays = [];
+
     // Write game_result to DB FIRST, then push the ga:false notification.
     // Other clients' _friendTableGameSub must be alive when game_result arrives —
     // if the notification lands first, ftStopPolling() kills the subscription.
