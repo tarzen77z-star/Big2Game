@@ -8172,23 +8172,32 @@ async function ftAfterMove() {
   if (!_myTableId) return;
   setPlayerControls(isMyTurn());
   updateTurnIndicator();
-  await ftPushState(); // write state then schedule next NPC
+  await ftPushState();
   // If runner and NPC is next, continue chain
   if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
     setTimeout(() => {
-      if (mpTurnToken !== tok) return; // superseded
+      if (mpTurnToken !== tok) return;
       if (!gameActive) return;
-      // Re-verify it's still an NPC's turn (state may have changed via sync)
-      if (mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
-        npcTurn();
-      }
+      if (mpNpcSlots[currentPlayer] && ftAmNpcRunner()) npcTurn();
     }, 900 + Math.random()*500);
   }
-  // Retry push for human-turn hand-offs: if the next player is a human (not NPC),
-  // re-push the state after a delay so a dropped notification doesn't freeze their turn.
-  // This is scoped to the move-maker only and does not affect lobby/waiting players.
-  if (gameActive && !isMyTurn() && !mpNpcSlots[currentPlayer]) {
+  // Game-over retry: push again at +2s and +5s so other players reliably get
+  // the result banner even if the first push is dropped.
+  if (!gameActive) {
+    const tableIdSnap = _myTableId;
+    setTimeout(async () => {
+      if (!tableIdSnap || _myTableId !== tableIdSnap) return;
+      await ftPushState();
+    }, 2000);
+    setTimeout(async () => {
+      if (!tableIdSnap || _myTableId !== tableIdSnap) return;
+      await ftPushState();
+    }, 5000);
+    return; // game over — no human-turn or ghost-pass logic needed
+  }
+  // Retry push for human-turn hand-offs
+  if (!isMyTurn() && !mpNpcSlots[currentPlayer]) {
     setTimeout(async () => {
       if (!_myTableId || !gameActive) return;
       await ftPushState();
@@ -8197,18 +8206,15 @@ async function ftAfterMove() {
       if (!_myTableId || !gameActive) return;
       await ftPushState();
     }, 7000);
-    // Ghost-pass safety: if a human player is disconnected or stuck in lobby,
-    // the NPC runner force-passes for them after 45s to prevent the game freezing.
-    // Token snapshot ensures this only fires if currentPlayer hasn't changed.
+    // Ghost-pass: force-pass for a disconnected human after 45s
     if (ftAmNpcRunner()) {
       const ghostTok = ++mpTurnToken;
       const ghostPlayer = currentPlayer;
       setTimeout(() => {
-        if (mpTurnToken !== ghostTok) return; // player acted — cancel
+        if (mpTurnToken !== ghostTok) return;
         if (!gameActive || !_myTableId) return;
-        if (currentPlayer !== ghostPlayer) return; // turn already moved on
-        if (mpNpcSlots[currentPlayer]) return; // now an NPC slot — let npcTurn handle it
-        // Still the same human player's turn after 45s — force pass for them
+        if (currentPlayer !== ghostPlayer) return;
+        if (mpNpcSlots[currentPlayer]) return;
         toast('⏱ ' + playerName(currentPlayer) + ' timed out — auto-pass');
         doPass(currentPlayer);
       }, 45000);
@@ -8239,14 +8245,20 @@ async function ftRestartGame() {
     await supaClient.from('friend_tables')
       .update({ payload: { seed: newSeed, started: true }, pending_move: null })
       .eq('id', _myTableId);
-    // Clean up old game_move notifications (best-effort)
-    try {
-      await supaClient.from('friend_notifications')
-        .delete()
-        .in('recipient_id', _ftOtherSeats.concat([supaUser.id]))
-        .eq('type', 'game_move')
-        .eq('payload->>table_id', _myTableId);
-    } catch(e) {}
+    // Clean up old game_move notifications after a delay — wait long enough
+    // for other players to have received and processed the game-over push
+    // before we delete it from their inboxes.
+    const cleanupTableId = _myTableId;
+    const cleanupSeats   = _ftOtherSeats.concat([supaUser.id]);
+    setTimeout(async () => {
+      try {
+        await supaClient.from('friend_notifications')
+          .delete()
+          .in('recipient_id', cleanupSeats)
+          .eq('type', 'game_move')
+          .eq('payload->>table_id', cleanupTableId);
+      } catch(e) {}
+    }, 8000); // 8s: enough time for the +2s and +5s retries to land
   }
 
   // Show a "waiting" indicator while polling
