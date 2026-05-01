@@ -5340,16 +5340,35 @@ function endGame(winnerIdx) {
     // Accumulate session scores (host-local order)
     gameDeltas.forEach((d,i) => { mpSessionScores[i] = (mpSessionScores[i]||0) + d; });
   }
-  // In FT mode: push final state NOW (after mpSessionScores updated) so other players
-  // get correct scores in their game-over banner
+  // In FT mode: write game result to DB so ALL players see it reliably.
+  // This is simpler and more robust than notification delivery.
   if (_myTableId) {
-    ftAfterMove(); // async — fires push with updated ss including this game's deltas
-    // Save this player's friend game stats (local player is always index 0)
     const myDelta = gameDeltas[0];
     const iWon = winnerIdx === 0;
     saveFriendGameStats(iWon, myDelta);
+    // Build result in global order so any player can read it
+    const r = _myGlobalSeat;
+    const toGlobal = li => (li + r) % 4;
+    const winnerGlobal = toGlobal(winnerIdx);
+    const gameResultPayload = {
+      winnerGlobal,
+      raw:    [0,1,2,3].map(g => raw[(g - r + 4) % 4]),
+      mults:  [0,1,2,3].map(g => mults[(g - r + 4) % 4]),
+      deltas: [0,1,2,3].map(g => gameDeltas[(g - r + 4) % 4]),
+      ss:     [0,1,2,3].map(g => mpSessionScores[(g - r + 4) % 4]),
+      seed:   _ftSeed,   // so players can reject stale results from previous games
+    };
+    // Write to DB — subscribeToTables realtime fires on all clients immediately
+    supaClient.from('friend_tables')
+      .update({ game_result: gameResultPayload })
+      .eq('id', _myTableId)
+      .then(({ error }) => { if (error) console.warn('[FT] game_result write failed:', error.message); });
+    // Still push state via notifications as backup (for score sync)
+    ftAfterMove();
   }
 
+  // Mark game-over handled so the realtime game_result event doesn't double-show
+  if (_myTableId) _ftGameOverHandled = true;
   showWinCelebration(winnerIdx, mpNames, () => {
     mpShowEndBanner(winnerIdx, raw, mults, gameDeltas, mpNames);
     // In Friend Table mode: update Leave button text
@@ -7868,14 +7887,20 @@ function ftStartPolling(tableId) {
         event: 'UPDATE', schema: 'public', table: 'friend_tables',
         filter: 'id=eq.' + tableId
       }, (payload) => {
+        // ── Game result: show banner on all clients when winner writes game_result ──
+        const gr = payload.new?.game_result;
+        if (gr && gr.seed === _ftSeed && !_ftGameOverHandled) {
+          _ftGameOverHandled = true;
+          ftShowGameResultBanner(gr);
+          return;
+        }
+        // ── Normal game move via pending_move ──
         const pm = payload.new?.pending_move;
         if (!pm || !pm.state) return;
         if (pm.author === _myGlobalSeat) return;
         if (_ftSeenKeys.has('pm:' + pm.seq)) return;
         _ftSeenKeys.add('pm:' + pm.seq);
         _ftLastPmSeq = pm.seq;
-        // Game-over states arrive via friend_notifications, not pending_move realtime.
-        // Skip ga:false here to prevent _ftGameOverHandled being set prematurely.
         if (pm.state.ga !== false) ftApplyState(pm.state);
       })
       .subscribe(() => {});
@@ -7930,14 +7955,24 @@ async function ftPollMoves(tableId) {
     }
   } catch(e) {}
 
-  // Path B: friend_tables.pending_move (always readable — ft_select allows all authenticated)
+  // Path B: friend_tables row — check both game_result and pending_move
   try {
     const { data: row, error } = await supaClient
       .from('friend_tables')
-      .select('pending_move')
+      .select('pending_move,game_result')
       .eq('id', _myTableId)
       .single();
-    if (error || !row?.pending_move) return;
+    if (error || !row) return;
+
+    // Check game_result first — if present and for this game, show banner
+    const gr = row.game_result;
+    if (gr && gr.seed === _ftSeed && !_ftGameOverHandled) {
+      _ftGameOverHandled = true;
+      ftShowGameResultBanner(gr);
+      return;
+    }
+
+    if (!row.pending_move) return;
     const pm = row.pending_move;
     if (!pm.state || pm.author === _myGlobalSeat) return;
     if (_ftSeenKeys.has('pm:' + pm.seq)) return;
@@ -7948,6 +7983,43 @@ async function ftPollMoves(tableId) {
     // would corrupt _ftGameOverHandled before the notification arrives.
     if (pm.state.ga !== false) ftApplyState(pm.state);
   } catch(e) { console.warn('[FT POLL] exception:', e); }
+}
+
+// Show the game result banner for any FT player from the global-order game_result payload.
+// Called when game_result is written to the DB — works for winner and all others.
+function ftShowGameResultBanner(gr) {
+  if (!gr) return;
+  const r = _myGlobalSeat;
+  // Rotate global-order arrays to this player's local perspective (index 0 = me)
+  const rawLocal    = [0,1,2,3].map(li => gr.raw[(li + r) % 4]);
+  const mults       = [0,1,2,3].map(li => gr.mults[(li + r) % 4]);
+  const gameDeltas  = [0,1,2,3].map(li => gr.deltas[(li + r) % 4]);
+  const winnerLocal = (gr.winnerGlobal - r + 4) % 4;
+
+  // Apply session scores from the result
+  if (gr.ss) mpSessionScores = [0,1,2,3].map(li => gr.ss[(li + r) % 4] || 0);
+
+  // Record in session history if not already there
+  if (!mpSessionHistory.some(h => h.seed === gr.seed)) {
+    mpSessionHistory.push({ winnerLocalIdx: winnerLocal, gameDeltas: gameDeltas.slice(), raw: rawLocal.slice(), seed: gr.seed });
+  }
+
+  if (!mpSessionNames.length) {
+    mpSessionNames = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
+  }
+  const names = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
+
+  gameActive = false;
+  ftStopPolling();
+  saveFriendGameStats(winnerLocal === 0, gameDeltas[0]);
+
+  showWinCelebration(winnerLocal, names, () => {
+    mpShowEndBanner(winnerLocal, rawLocal, mults, gameDeltas, names);
+    const endBtn = document.getElementById('btn-end-session');
+    if (endBtn) { endBtn.textContent = '🏠 Leave Room'; endBtn.onclick = endSessionFinal; }
+    const contBtn = document.querySelector('#winner-banner .btn-gold');
+    if (contBtn) { contBtn.textContent = 'Continue Playing'; contBtn.onclick = continueGame; }
+  });
 }
 
 // Build the global-order state snapshot every player can remap locally
@@ -8270,7 +8342,7 @@ async function ftRestartGame() {
     // Runner writes new seed right away
     const newSeed = Math.floor(Math.random() * 0x7fffffff);
     await supaClient.from('friend_tables')
-      .update({ payload: { seed: newSeed, started: true }, pending_move: null })
+      .update({ payload: { seed: newSeed, started: true }, pending_move: null, game_result: null })
       .eq('id', _myTableId);
     // Clean up old game_move notifications after a delay — wait long enough
     // for other players to have received and processed the game-over push
@@ -8413,7 +8485,8 @@ function _tableLobbyFingerprint(row) {
   return [row.seat_1,row.seat_2,row.seat_3,row.seat_4,
           row.status,row.started_at,
           JSON.stringify(row.ready_votes),
-          row.payload?.seed].join('|');
+          row.payload?.seed,
+          row.game_result?.seed ?? ''].join('|');
 }
 
 function subscribeToTables() {
