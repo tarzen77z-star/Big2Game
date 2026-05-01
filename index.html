@@ -7686,10 +7686,12 @@ function watchMyTable(tableId, waitForNewSeed) {
 
         await launchFriendTableGame(row);
 
-        // Sync to current game state via pending_move
+        // Sync to current game state via pending_move.
+        // Only apply mid-game states (ga:true) — a game-over pending_move means
+        // the previous game just ended; applying it would corrupt _ftGameOverHandled.
         if (row.pending_move?.state && row.pending_move.state.gameId === row.payload?.seed) {
           const pm = row.pending_move;
-          if (pm.author !== _myGlobalSeat) {
+          if (pm.author !== _myGlobalSeat && pm.state.ga !== false) {
             _ftAppliedSeq = pm.state.seq;
             _ftSeenKeys.add('pm:' + pm.state.seq);
             ftApplyState(pm.state);
@@ -7872,7 +7874,9 @@ function ftStartPolling(tableId) {
         if (_ftSeenKeys.has('pm:' + pm.seq)) return;
         _ftSeenKeys.add('pm:' + pm.seq);
         _ftLastPmSeq = pm.seq;
-        ftApplyState(pm.state);
+        // Game-over states arrive via friend_notifications, not pending_move realtime.
+        // Skip ga:false here to prevent _ftGameOverHandled being set prematurely.
+        if (pm.state.ga !== false) ftApplyState(pm.state);
       })
       .subscribe(() => {});
   }
@@ -7940,7 +7944,9 @@ async function ftPollMoves(tableId) {
     _ftSeenKeys.add('pm:' + pm.seq);
     _ftLastPmSeq = pm.seq;
 
-    ftApplyState(pm.state);
+    // Only apply mid-game states from pending_move — a game-over state here
+    // would corrupt _ftGameOverHandled before the notification arrives.
+    if (pm.state.ga !== false) ftApplyState(pm.state);
   } catch(e) { console.warn('[FT POLL] exception:', e); }
 }
 
@@ -8324,10 +8330,12 @@ async function ftRestartGame() {
 
         await launchFriendTableGame(freshRow);
 
-        // Late joiner: sync to current state via pending_move
+        // Late joiner: sync to current state via pending_move.
+        // Only apply mid-game states — a game-over pending_move would corrupt
+        // _ftGameOverHandled before the current game's result arrives.
         if (freshRow.pending_move?.state && freshRow.pending_move.state.gameId === newSeed) {
           const pm = freshRow.pending_move;
-          if (pm.author !== _myGlobalSeat) {
+          if (pm.author !== _myGlobalSeat && pm.state.ga !== false) {
             _ftAppliedSeq = pm.state.seq;
             _ftSeenKeys.add('pm:' + pm.state.seq);
             ftApplyState(pm.state);
