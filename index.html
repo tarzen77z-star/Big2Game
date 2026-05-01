@@ -8225,77 +8225,33 @@ function ftApplyState(s) {
   renderAll();
 
   if (!gameActive) {
-    // Before stopping polls, do one quick check for game_result in the DB.
-    // The winner writes game_result then pushes the ga:false notification —
-    // but network timing can vary. This ensures we never miss it.
-    if (!_ftGameOverHandled && _myTableId && supaClient) {
+    // Game over. Stop polling and show the result banner.
+    // Single authoritative path: always use game_result from the DB via ftShowGameResultBanner.
+    // This avoids race conditions between the ga:false notification and the game_result write.
+    if (_ftGameOverHandled) return;
+    _ftGameOverHandled = true;
+    ftStopPolling();
+
+    // Poll for game_result — retry until it appears (winner writes it just before pushing)
+    const seedSnap = _ftSeed;
+    const tableSnap = _myTableId;
+    function pollForResult(attempt) {
+      if (!supaClient || !tableSnap) return;
       supaClient.from('friend_tables')
         .select('game_result')
-        .eq('id', _myTableId)
+        .eq('id', tableSnap)
         .single()
         .then(({ data: row }) => {
           const gr = row?.game_result;
-          if (gr && gr.seed === _ftSeed && !_ftGameOverHandled) {
-            _ftGameOverHandled = true;
+          if (gr && gr.seed === seedSnap) {
             ftShowGameResultBanner(gr);
+          } else if (attempt < 10) {
+            // game_result not written yet — retry in 500ms (winner writes it just before notification)
+            setTimeout(() => pollForResult(attempt + 1), 500);
           }
         });
     }
-    ftStopPolling();
-    // Show end-game banner for non-winning players who received this via sync.
-    // _ftGameOverHandled ensures we only show the banner once — retries from
-    // the winner (at +2s/+5s) must not reset or duplicate the banner.
-    if (_ftGameOverHandled) return;
-    _ftGameOverHandled = true;
-    if (s.winnerGlobal !== null && s.winnerGlobal !== undefined) {
-      const r2 = _myGlobalSeat;
-      const winnerLocal = (s.winnerGlobal - r2 + 4) % 4;
-      // Reconstruct hands/scores from state for banner display
-      const raw = s.h.map(h => h.length); // global order card counts
-      const rawLocal = [0,1,2,3].map(li => s.h[(li + r2) % 4].length);
-      const mults = rawLocal.map(penaltyMultiplier);
-      const gameDeltas = [0,0,0,0];
-      for (let i = 0; i < 4; i++) {
-        for (let j = i + 1; j < 4; j++) {
-          const diff = rawLocal[i] * mults[i] - rawLocal[j] * mults[j];
-          gameDeltas[i] -= diff;
-          gameDeltas[j] += diff;
-        }
-      }
-      // Session scores — s.ss is in GLOBAL order; rotate to local perspective
-      if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[(li + r) % 4] || 0);
-      // Record in session history only if not already recorded (prevent double-count)
-      const alreadyRecorded = mpSessionHistory.some(h => h.seq === s.seq);
-      if (!alreadyRecorded) {
-        mpSessionHistory.push({
-          winnerLocalIdx: winnerLocal,
-          gameDeltas: gameDeltas.slice(),
-          raw: rawLocal.slice(),
-          seq: s.seq
-        });
-        saveFriendGameStats(winnerLocal === 0, gameDeltas[0]);
-      }
-      if (!mpSessionNames.length) {
-        mpSessionNames = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
-      }
-      // Build names in local order — always show the banner
-      const names = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
-      showWinCelebration(winnerLocal, names, () => {
-        mpShowEndBanner(winnerLocal, rawLocal, mults, gameDeltas, names);
-        // Set up buttons for Friend Table — Continue restarts, Leave exits
-        const endBtn = document.getElementById('btn-end-session');
-        if (endBtn) {
-          endBtn.textContent = '🏠 Leave Room';
-          endBtn.onclick = endSessionFinal;
-        }
-        // Ensure Continue Playing button works (it calls continueGame → ftRestartGame)
-        const contBtn = document.querySelector('#winner-banner .btn-gold');
-        if (contBtn) {
-          contBtn.textContent = 'Continue Playing';
-          contBtn.onclick = continueGame;
-        }
-      });
-    }
+    pollForResult(0);
     return;
   }
 
