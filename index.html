@@ -7987,6 +7987,22 @@ async function ftPushState() {
   const r = _myGlobalSeat;
   const state = ftBuildState();
 
+  // For game-over pushes, re-fetch the table row to pick up any late-joining
+  // players (e.g. FatPika) whose UIDs were written to NPC slots after this
+  // client's _ftSeats was last set.
+  if (!gameActive) {
+    try {
+      const { data: freshRow } = await supaClient
+        .from('friend_tables')
+        .select('seat_1,seat_2,seat_3,seat_4')
+        .eq('id', _myTableId)
+        .single();
+      if (freshRow) {
+        _ftSeats = [freshRow.seat_1, freshRow.seat_2, freshRow.seat_3, freshRow.seat_4];
+      }
+    } catch(e) {}
+  }
+
   // Derive recipients fresh from _ftSeats — handles mid-session joins correctly
   const recipients = _ftSeats.filter(uid => uid && uid !== supaUser.id);
   if (!recipients.length) return;
@@ -8106,12 +8122,11 @@ function ftApplyState(s) {
 
   if (!gameActive) {
     ftStopPolling();
-    // If we already showed the end-game banner, ignore further game-over pushes
-    // (retries from the winner at +2s/+5s must not reset the banner)
+    // Show end-game banner for non-winning players who received this via sync.
+    // _ftGameOverHandled ensures we only show the banner once — retries from
+    // the winner (at +2s/+5s) must not reset or duplicate the banner.
     if (_ftGameOverHandled) return;
     _ftGameOverHandled = true;
-    // Show end-game banner for non-winning players who received this via sync
-    // (The winning player already called endGame() locally)
     if (s.winnerGlobal !== null && s.winnerGlobal !== undefined) {
       const r2 = _myGlobalSeat;
       const winnerLocal = (s.winnerGlobal - r2 + 4) % 4;
@@ -8129,21 +8144,21 @@ function ftApplyState(s) {
       }
       // Session scores — s.ss is in GLOBAL order; rotate to local perspective
       if (s.ss) mpSessionScores = [0,1,2,3].map(li => s.ss[(li + r) % 4] || 0);
-      // Record in session history (only if not already recorded — prevent double-count on reconnect)
+      // Record in session history only if not already recorded (prevent double-count)
       const alreadyRecorded = mpSessionHistory.some(h => h.seq === s.seq);
-      if (alreadyRecorded) return;
-      mpSessionHistory.push({
-        winnerLocalIdx: winnerLocal,
-        gameDeltas: gameDeltas.slice(),
-        raw: rawLocal.slice(),
-        seq: s.seq
-      });
-      // Save this player's friend game stats (local index 0 = this player)
-      saveFriendGameStats(winnerLocal === 0, gameDeltas[0]);
+      if (!alreadyRecorded) {
+        mpSessionHistory.push({
+          winnerLocalIdx: winnerLocal,
+          gameDeltas: gameDeltas.slice(),
+          raw: rawLocal.slice(),
+          seq: s.seq
+        });
+        saveFriendGameStats(winnerLocal === 0, gameDeltas[0]);
+      }
       if (!mpSessionNames.length) {
         mpSessionNames = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
       }
-      // Build names in local order
+      // Build names in local order — always show the banner
       const names = [0,1,2,3].map(li => mpSeats[li]?.name || ('Player '+(li+1)));
       showWinCelebration(winnerLocal, names, () => {
         mpShowEndBanner(winnerLocal, rawLocal, mults, gameDeltas, names);
@@ -8300,11 +8315,12 @@ async function ftRestartGame() {
         } catch(e) {}
 
         // Reset all sync state for new game
-        _ftAppliedSeq  = 0;
-        _ftSeenKeys    = new Set();
-        _ftLastNotifId = null;
-        _ftLastPmSeq   = 0;
-        _ftSeqCounter  = 0;
+        _ftAppliedSeq       = 0;
+        _ftSeenKeys         = new Set();
+        _ftLastNotifId      = null;
+        _ftLastPmSeq        = 0;
+        _ftSeqCounter       = 0;
+        _ftGameOverHandled  = false;
 
         await launchFriendTableGame(freshRow);
 
