@@ -5358,13 +5358,17 @@ function endGame(winnerIdx) {
       ss:     [0,1,2,3].map(g => mpSessionScores[(g - r + 4) % 4]),
       seed:   _ftSeed,   // so players can reject stale results from previous games
     };
-    // Write to DB — subscribeToTables realtime fires on all clients immediately
+    // Write game_result to DB FIRST, then push the ga:false notification.
+    // Other clients' _friendTableGameSub must be alive when game_result arrives —
+    // if the notification lands first, ftStopPolling() kills the subscription.
     supaClient.from('friend_tables')
       .update({ game_result: gameResultPayload })
       .eq('id', _myTableId)
-      .then(({ error }) => { if (error) console.warn('[FT] game_result write failed:', error.message); });
-    // Still push state via notifications as backup (for score sync)
-    ftAfterMove();
+      .then(({ error }) => {
+        if (error) console.warn('[FT] game_result write failed:', error.message);
+        // Push ga:false notification AFTER game_result is committed to DB
+        ftAfterMove();
+      });
   }
 
   // Mark game-over handled so the realtime game_result event doesn't double-show
@@ -8216,6 +8220,22 @@ function ftApplyState(s) {
   renderAll();
 
   if (!gameActive) {
+    // Before stopping polls, do one quick check for game_result in the DB.
+    // The winner writes game_result then pushes the ga:false notification —
+    // but network timing can vary. This ensures we never miss it.
+    if (!_ftGameOverHandled && _myTableId && supaClient) {
+      supaClient.from('friend_tables')
+        .select('game_result')
+        .eq('id', _myTableId)
+        .single()
+        .then(({ data: row }) => {
+          const gr = row?.game_result;
+          if (gr && gr.seed === _ftSeed && !_ftGameOverHandled) {
+            _ftGameOverHandled = true;
+            ftShowGameResultBanner(gr);
+          }
+        });
+    }
     ftStopPolling();
     // Show end-game banner for non-winning players who received this via sync.
     // _ftGameOverHandled ensures we only show the banner once — retries from
