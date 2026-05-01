@@ -7664,6 +7664,13 @@ function watchMyTable(tableId, waitForNewSeed) {
       // If waiting for next game: wait until the seed changes (new game issued)
       if (waitForNewSeed !== undefined) {
         if (seed === waitForNewSeed) return; // same seed = same game, keep waiting
+        // Seed changed — but wait until pending_move also reflects the new game.
+        // ftRestartGame writes the new seed immediately but the game isn't ready
+        // until the runner pushes the first state. Without this check, a waiting
+        // player (like Fatpika) would launch into a phantom game mid-game-1.
+        const pm = row.pending_move;
+        const pmMatchesSeed = pm && pm.state && pm.state.gameId === seed;
+        if (!pmMatchesSeed) return; // game not ready yet — keep waiting
       }
       if (row.status === 'playing') {
         clearInterval(_myTableWatchSub); _myTableWatchSub = null;
@@ -7678,8 +7685,7 @@ function watchMyTable(tableId, waitForNewSeed) {
 
         await launchFriendTableGame(row);
 
-        // Sync to current game state via pending_move, same as ftRestartGame does
-        // This catches up a late joiner to wherever the game currently is
+        // Sync to current game state via pending_move
         if (row.pending_move?.state && row.pending_move.state.gameId === row.payload?.seed) {
           const pm = row.pending_move;
           if (pm.author !== _myGlobalSeat) {
