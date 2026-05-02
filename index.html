@@ -3793,6 +3793,16 @@ function renderHand() {
 
 function renderDiscardPile() {
   const pile = document.getElementById('discard-pile');
+
+  // Build a fingerprint of the current round plays to avoid unnecessary DOM rebuilds.
+  // Rebuilding the pile triggers CSS entry animations causing cards to flash from low opacity.
+  const crpKey = currentRoundPlays.map(p => p.playerIdx + ':' + p.cards.map(c=>c.rank+c.suit).join(',') + ':' + (p === currentRoundPlays[currentRoundPlays.length-1] ? 'new' : 'old')).join('|');
+  if (pile._crpKey === crpKey && pile.children.length > 0) {
+    // Pile content unchanged — skip rebuild to prevent flash
+    pile.classList.toggle('discard-zoomed', discardZoomed);
+    return;
+  }
+  pile._crpKey = crpKey;
   pile.innerHTML = '';
 
   // Re-apply zoom class based on current state
