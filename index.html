@@ -2986,7 +2986,7 @@
     </div>
     <div id="winner-room-standing"></div>
     <div class="modal-buttons" style="margin-top:1.5rem">
-      <button class="btn-gold" onclick="continueGame()">Continue Playing</button>
+      <button class="btn-gold" onclick="continueGame()">▶ Continue Playing</button>
       <button class="btn-ghost" id="btn-end-session" onclick="endSession()">End Session</button>
     </div>
   </div>
@@ -5392,12 +5392,17 @@ function endGame(winnerIdx) {
   if (_myTableId) _ftGameOverHandled = true;
   showWinCelebration(winnerIdx, mpNames, () => {
     mpShowEndBanner(winnerIdx, raw, mults, gameDeltas, mpNames);
-    // In Friend Table mode: update Leave button text
+    // In Friend Table mode: update button labels and actions
     if (_myTableId) {
       const btn = document.getElementById('btn-end-session');
       if (btn) {
-        btn.textContent = '🏠 Leave Room';
-        btn.onclick = endSessionFinal;
+        btn.textContent = '🚪 Leave Room';
+        btn.onclick = ftLeaveRoom;
+      }
+      const contBtn = document.querySelector('#winner-banner .btn-gold');
+      if (contBtn) {
+        contBtn.textContent = '▶ Continue Playing';
+        contBtn.onclick = continueGame;
       }
     }
   });
@@ -5520,6 +5525,11 @@ function continueGame() {
 }
 
 function endSession() {
+  // In Friend Table mode, always use ftLeaveRoom
+  if (_myTableId) {
+    ftLeaveRoom();
+    return;
+  }
   // In MP with session history: show final standings before leaving
   if (mpGameMode === 'vs_human' && mpSessionHistory.length > 0) {
     // Switch to room standing tab and update button to "Leave Room"
@@ -5553,6 +5563,36 @@ function endSessionFinal() {
   }
   if (_myTableId) cleanupFriendTable();
   mpDestroy();
+}
+
+// ── Player leaves FT room after a game ends ───────────────────────
+// Nulls their DB seat so remaining players see them as NPC.
+// Their session score stays in mpSessionScores for the other players to inherit.
+async function ftLeaveRoom() {
+  document.getElementById('winner-banner').style.display = 'none';
+
+  if (_myTableId && supaClient && supaUser && _myTableSeat) {
+    // Null our seat — staying players will detect this and treat us as NPC
+    const seatCol = 'seat_' + _myTableSeat;
+    try {
+      await supaClient.from('friend_tables')
+        .update({ [seatCol]: null })
+        .eq('id', _myTableId);
+    } catch(e) { console.warn('ftLeaveRoom seat null failed:', e); }
+  }
+
+  // Return to splash
+  document.getElementById('game').style.display = 'none';
+  clearResumeButton();
+  document.getElementById('splash').style.display = 'block';
+
+  const btn = document.getElementById('btn-end-session');
+  if (btn) { btn.textContent = 'End Session'; btn.onclick = endSession; }
+
+  // Clean up but preserve session scores in case of rejoin
+  if (_myTableId) cleanupFriendTable();
+  mpDestroy();
+  toast('You left the room. Your score is held for the remaining players.');
 }
 
 function showScoreboard() {
@@ -6306,17 +6346,23 @@ function showWinCelebration(winnerLocalIdx, names, callback) {
   if (msg) msg.textContent = isHuman ? '🏆 You Win!' : '🃏 ' + winnerName + ' Wins!';
   if (sub) sub.textContent = isHuman ? 'Brilliant play!' : 'Better luck next time!';
 
-  // Show overlay
+  // Show overlay for ALL players (winner and non-winners)
   const cel = document.getElementById('win-celebration');
   if (cel) cel.classList.add('show');
 
-  // Confetti only for human win
-  if (isHuman) spawnConfetti();
+  // Confetti for winner, simpler spark effect for others
+  if (isHuman) {
+    spawnConfetti();
+  } else if (_myTableId) {
+    // Brief spark/glow for non-winner in Friend Table
+    spawnDefeatSparks();
+  }
 
-  // After delay, hide celebration and show result
+  // After delay, hide celebration and show result banner
   setTimeout(() => {
     if (cel) cel.classList.remove('show');
     clearConfetti();
+    clearDefeatSparks();
     callback();
   }, 2200);
 }
@@ -6344,6 +6390,30 @@ function spawnConfetti() {
 function clearConfetti() {
   _confettiPieces.forEach(el => { try { el.remove(); } catch(e) {} });
   _confettiPieces.length = 0;
+}
+
+const _defeatSparks = [];
+function spawnDefeatSparks() {
+  const colors = ['#c9a84c','#e8c96a','#ffffff','#a09060'];
+  for (let i = 0; i < 20; i++) {
+    setTimeout(() => {
+      const el = document.createElement('div');
+      el.className = 'confetti-piece';
+      el.style.left = (20 + Math.random() * 60) + 'vw';
+      el.style.background = colors[Math.floor(Math.random()*colors.length)];
+      el.style.width = (4 + Math.random()*5) + 'px';
+      el.style.height = (4 + Math.random()*5) + 'px';
+      el.style.opacity = '0.6';
+      el.style.animationDuration = (1.2 + Math.random()*1) + 's';
+      el.style.animationDelay = '0s';
+      document.body.appendChild(el);
+      _defeatSparks.push(el);
+    }, i * 40);
+  }
+}
+function clearDefeatSparks() {
+  _defeatSparks.forEach(el => { try { el.remove(); } catch(e) {} });
+  _defeatSparks.length = 0;
 }
 
 
@@ -7604,7 +7674,7 @@ async function confirmLeaveTable() {
 
 function cleanupFriendTable() {
   _myTableId = null; _myTableSeat = null; _myGlobalSeat = null; _ftSeats = [];
-  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeq = 0; _ftSeqCounter = 0; _ftGameOverHandled = false;
+  _ftOtherSeats = []; _ftSeenKeys = new Set(); _ftLastNotifId = null; _ftLastPmSeq = 0; _ftAppliedSeq = 0; _ftSeqCounter = 0; _ftGameOverHandled = false; _ftLocalPlaySeq = 0;
   _ftJoinedAtGame = 0;  // reset so next table sit-down is treated as fresh
   ftStopPolling();
   stopTableTimer();
@@ -7725,6 +7795,7 @@ function watchMyTable(tableId, waitForNewSeed) {
         _ftLastPmSeq        = 0;
         _ftSeqCounter       = 0;
         _ftGameOverHandled  = false;
+        _ftLocalPlaySeq     = 0;
 
         await launchFriendTableGame(row);
 
@@ -8046,10 +8117,18 @@ function ftShowGameResultBanner(gr) {
 
   showWinCelebration(winnerLocal, names, () => {
     mpShowEndBanner(winnerLocal, rawLocal, mults, gameDeltas, names);
+    // Wire up Leave Room button
     const endBtn = document.getElementById('btn-end-session');
-    if (endBtn) { endBtn.textContent = '🏠 Leave Room'; endBtn.onclick = endSessionFinal; }
+    if (endBtn) {
+      endBtn.textContent = '🚪 Leave Room';
+      endBtn.onclick = ftLeaveRoom;
+    }
+    // Wire up Continue Playing button
     const contBtn = document.querySelector('#winner-banner .btn-gold');
-    if (contBtn) { contBtn.textContent = 'Continue Playing'; contBtn.onclick = continueGame; }
+    if (contBtn) {
+      contBtn.textContent = '▶ Continue Playing';
+      contBtn.onclick = continueGame;
+    }
   });
 }
 
@@ -8176,6 +8255,7 @@ async function ftPushState() {
 
 let _ftAppliedSeq = 0;      // monotonic: reject states older than what we've already applied
 let _ftGameOverHandled = false; // true once end-game banner has been shown — blocks retries
+let _ftLocalPlaySeq    = 0;     // seq of our most recent local push — blocks stale retries from undoing it
 
 // Apply state received from another player
 function ftApplyState(s) {
@@ -8191,6 +8271,9 @@ function ftApplyState(s) {
 
   // Reject stale states — only ever move time forward
   if (s.seq <= _ftAppliedSeq) return;
+  // Reject states that are older than our last local push — prevents another player's
+  // retry from undoing a play we just made (e.g. restoring a card we already played)
+  if (_ftLocalPlaySeq > 0 && s.seq < _ftLocalPlaySeq) return;
   _ftAppliedSeq = s.seq;
 
   const toLoc = g => (g - r + 4) % 4;
@@ -8250,6 +8333,30 @@ function ftApplyState(s) {
     // That handler sets _ftGameOverHandled = true and calls ftShowGameResultBanner.
     if (_ftGameOverHandled) return; // already handled (winner's own endGame set this)
     if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
+    // Proactively poll DB for game_result in case we missed the realtime event.
+    // Retry every 1.5s for up to 15s — covers late DB writes and network hiccups.
+    let _grRetries = 0;
+    const _grTableId = _myTableId;
+    const _grSeed    = _ftSeed;
+    const _grTimer = setInterval(async () => {
+      if (_ftGameOverHandled || !_grTableId || _myTableId !== _grTableId) {
+        clearInterval(_grTimer); return;
+      }
+      if (++_grRetries > 10) { clearInterval(_grTimer); return; } // give up after 15s
+      try {
+        const { data: row } = await supaClient
+          .from('friend_tables')
+          .select('game_result')
+          .eq('id', _grTableId)
+          .single();
+        const gr = row?.game_result;
+        if (gr && gr.seed === _grSeed && !_ftGameOverHandled) {
+          clearInterval(_grTimer);
+          _ftGameOverHandled = true;
+          ftShowGameResultBanner(gr);
+        }
+      } catch(e) {}
+    }, 1500);
     return;
   }
 
@@ -8268,6 +8375,8 @@ async function ftAfterMove() {
   setPlayerControls(isMyTurn());
   updateTurnIndicator();
   await ftPushState();
+  // Record the seq we just pushed so ftApplyState can reject older stale retries
+  _ftLocalPlaySeq = _ftSeqCounter;
   // If runner and NPC is next, continue chain
   if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
     const tok = ++mpTurnToken;
@@ -8409,6 +8518,7 @@ async function ftRestartGame() {
         _ftLastPmSeq        = 0;
         _ftSeqCounter       = 0;
         _ftGameOverHandled  = false;
+        _ftLocalPlaySeq     = 0;
 
         await launchFriendTableGame(freshRow);
 
