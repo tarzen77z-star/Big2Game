@@ -5376,39 +5376,13 @@ function endGame(winnerIdx) {
     currentRoundPlays = [];
 
     // Write game_result to DB FIRST, then push the ga:false notification.
-    // Other clients' _friendTableGameSub must be alive when game_result arrives.
-    // We ALSO send game_result directly via friend_notifications (backup channel)
-    // so non-winners get the banner even if they miss the DB UPDATE realtime event.
+    // Other clients' _friendTableGameSub must be alive when game_result arrives —
+    // if the notification lands first, ftStopPolling() kills the subscription.
     supaClient.from('friend_tables')
       .update({ game_result: gameResultPayload })
       .eq('id', _myTableId)
-      .then(async ({ error }) => {
+      .then(({ error }) => {
         if (error) console.warn('[FT] game_result write failed:', error.message);
-        // Re-fetch the freshest seat list — catches late-joiners who claimed NPC
-        // seats after this client's _ftSeats was last set at launchFriendTableGame.
-        try {
-          const { data: freshRow } = await supaClient
-            .from('friend_tables').select('seat_1,seat_2,seat_3,seat_4').eq('id', _myTableId).single();
-          if (freshRow) {
-            _ftSeats = [freshRow.seat_1, freshRow.seat_2, freshRow.seat_3, freshRow.seat_4];
-            _ftOtherSeats = _ftSeats.filter(uid => uid && uid !== supaUser.id);
-          }
-        } catch(e) {}
-        // Send game_result directly via friend_notifications to every human at the table.
-        // This is a second independent delivery channel — if they missed the DB UPDATE
-        // realtime event, they will catch this in their poll loop or realtime subscription.
-        const grRecipients = _ftSeats.filter(uid => uid && uid !== supaUser.id);
-        if (grRecipients.length > 0) {
-          const grRows = grRecipients.map(uid => ({
-            sender_id:    supaUser.id,
-            recipient_id: uid,
-            type:         'game_result_ft',
-            payload:      { table_id: _myTableId, game_result: gameResultPayload },
-            read:         false,
-          }));
-          supaClient.from('friend_notifications').insert(grRows)
-            .then(({ error: e }) => { if (e) console.warn('[FT] game_result_ft notify failed:', e.message); });
-        }
         // Push ga:false notification AFTER game_result is committed to DB
         ftAfterMove();
       });
@@ -7165,18 +7139,6 @@ function subscribeToNotifications() {
         _ftSeenKeys.add(n.id);
         _ftLastNotifId = n.id;
         ftApplyState(pm.state);
-      } else if (n.type === 'game_result_ft') {
-        // ── Game result delivered directly via notification (backup channel) ──
-        // Ensures non-winners see the end banner even if the DB realtime UPDATE is missed.
-        const pm = n.payload;
-        if (!pm || !pm.game_result) return;
-        if (!_myTableId || pm.table_id !== _myTableId) return;
-        if (n.sender_id === supaUser.id) return; // our own echo (we are the winner)
-        const gr = pm.game_result;
-        if (!gr || gr.seed !== _ftSeed) return;  // wrong game seed — stale result
-        if (_ftGameOverHandled) return;           // already showing banner
-        _ftGameOverHandled = true;
-        ftShowGameResultBanner(gr);
       }
     })
     .subscribe((status) => {
@@ -7915,16 +7877,35 @@ async function launchFriendTableGame(table) {
   for (let i = 0; i < 52; i++) hands[i % 4].push(deck[i]);
   hands.forEach(h => h.sort(compareCards));
 
+  // ── Full game state reset (mirrors startGame) ──
+  // IMPORTANT: must clear discardPile, currentRoundPlays, last-play-info, zoom
+  // states, and startingHandProfile — these are NOT reset by FT restart logic
+  // and will otherwise show the previous game's cards/messages on screen.
+  discardPile          = [];
+  currentRoundPlays    = [];
+  globalDiscardedCards = new Set();
+  lastPlay             = null;
+  passCount            = 0;
+  firstTurn            = true;
+  selectedCards        = [];
+  gameActive           = true;
+  _roundsPlayed        = 0;
+  _roundsWonByHuman    = 0;
+
+  // Clear the "last play" info label so old game's message is gone
+  const _lpiEl = document.getElementById('last-play-info');
+  if (_lpiEl) _lpiEl.textContent = '';
+
+  // Reset zoom so new game starts at normal view
+  resetHandZoom();
+  resetDiscardZoom();
+
   // ── Find who has 3♦ ──
   openingPlayer = hands.findIndex(h => h.some(c => c.rank==='3' && c.suit==='♦'));
   currentPlayer = openingPlayer;
-  passCount     = 0;
-  firstTurn     = true;
-  lastPlay      = null;
-  currentRoundPlays = [];
-  globalDiscardedCards = new Set();
-  selectedCards = [];
-  gameActive    = true;
+
+  // Record starting hand profiles for NPC AI
+  startingHandProfile = hands.map(h => classifyStartingHand(h));
 
   // ── Rotate: put MY seat at index 0 ──
   // This means hands[0] = my hand, hands[1] = right, etc.
@@ -8033,8 +8014,7 @@ function ftStartPolling(tableId) {
         if (_ftSeenKeys.has('pm:' + pm.seq)) return;
         _ftSeenKeys.add('pm:' + pm.seq);
         _ftLastPmSeq = pm.seq;
-        // Apply mid-game and game-over states (ga:false triggers the banner path in ftApplyState)
-        ftApplyState(pm.state);
+        if (pm.state.ga !== false) ftApplyState(pm.state);
       })
       .subscribe(() => {});
   }
@@ -8067,50 +8047,36 @@ function ftAmNpcRunner() {
 
 // Fallback poll — checks BOTH friend_notifications AND pending_move
 async function ftPollMoves(tableId) {
-  if (!supaClient || _myGlobalSeat === null || !_myTableId) return;
-  // After game ends we still need to poll for game_result banner — don't gate on gameActive
+  if (!gameActive || !supaClient || _myGlobalSeat === null || !_myTableId) return;
 
-  // Path A: friend_notifications — apply ALL unseen moves AND game results in seq order
+  // Path A: friend_notifications — apply ALL unseen moves in seq order
   try {
-    const since = new Date(Date.now() - 60000).toISOString(); // look back 60s for robustness
+    const since = new Date(Date.now() - 30000).toISOString();
     const { data, error } = await supaClient
       .from('friend_notifications')
-      .select('id,sender_id,type,payload,created_at')
+      .select('id,sender_id,payload,created_at')
       .eq('recipient_id', supaUser.id)
-      .in('type', ['game_move', 'game_result_ft'])
+      .eq('type', 'game_move')
       .eq('payload->>table_id', _myTableId)
       .gt('created_at', since)
       .order('created_at', { ascending: true });
     if (!error && data && data.length) {
-      // First: check for game_result_ft (direct banner delivery from winner)
-      for (const row of data) {
-        if (row.type === 'game_result_ft' && row.sender_id !== supaUser.id && !_ftGameOverHandled) {
-          const gr = row.payload?.game_result;
-          if (gr && gr.seed === _ftSeed) {
-            _ftGameOverHandled = true;
-            ftShowGameResultBanner(gr);
-            return;
-          }
-        }
+      // Collect all unseen states, sort by seq, apply in order
+      const unseen = data
+        .filter(row => !_ftSeenKeys.has(row.id) && row.sender_id !== supaUser.id)
+        .map(row => ({ id: row.id, state: row.payload?.state }))
+        .filter(x => x.state)
+        .sort((a, b) => (a.state.seq || 0) - (b.state.seq || 0));
+      for (const { id, state } of unseen) {
+        _ftSeenKeys.add(id);
+        _ftLastNotifId = id;
+        ftApplyState(state);
       }
-      // Then: collect all unseen game_move states, sort by seq, apply in order
-      if (gameActive) {
-        const unseen = data
-          .filter(row => row.type === 'game_move' && !_ftSeenKeys.has(row.id) && row.sender_id !== supaUser.id)
-          .map(row => ({ id: row.id, state: row.payload?.state }))
-          .filter(x => x.state)
-          .sort((a, b) => (a.state.seq || 0) - (b.state.seq || 0));
-        for (const { id, state } of unseen) {
-          _ftSeenKeys.add(id);
-          _ftLastNotifId = id;
-          ftApplyState(state);
-        }
-        if (unseen.length) return; // handled via notifications
-      }
+      if (unseen.length) return; // handled via notifications
     }
   } catch(e) {}
 
-  // Path B: friend_tables row — check game_result first, then pending_move
+  // Path B: friend_tables row — check both game_result and pending_move
   try {
     const { data: row, error } = await supaClient
       .from('friend_tables')
@@ -8119,7 +8085,7 @@ async function ftPollMoves(tableId) {
       .single();
     if (error || !row) return;
 
-    // Check game_result — if present and for this game, show banner
+    // Check game_result first — if present and for this game, show banner
     const gr = row.game_result;
     if (gr && gr.seed === _ftSeed && !_ftGameOverHandled) {
       _ftGameOverHandled = true;
@@ -8127,7 +8093,6 @@ async function ftPollMoves(tableId) {
       return;
     }
 
-    if (!gameActive) return; // game over and no result yet — wait for retry loop
     if (!row.pending_move) return;
     const pm = row.pending_move;
     if (!pm.state || pm.author === _myGlobalSeat) return;
@@ -8382,43 +8347,21 @@ function ftApplyState(s) {
   renderAll();
 
   if (!gameActive) {
-    // Game over — stop the 1s poll timer but keep _friendTableGameSub alive to
-    // catch the game_result UPDATE that the winner writes immediately after.
+    // Game over — stop the 1s poll timer but do NOT set _ftGameOverHandled yet.
+    // _friendTableGameSub is still alive and will fire when winner writes game_result.
+    // That handler sets _ftGameOverHandled = true and calls ftShowGameResultBanner.
     if (_ftGameOverHandled) return; // already handled (winner's own endGame set this)
-    // Keep the poll timer running — ftPollMoves now handles !gameActive so it
-    // can still pick up game_result_ft notifications and game_result from DB.
-    // (The guard at the top of ftPollMoves no longer blocks on !gameActive)
-
+    if (_ftPollTimer) { clearInterval(_ftPollTimer); _ftPollTimer = null; }
+    // Proactively poll DB for game_result in case we missed the realtime event.
+    // Retry every 1.5s for up to 15s — covers late DB writes and network hiccups.
+    let _grRetries = 0;
     const _grTableId = _myTableId;
     const _grSeed    = _ftSeed;
-
-    // Immediately check both channels — catches the case where game_result was
-    // written BEFORE this ga:false state arrived (common in 2-player games).
-    async function _checkGameResult() {
-      if (_ftGameOverHandled || !_grTableId || _myTableId !== _grTableId) return true;
-      // Channel A: friend_notifications (game_result_ft direct delivery)
-      try {
-        const since = new Date(Date.now() - 60000).toISOString();
-        const { data: grNotifs } = await supaClient
-          .from('friend_notifications')
-          .select('sender_id,payload')
-          .eq('recipient_id', supaUser.id)
-          .eq('type', 'game_result_ft')
-          .eq('payload->>table_id', _grTableId)
-          .gt('created_at', since)
-          .limit(5);
-        if (grNotifs && grNotifs.length) {
-          for (const row of grNotifs) {
-            const gr = row.payload?.game_result;
-            if (gr && gr.seed === _grSeed && !_ftGameOverHandled) {
-              _ftGameOverHandled = true;
-              ftShowGameResultBanner(gr);
-              return true;
-            }
-          }
-        }
-      } catch(e) {}
-      // Channel B: friend_tables.game_result column
+    const _grTimer = setInterval(async () => {
+      if (_ftGameOverHandled || !_grTableId || _myTableId !== _grTableId) {
+        clearInterval(_grTimer); return;
+      }
+      if (++_grRetries > 10) { clearInterval(_grTimer); return; } // give up after 15s
       try {
         const { data: row } = await supaClient
           .from('friend_tables')
@@ -8427,27 +8370,12 @@ function ftApplyState(s) {
           .single();
         const gr = row?.game_result;
         if (gr && gr.seed === _grSeed && !_ftGameOverHandled) {
+          clearInterval(_grTimer);
           _ftGameOverHandled = true;
           ftShowGameResultBanner(gr);
-          return true;
         }
       } catch(e) {}
-      return false;
-    }
-
-    // Run immediately, then retry every 1.2s for up to 36s (30 retries)
-    let _grRetries = 0;
-    _checkGameResult().then(found => {
-      if (found) return;
-      const _grTimer = setInterval(async () => {
-        if (_ftGameOverHandled || !_grTableId || _myTableId !== _grTableId) {
-          clearInterval(_grTimer); return;
-        }
-        if (++_grRetries > 30) { clearInterval(_grTimer); return; } // give up after 36s
-        const done = await _checkGameResult();
-        if (done) clearInterval(_grTimer);
-      }, 1200);
-    });
+    }, 1500);
     return;
   }
 
@@ -8477,20 +8405,24 @@ async function ftAfterMove() {
       if (mpNpcSlots[currentPlayer] && ftAmNpcRunner()) npcTurn();
     }, 900 + Math.random()*500);
   }
-  // Game-over retry: push again at +2s, +5s, +10s so other players reliably get
-  // the result banner even on slow networks or missed realtime events.
+  // Game-over retry: push again at +2s and +5s so other players reliably get
+  // the result banner even if the first push is dropped.
   // Snapshot the seed — if it changes (new game started), retries are cancelled.
   if (!gameActive) {
     const tableIdSnap = _myTableId;
     const seedSnap    = _ftSeed;
-    [2000, 5000, 10000].forEach(delay => {
-      setTimeout(async () => {
-        if (!tableIdSnap || _myTableId !== tableIdSnap) return;
-        if (_ftSeed !== seedSnap) return; // new game started — don't push old state
-        if (gameActive) return;           // new game already active
-        await ftPushState();
-      }, delay);
-    });
+    setTimeout(async () => {
+      if (!tableIdSnap || _myTableId !== tableIdSnap) return;
+      if (_ftSeed !== seedSnap) return; // new game started — don't push old state
+      if (gameActive) return;           // new game already active
+      await ftPushState();
+    }, 2000);
+    setTimeout(async () => {
+      if (!tableIdSnap || _myTableId !== tableIdSnap) return;
+      if (_ftSeed !== seedSnap) return;
+      if (gameActive) return;
+      await ftPushState();
+    }, 5000);
     return; // game over — no human-turn or ghost-pass logic needed
   }
   // Retry push for human-turn hand-offs.
@@ -8560,10 +8492,10 @@ async function ftRestartGame() {
         await supaClient.from('friend_notifications')
           .delete()
           .in('recipient_id', cleanupSeats)
-          .in('type', ['game_move', 'game_result_ft'])
+          .eq('type', 'game_move')
           .eq('payload->>table_id', cleanupTableId);
       } catch(e) {}
-    }, 12000); // 12s: enough time for the +2s, +5s, +10s retries to land
+    }, 8000); // 8s: enough time for the +2s and +5s retries to land
   }
 
   // Show a "waiting" indicator while polling
