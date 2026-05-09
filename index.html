@@ -5735,14 +5735,30 @@ function endSessionFinal() {
   document.getElementById('splash').style.display = 'block';
   const btn = document.getElementById('btn-end-session');
   if (btn) { btn.textContent = 'End Session'; btn.onclick = endSession; }
-  // In Friend Table mode: null our seat in DB so staying players treat us as NPC
+
+  // Clean up the table seat in DB
   if (_myTableId && supaClient && supaUser && _myTableSeat) {
     const seatCol = 'seat_' + _myTableSeat;
-    supaClient.from(_ftTableName())
-      .update({ [seatCol]: null })
-      .eq('id', _myTableId)
-      .then(() => {});  // fire and forget
+    if (_activeRoomType === 'online') {
+      // Online Room: delete or reset table
+      supaClient.from('online_tables').select('seat_1,seat_2,seat_3,seat_4').eq('id', _myTableId).single()
+        .then(({ data: t }) => {
+          if (!t) return;
+          const others = ['seat_1','seat_2','seat_3','seat_4'].filter(c => t[c] && t[c] !== supaUser.id).length;
+          if (others === 0) {
+            supaClient.from('online_tables').delete().eq('id', _myTableId).then(() => {});
+          } else {
+            supaClient.from('online_tables')
+              .update({ [seatCol]: null, status: 'waiting', payload: {}, ready_votes: '[]' })
+              .eq('id', _myTableId).then(() => {});
+          }
+        });
+    } else {
+      // Friend Table: just null the seat
+      supaClient.from(_ftTableName()).update({ [seatCol]: null }).eq('id', _myTableId).then(() => {});
+    }
   }
+
   if (_activeRoomType === 'online') { _orCleanupTable(); } else if (_myTableId) { cleanupFriendTable(); }
   _activeRoomType = 'friend';
   mpDestroy();
@@ -5755,12 +5771,28 @@ async function ftLeaveRoom() {
   document.getElementById('winner-banner').style.display = 'none';
 
   if (_myTableId && supaClient && supaUser && _myTableSeat) {
-    // Null our seat — staying players will detect this and treat us as NPC
     const seatCol = 'seat_' + _myTableSeat;
+    const tableName = _ftTableName();
     try {
-      await supaClient.from(_ftTableName())
-        .update({ [seatCol]: null })
-        .eq('id', _myTableId);
+      if (_activeRoomType === 'online') {
+        // For Online Room: fetch the row first to decide whether to delete or just null seat
+        const { data: t } = await supaClient.from('online_tables').select('seat_1,seat_2,seat_3,seat_4').eq('id', _myTableId).single();
+        if (t) {
+          const others = ['seat_1','seat_2','seat_3','seat_4'].filter(c => t[c] && t[c] !== supaUser.id).length;
+          if (others === 0) {
+            // Last one out — delete the table entirely so it doesn't linger
+            await supaClient.from('online_tables').delete().eq('id', _myTableId);
+          } else {
+            // Others still in — null our seat and reset status to waiting
+            await supaClient.from('online_tables')
+              .update({ [seatCol]: null, status: 'waiting', payload: {}, ready_votes: '[]' })
+              .eq('id', _myTableId);
+          }
+        }
+      } else {
+        // Friend Table: just null our seat
+        await supaClient.from(tableName).update({ [seatCol]: null }).eq('id', _myTableId);
+      }
     } catch(e) { console.warn('ftLeaveRoom seat null failed:', e); }
   }
 
@@ -5772,11 +5804,11 @@ async function ftLeaveRoom() {
   const btn = document.getElementById('btn-end-session');
   if (btn) { btn.textContent = 'End Session'; btn.onclick = endSession; }
 
-  // Clean up but preserve session scores in case of rejoin
+  // Clean up local state
   if (_activeRoomType === 'online') { _orCleanupTable(); } else if (_myTableId) { cleanupFriendTable(); }
   _activeRoomType = 'friend';
   mpDestroy();
-  toast('You left the room. Your score is held for the remaining players.');
+  toast('You left the room.');
 }
 
 function showScoreboard() {
@@ -9489,22 +9521,35 @@ function mpGuestOnData(data){
 
 // ── Start game ────────────────────────────────────────────
 function mpStartGame(){
-  if(!mpIsHost||mpSeats.length<2)return;
+  if(!mpIsHost||mpConnections.length<1)return; // need at least host + 1 guest
   const deck=shuffle(buildDeck());
   const dealtHands=[[],[],[],[]];
   for(let i=0;i<52;i++) dealtHands[i%4].push(deck[i]);
   dealtHands.forEach(h=>h.sort(compareCards));
-  const seatNames=mpSeats.map(s=>s.name);
+
+  // humanCount = host (1) + connected guests
+  const humanCount = 1 + mpConnections.length;
+
+  // Preserve human seat names; fill remaining slots with NPC names
+  const humanNames = [mpSeats[0]?.name || playerCustomName];
+  for(let ci=0;ci<mpConnections.length;ci++){
+    // Find the seat matching this connection
+    const s = mpSeats.find(x=>x.conn===mpConnections[ci]);
+    humanNames.push(s ? s.name : ('Player '+(ci+2)));
+  }
+  const seatNames = humanNames.slice();
   while(seatNames.length<4) seatNames.push('NPC '+(seatNames.length+1));
-  // npcSeats[i]=true if seat i is an NPC (no human connected)
-  const npcSeatsArr=Array.from({length:4},(_,i)=>i>=mpSeats.length);
+
+  // npcSeats[i]=true only for slots with no human (i >= humanCount)
+  const npcSeatsArr = Array.from({length:4}, (_, i) => i >= humanCount);
+
   const openingP=dealtHands.findIndex(h=>h.some(c=>c.rank==='3'&&c.suit==='♦'));
   const startData={
     type:'start',
     seats:seatNames.map(n=>({name:n})),
     hostRankScore: rankScore,
-    hands:dealtHands,        // global order; guest receives rotated hands in sync
-    openingPlayer:openingP,  // global seat index
+    hands:dealtHands,
+    openingPlayer:openingP,
     npcSeats:npcSeatsArr
   };
   // Tell each guest their seat number
@@ -9512,22 +9557,25 @@ function mpStartGame(){
     try{c.send({...startData,mySeat:ci+1});}catch(e){}
   });
   document.getElementById('mp-lobby').classList.remove('open');
-  // Host starts with global seat 0 = local index 0
   mpHostStartGame(startData);
 }
 
 // Host initialises its own game state (global seats = host local indices)
 function mpHostStartGame(data){
   mpGameMode='vs_human';
-  // Host is always seat 0, so global order = local order for host
-  // Rebuild mpSeats with connections, in global/local order (same for host)
-  mpSeats=data.seats.map((s,i)=>({name:s.name,conn:i===0?null:mpConnections[i-1]}));
+  // Rebuild mpSeats with ONLY human seats (host + one entry per connected guest).
+  // NPC slots must NOT be added here — they are tracked in mpNpcSlots instead.
+  const humanCount = 1 + mpConnections.length;
+  mpSeats = [];
+  mpSeats.push({name: data.seats[0].name, conn: null}); // host at slot 0
+  for(let ci=0;ci<mpConnections.length;ci++){
+    mpSeats.push({name: data.seats[ci+1].name, conn: mpConnections[ci]});
+  }
   mpMySeat=0;
-  mpNpcSlots=data.npcSeats.slice(); // global index = local index for host (seat 0)
+  mpNpcSlots=data.npcSeats.slice(); // correctly built in mpStartGame from humanCount
   mpTurnToken=0;
-  mpSeatRankScores[0]=rankScore; // host's own rank score
+  mpSeatRankScores[0]=rankScore;
 
-  // Host uses global seat order directly (no remap needed since host is seat 0)
   hands=data.hands;
   discardPile=[];currentRoundPlays=[];globalDiscardedCards=new Set();
   lastPlay=null;passCount=0;selectedCards=[];firstTurn=true;gameActive=true;
@@ -9540,10 +9588,8 @@ function mpHostStartGame(data){
   setPlayerControls(currentPlayer===mpMySeat);
   updateTurnIndicator();
 
-  // Broadcast initial state to all guests
   mpBroadcastSync();
 
-  // Fire NPC chain if opening player is an NPC
   if(mpNpcSlots[currentPlayer]){
     mpRunNpcChain();
   }
