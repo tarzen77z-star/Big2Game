@@ -2217,6 +2217,63 @@
   }
   .btn-table-start:hover { background: rgba(45,138,80,0.5); }
 
+
+  /* ── ONLINE ROOM MODAL ── */
+  #online-room-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.88);
+    z-index: 351;
+    align-items: flex-start;
+    justify-content: center;
+    overflow-y: auto;
+    padding: 12px;
+    box-sizing: border-box;
+  }
+  #online-room-overlay.open { display: flex; }
+  #online-room-box {
+    background: linear-gradient(170deg,#160f08 0%,#251508 50%,#1a0e06 100%);
+    border: 1px solid rgba(255,140,60,0.22);
+    border-radius: 20px;
+    padding: 0;
+    width: min(460px, 98vw);
+    position: relative;
+    margin: auto;
+    box-shadow: 0 16px 60px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #or-header {
+    padding: 18px 20px 14px;
+    background: linear-gradient(135deg,rgba(120,50,10,0.5),rgba(80,35,8,0.3));
+    border-bottom: 1px solid rgba(255,140,60,0.18);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #or-header h2 {
+    font-family: 'Cinzel Decorative', 'Crimson Pro', serif;
+    font-size: 1.15rem;
+    color: rgba(255,220,180,0.95);
+    margin: 0;
+    letter-spacing: 0.03em;
+  }
+  #or-header-close {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 50%;
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: rgba(255,180,100,0.7);
+    font-size: 0.9rem;
+    transition: all 0.15s;
+  }
+  #or-header-close:hover { background: rgba(200,60,60,0.25); color: #ffaaaa; border-color: rgba(200,60,60,0.4); }
 </style>
 </head>
 <body>
@@ -2314,14 +2371,14 @@
     <div class="sp-action-arrow">▸</div>
   </div>
 
-  <!-- ── ONLINE — coming soon ── -->
-  <div class="sp-action-card sp-action-dim">
-    <div class="sp-action-card-suit" style="color:rgba(160,184,255,0.2)">♥</div>
+  <!-- ── ONLINE ROOM ── -->
+  <div class="sp-action-card" onclick="openOnlineRoom()">
+    <div class="sp-action-card-suit" style="color:rgba(255,160,80,0.7)">♥</div>
     <div class="sp-action-card-body">
-      <div class="sp-action-title" style="color:rgba(160,184,255,0.35)">Online Room <span class="sp-soon-pill">Soon</span></div>
-      <div class="sp-action-sub" style="color:rgba(140,165,220,0.25)">Ranked matches worldwide</div>
+      <div class="sp-action-title">Online Room</div>
+      <div class="sp-action-sub">Tables · Leaderboard · Everyone</div>
     </div>
-    <div class="sp-action-arrow" style="color:rgba(255,255,255,0.1)">▸</div>
+    <div class="sp-action-arrow">▸</div>
   </div>
 
   <!-- ── HOST GAME ── -->
@@ -2463,6 +2520,69 @@
         </div>
       </div>
 
+    </div>
+  </div>
+</div>
+
+
+<!-- ONLINE ROOM MODAL -->
+<div id="online-room-overlay">
+  <div id="online-room-box">
+    <div id="or-header">
+      <h2>🌐 Online Room</h2>
+      <div id="or-header-close" onclick="closeOnlineRoom()">✕</div>
+    </div>
+    <div id="online-auth-warning" style="display:none;text-align:center;padding:10px 4px 20px;">
+      <div style="font-size:3.5rem;margin-bottom:12px;filter:drop-shadow(0 0 18px rgba(255,140,60,0.45))">🌐</div>
+      <div style="font-family:'Playfair Display',serif;font-size:1.35rem;color:var(--gold-light);font-weight:700;margin-bottom:6px">Online Room</div>
+      <div style="font-size:0.82rem;color:rgba(160,184,255,0.8);margin-bottom:18px;line-height:1.6">Play against anyone online. Earn Online Points.</div>
+      <div style="text-align:left;background:rgba(0,0,0,0.25);border:1px solid rgba(255,140,60,0.18);border-radius:12px;padding:14px 16px;margin-bottom:18px;">
+        <div style="font-size:0.72rem;letter-spacing:0.15em;color:rgba(255,140,60,0.55);margin-bottom:10px;font-family:'Crimson Pro',serif">WITH A FREE ACCOUNT YOU GET</div>
+        <div class="friend-feature-item">🌐 <strong>Open Tables</strong> — join any open seat worldwide</div>
+        <div class="friend-feature-item">🏆 <strong>Online Points</strong> — earn points in every online game</div>
+        <div class="friend-feature-item">📊 <strong>Global Leaderboard</strong> — rank among all online players</div>
+        <div class="friend-feature-item">☁ <strong>Cloud Save</strong> — your progress syncs everywhere</div>
+      </div>
+      <button onclick="closeOnlineRoom();showAuthModal();document.getElementById('auth-tab-signup')?.click();"
+        style="width:100%;padding:11px;background:linear-gradient(135deg,rgba(180,80,20,0.6),rgba(255,140,60,0.4));border:1.5px solid rgba(255,140,60,0.5);border-radius:10px;color:rgba(255,220,180,0.95);font-family:'Crimson Pro',serif;font-size:1rem;font-weight:700;cursor:pointer;margin-bottom:8px;letter-spacing:0.04em;">
+        ✨ Create Free Account
+      </button>
+      <button onclick="closeOnlineRoom();showAuthModal();"
+        style="width:100%;padding:9px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(200,220,255,0.6);font-family:'Crimson Pro',serif;font-size:0.9rem;cursor:pointer;margin-bottom:10px;">
+        Sign In to Existing Account
+      </button>
+      <button onclick="closeOnlineRoom()"
+        style="background:none;border:none;color:rgba(255,255,255,0.25);font-size:0.78rem;cursor:pointer;font-family:'Crimson Pro',serif;">
+        Maybe later
+      </button>
+    </div>
+    <div id="online-room-content" style="display:none;flex-direction:column;overflow:hidden;flex:1;">
+      <div class="friend-tabs">
+        <div class="friend-tab active" id="ortab-tables" onclick="orSwitchTab('tables')"><svg width="14" height="14" viewBox="0 0 20 20" style="vertical-align:-2px;margin-right:3px" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="10" cy="10" rx="9" ry="6" stroke="currentColor" stroke-width="1.5"/><ellipse cx="10" cy="10" rx="5.5" ry="3.2" stroke="currentColor" stroke-width="1"/><line x1="1" y1="10" x2="19" y2="10" stroke="currentColor" stroke-width="1" stroke-dasharray="2 1.5"/></svg>Tables</div>
+        <div class="friend-tab" id="ortab-leaderboard" onclick="orSwitchTab('leaderboard')">🏆 Leaderboard</div>
+      </div>
+      <div class="friend-section active" id="orsec-tables">
+        <div id="or-tables-group-bar" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+          <button class="table-group-btn active" id="ortgrp-beginner"      onclick="orSelectTableGroup('beginner')">🌱 Beginner</button>
+          <button class="table-group-btn locked"  id="ortgrp-intermediate" onclick="orSelectTableGroup('intermediate')" disabled>🥉 Intermediate</button>
+          <button class="table-group-btn locked"  id="ortgrp-hard"         onclick="orSelectTableGroup('hard')" disabled>🥈 Hard</button>
+          <button class="table-group-btn locked"  id="ortgrp-pro"          onclick="orSelectTableGroup('pro')" disabled>🥇 Pro</button>
+        </div>
+        <div id="or-online-count" style="font-size:0.7rem;color:rgba(140,200,120,0.7);margin-bottom:8px;text-align:right;font-family:'Crimson Pro',serif;"></div>
+        <div id="or-tables-list">
+          <div class="friend-status-msg">Loading tables…</div>
+        </div>
+        <div id="or-my-table-banner" style="display:none;background:rgba(45,138,80,0.12);border:1px solid rgba(45,138,80,0.35);border-radius:10px;padding:10px 14px;margin-top:10px;font-size:0.82rem;color:#7fffaa;text-align:center;">
+          <span id="or-my-table-banner-text">You are seated at a table</span>
+          <button onclick="orLeaveCurrentTable()" style="margin-left:10px;background:rgba(180,30,30,0.25);border:1px solid rgba(200,60,60,0.35);color:#ffaaaa;border-radius:6px;padding:3px 10px;font-size:0.75rem;cursor:pointer;font-family:'Crimson Pro',serif;">Leave</button>
+        </div>
+      </div>
+      <div class="friend-section" id="orsec-leaderboard">
+        <div class="fr-section-label" style="margin-bottom:10px">Online Points · All Players</div>
+        <div id="or-leaderboard-content">
+          <div style="text-align:center;padding:20px;color:var(--text-dim);font-style:italic;font-size:0.82rem">Loading leaderboard…</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -5355,7 +5475,7 @@ function endGame(winnerIdx) {
   if (_myTableId) {
     const myDelta = gameDeltas[0];
     const iWon = winnerIdx === 0;
-    saveFriendGameStats(iWon, myDelta);
+    if (_activeRoomType === 'online') saveOnlineGameStats(iWon, myDelta); else saveFriendGameStats(iWon, myDelta);
     // Build result in global order so any player can read it
     const r = _myGlobalSeat;
     const toGlobal = li => (li + r) % 4;
@@ -5378,7 +5498,7 @@ function endGame(winnerIdx) {
     // Write game_result to DB FIRST, then push the ga:false notification.
     // Other clients' _friendTableGameSub must be alive when game_result arrives —
     // if the notification lands first, ftStopPolling() kills the subscription.
-    supaClient.from('friend_tables')
+    supaClient.from(_ftTableName())
       .update({ game_result: gameResultPayload })
       .eq('id', _myTableId)
       .then(({ error }) => {
@@ -5556,12 +5676,13 @@ function endSessionFinal() {
   // In Friend Table mode: null our seat in DB so staying players treat us as NPC
   if (_myTableId && supaClient && supaUser && _myTableSeat) {
     const seatCol = 'seat_' + _myTableSeat;
-    supaClient.from('friend_tables')
+    supaClient.from(_ftTableName())
       .update({ [seatCol]: null })
       .eq('id', _myTableId)
       .then(() => {});  // fire and forget
   }
-  if (_myTableId) cleanupFriendTable();
+  if (_activeRoomType === 'online') { _orCleanupTable(); } else if (_myTableId) { cleanupFriendTable(); }
+  _activeRoomType = 'friend';
   mpDestroy();
 }
 
@@ -5575,7 +5696,7 @@ async function ftLeaveRoom() {
     // Null our seat — staying players will detect this and treat us as NPC
     const seatCol = 'seat_' + _myTableSeat;
     try {
-      await supaClient.from('friend_tables')
+      await supaClient.from(_ftTableName())
         .update({ [seatCol]: null })
         .eq('id', _myTableId);
     } catch(e) { console.warn('ftLeaveRoom seat null failed:', e); }
@@ -5590,7 +5711,8 @@ async function ftLeaveRoom() {
   if (btn) { btn.textContent = 'End Session'; btn.onclick = endSession; }
 
   // Clean up but preserve session scores in case of rejoin
-  if (_myTableId) cleanupFriendTable();
+  if (_activeRoomType === 'online') { _orCleanupTable(); } else if (_myTableId) { cleanupFriendTable(); }
+  _activeRoomType = 'friend';
   mpDestroy();
   toast('You left the room. Your score is held for the remaining players.');
 }
@@ -7769,24 +7891,20 @@ function watchMyTable(tableId, waitForNewSeed) {
     if (gameActive) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; return; }
     try {
       const { data: row } = await supaClient
-        .from('friend_tables').select('*').eq('id', tableId).single();
+        .from(_ftTableName()).select('*').eq('id', tableId).single();
       if (!row) return;
       const seed = row.payload?.seed;
       if (!seed) return;
       // If waiting for next game: wait until the seed changes (new game issued)
       if (waitForNewSeed !== undefined) {
         if (seed === waitForNewSeed) return; // same seed = same game, keep waiting
-        // Seed changed — but wait until pending_move also reflects the new game.
-        // ftRestartGame writes the new seed immediately but the game isn't ready
-        // until the runner pushes the first state. Without this check, a waiting
-        // player (like Fatpika) would launch into a phantom game mid-game-1.
         const pm = row.pending_move;
         const pmMatchesSeed = pm && pm.state && pm.state.gameId === seed;
         if (!pmMatchesSeed) return; // game not ready yet — keep waiting
       }
       if (row.status === 'playing') {
         clearInterval(_myTableWatchSub); _myTableWatchSub = null;
-        closeFriendRoom();
+        if (_activeRoomType === 'online') closeOnlineRoom(); else closeFriendRoom();
 
         // Reset sync state before launching
         _ftAppliedSeq       = 0;
@@ -7797,11 +7915,13 @@ function watchMyTable(tableId, waitForNewSeed) {
         _ftGameOverHandled  = false;
         _ftLocalPlaySeq     = 0;
 
-        await launchFriendTableGame(row);
+        if (_activeRoomType === 'online') {
+          await orLaunchGame(row);
+        } else {
+          await launchFriendTableGame(row);
+        }
 
         // Sync to current game state via pending_move.
-        // Only apply mid-game states (ga:true) — a game-over pending_move means
-        // the previous game just ended; applying it would corrupt _ftGameOverHandled.
         if (row.pending_move?.state && row.pending_move.state.gameId === row.payload?.seed) {
           const pm = row.pending_move;
           if (pm.author !== _myGlobalSeat && pm.state.ga !== false) {
@@ -7877,35 +7997,16 @@ async function launchFriendTableGame(table) {
   for (let i = 0; i < 52; i++) hands[i % 4].push(deck[i]);
   hands.forEach(h => h.sort(compareCards));
 
-  // ── Full game state reset (mirrors startGame) ──
-  // IMPORTANT: must clear discardPile, currentRoundPlays, last-play-info, zoom
-  // states, and startingHandProfile — these are NOT reset by FT restart logic
-  // and will otherwise show the previous game's cards/messages on screen.
-  discardPile          = [];
-  currentRoundPlays    = [];
-  globalDiscardedCards = new Set();
-  lastPlay             = null;
-  passCount            = 0;
-  firstTurn            = true;
-  selectedCards        = [];
-  gameActive           = true;
-  _roundsPlayed        = 0;
-  _roundsWonByHuman    = 0;
-
-  // Clear the "last play" info label so old game's message is gone
-  const _lpiEl = document.getElementById('last-play-info');
-  if (_lpiEl) _lpiEl.textContent = '';
-
-  // Reset zoom so new game starts at normal view
-  resetHandZoom();
-  resetDiscardZoom();
-
   // ── Find who has 3♦ ──
   openingPlayer = hands.findIndex(h => h.some(c => c.rank==='3' && c.suit==='♦'));
   currentPlayer = openingPlayer;
-
-  // Record starting hand profiles for NPC AI
-  startingHandProfile = hands.map(h => classifyStartingHand(h));
+  passCount     = 0;
+  firstTurn     = true;
+  lastPlay      = null;
+  currentRoundPlays = [];
+  globalDiscardedCards = new Set();
+  selectedCards = [];
+  gameActive    = true;
 
   // ── Rotate: put MY seat at index 0 ──
   // This means hands[0] = my hand, hands[1] = right, etc.
@@ -7969,6 +8070,7 @@ async function launchFriendTableGame(table) {
     setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 1200);
   }
 
+  _activeRoomType = 'friend';
   toast('🃏 Friend Table game started!');
 }
 
@@ -7991,13 +8093,16 @@ let _ftOtherSeats   = []; // recipient user IDs (other humans at the table)
 // so RLS is not a problem. The existing subscribeToNotifications() realtime
 // channel handles incoming game_move notifications instantly.
 // We keep a 3s fallback poll that queries friend_notifications directly.
+// Returns the correct Supabase table name for the active game session
+function _ftTableName() { return _activeRoomType === 'online' ? 'online_tables' : 'friend_tables'; }
+
 function ftStartPolling(tableId) {
-  // Realtime on friend_tables.pending_move — fires when host UPDATEs as fallback
+  // Realtime on pending_move — fires when host UPDATEs as fallback
   if (supaClient && !_friendTableGameSub) {
     _friendTableGameSub = supaClient
       .channel('ft_game_' + tableId)
       .on('postgres_changes', {
-        event: 'UPDATE', schema: 'public', table: 'friend_tables',
+        event: 'UPDATE', schema: 'public', table: _ftTableName(),
         filter: 'id=eq.' + tableId
       }, (payload) => {
         // ── Game result: show banner on all clients when winner writes game_result ──
@@ -8076,10 +8181,10 @@ async function ftPollMoves(tableId) {
     }
   } catch(e) {}
 
-  // Path B: friend_tables row — check both game_result and pending_move
+  // Path B: table row — check both game_result and pending_move
   try {
     const { data: row, error } = await supaClient
-      .from('friend_tables')
+      .from(_ftTableName())
       .select('pending_move,game_result')
       .eq('id', _myTableId)
       .single();
@@ -8132,7 +8237,7 @@ function ftShowGameResultBanner(gr) {
 
   gameActive = false;
   ftStopPollingFull();
-  saveFriendGameStats(winnerLocal === 0, gameDeltas[0]);
+  if (_activeRoomType === 'online') saveOnlineGameStats(winnerLocal === 0, gameDeltas[0]); else saveFriendGameStats(winnerLocal === 0, gameDeltas[0]);
 
   showWinCelebration(winnerLocal, names, () => {
     mpShowEndBanner(winnerLocal, rawLocal, mults, gameDeltas, names);
@@ -8200,7 +8305,7 @@ async function ftPushState() {
   if (!gameActive) {
     try {
       const { data: freshRow } = await supaClient
-        .from('friend_tables')
+        .from(_ftTableName())
         .select('seat_1,seat_2,seat_3,seat_4')
         .eq('id', _myTableId)
         .single();
@@ -8232,8 +8337,8 @@ async function ftPushState() {
     if (!error && inserted && inserted.length) {
       inserted.forEach(row => { _ftSeenKeys.add(row.id); _ftLastNotifId = row.id; });
 
-      // ALWAYS also write pending_move — this is what the friend_tables realtime sub picks up
-      const { error: pmErr } = await supaClient.from('friend_tables')
+      // ALWAYS also write pending_move — this is what the realtime sub picks up
+      const { error: pmErr } = await supaClient.from(_ftTableName())
         .update({ pending_move: { state, author: r, seq: state.seq } })
         .eq('id', _myTableId);
       if (pmErr) console.warn('[FT PUSH] pending_move write failed:', pmErr.message);
@@ -8246,11 +8351,11 @@ async function ftPushState() {
 
   }
 
-  // ── FALLBACK: friend_tables.pending_move UPDATE ───────────────
+  // ── FALLBACK: pending_move UPDATE ────────────────────────────
   // ft_update policy allows any seated player to update the table row.
   try {
     const { data: wr, error: wr_err } = await supaClient
-      .from('friend_tables')
+      .from(_ftTableName())
       .update({ pending_move: { state, author: r, seq: state.seq } })
       .eq('id', _myTableId)
       .select('id');
@@ -8364,7 +8469,7 @@ function ftApplyState(s) {
       if (++_grRetries > 10) { clearInterval(_grTimer); return; } // give up after 15s
       try {
         const { data: row } = await supaClient
-          .from('friend_tables')
+          .from(_ftTableName())
           .select('game_result')
           .eq('id', _grTableId)
           .single();
@@ -8479,7 +8584,7 @@ async function ftRestartGame() {
   if (ftAmNpcRunner()) {
     // Runner writes new seed right away
     const newSeed = Math.floor(Math.random() * 0x7fffffff);
-    await supaClient.from('friend_tables')
+    await supaClient.from(_ftTableName())
       .update({ payload: { seed: newSeed, started: true }, pending_move: null, game_result: null })
       .eq('id', _myTableId);
     // Clean up old game_move notifications after a delay — wait long enough
@@ -8506,7 +8611,7 @@ async function ftRestartGame() {
   let _waitTimer = null;
   async function checkForNewGame() {
     try {
-      const { data: row } = await supaClient.from('friend_tables')
+      const { data: row } = await supaClient.from(_ftTableName())
         .select('*').eq('id', _myTableId).single();
 
       if (!row) {
@@ -8525,7 +8630,7 @@ async function ftRestartGame() {
         await new Promise(r => setTimeout(r, 1500));
         let freshRow = row;
         try {
-          const { data: fr } = await supaClient.from('friend_tables')
+          const { data: fr } = await supaClient.from(_ftTableName())
             .select('*').eq('id', _myTableId).single();
           if (fr) freshRow = fr;
         } catch(e) {}
@@ -8539,7 +8644,11 @@ async function ftRestartGame() {
         _ftGameOverHandled  = false;
         _ftLocalPlaySeq     = 0;
 
-        await launchFriendTableGame(freshRow);
+        if (_activeRoomType === 'online') {
+          await orLaunchGame(freshRow);
+        } else {
+          await launchFriendTableGame(freshRow);
+        }
 
         // Late joiner: sync to current state via pending_move.
         // Only apply mid-game states — a game-over pending_move would corrupt
@@ -9607,6 +9716,742 @@ function mpDestroy(){
   // Restore zoom button position
   const zb = document.getElementById('btn-hand-zoom');
   if (zb) zb.style.top = '';
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  ONLINE ROOM — Tables open to all authenticated players
+//  Same game mechanics as Friend Room.
+//  No Friends tab. Points tracked as Online Points (or_points_<mode>).
+// ════════════════════════════════════════════════════════════
+
+let _orCurrentTableGroup  = 'beginner';
+let _orMyTableId          = null;
+let _orMyTableSeat        = null;   // 1-4
+let _orMyGlobalSeat       = null;   // 0-3
+let _orTableRealtimeSub   = null;
+let _orEvictionDone       = false;
+let _orMyTableWatchSub    = null;
+let _orIsHost             = false;
+let _orTableTimerInterval = null;
+let _orCurrentTab         = 'tables';
+let _orLbCurrentTab       = 'beginner';
+let _orGameSub            = null;
+let _orPollTimer          = null;
+let _orSeed               = 0;
+let _orSeenKeys           = new Set();
+let _orLastNotifId        = null;
+let _orLastPmSeq          = 0;
+let _orAppliedSeq         = 0;
+let _orSeqCounter         = 0;
+let _orGameOverHandled    = false;
+let _orLocalPlaySeq       = 0;
+let _orOtherSeats         = [];
+let _orSeats              = [];
+let _orJoinedAtGame       = 0;
+let _orActedThisRound     = new Set();
+let _orTableFingerprints  = {};
+
+// ── Open / Close ──────────────────────────────────────────
+function openOnlineRoom() {
+  orSwitchTab('tables');
+  const overlay = document.getElementById('online-room-overlay');
+  overlay.classList.add('open');
+  const warning = document.getElementById('online-auth-warning');
+  const content = document.getElementById('online-room-content');
+  if (!supaUser) {
+    warning.style.display = 'block';
+    content.style.display = 'none';
+    return;
+  }
+  if (!gameActive && _orMyTableId) { _orCleanupTable(); }
+  warning.style.display = 'none';
+  content.style.display = 'flex';
+  orSwitchTab('tables');
+  _orEvictionDone = false;
+  orLoadTables();
+  orSubscribeToTables();
+  if (supaClient && supaUser) {
+    supaClient.from('profiles').update({ is_online: true, last_active: new Date().toISOString() })
+      .eq('id', supaUser.id).then(() => {});
+  }
+}
+
+function closeOnlineRoom() {
+  document.getElementById('online-room-overlay').classList.remove('open');
+  orUnsubscribeFromTables();
+  _orEvictionDone = false;
+  if (supaClient && supaUser) {
+    supaClient.from('profiles')
+      .update({ is_online: false, last_active: new Date().toISOString() })
+      .eq('id', supaUser.id).then(() => {});
+  }
+}
+
+// ── Tab switching ─────────────────────────────────────────
+function orSwitchTab(tab) {
+  _orCurrentTab = tab;
+  ['tables', 'leaderboard'].forEach(t => {
+    document.getElementById('ortab-' + t)?.classList.toggle('active', t === tab);
+    document.getElementById('orsec-' + t)?.classList.toggle('active', t === tab);
+  });
+  if (tab === 'tables') {
+    orUpdateTableGroupLocks();
+    _orEvictionDone = false;
+    orLoadTables();
+    orSubscribeToTables();
+  }
+  if (tab === 'leaderboard') orLoadLeaderboard();
+}
+
+// ── Table group lock/unlock ───────────────────────────────
+function orUpdateTableGroupLocks() {
+  const rs = rankScore || 0;
+  const unlocks = { beginner: 0, intermediate: 100, hard: 1000, pro: 5000 };
+  ['beginner', 'intermediate', 'hard', 'pro'].forEach(g => {
+    const btn = document.getElementById('ortgrp-' + g);
+    if (!btn) return;
+    const locked = rs < unlocks[g];
+    btn.disabled = locked;
+    btn.classList.toggle('locked', locked);
+    btn.classList.toggle('active', g === _orCurrentTableGroup);
+  });
+}
+
+function orSelectTableGroup(g) {
+  _orCurrentTableGroup = g;
+  orUpdateTableGroupLocks();
+  _orEvictionDone = false;
+  orLoadTables();
+  orSubscribeToTables();
+}
+
+// ── Realtime subscription ─────────────────────────────────
+function orSubscribeToTables() {
+  if (!supaClient || _orTableRealtimeSub) return;
+  _orTableRealtimeSub = supaClient
+    .channel('online_tables_lobby_' + _orCurrentTableGroup)
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'online_tables',
+      filter: 'table_group=eq.' + _orCurrentTableGroup
+    }, (payload) => {
+      if (payload.eventType === 'DELETE' || !payload.new) { orLoadTables(true); return; }
+      const row = payload.new;
+      const fp = _orTableLobbyFingerprint(row);
+      const old = _orTableFingerprints[row.id];
+      _orTableFingerprints[row.id] = fp;
+      if (fp !== old) orLoadTables(true);
+    })
+    .subscribe();
+}
+
+function orUnsubscribeFromTables() {
+  if (_orTableRealtimeSub && supaClient) {
+    supaClient.removeChannel(_orTableRealtimeSub);
+    _orTableRealtimeSub = null;
+  }
+  _orTableFingerprints = {};
+}
+
+function _orTableLobbyFingerprint(row) {
+  return [row.seat_1, row.seat_2, row.seat_3, row.seat_4,
+          row.status, row.started_at,
+          JSON.stringify(row.ready_votes),
+          row.payload?.seed,
+          row.game_result?.seed ?? ''].join('|');
+}
+
+// ── Stale seat eviction ───────────────────────────────────
+async function orCleanupStaleSeats() {
+  if (!supaClient || !supaUser) return;
+  try {
+    const { data: mySeats } = await supaClient
+      .from('online_tables')
+      .select('id, seat_1, seat_2, seat_3, seat_4, status')
+      .or('seat_1.eq.' + supaUser.id + ',seat_2.eq.' + supaUser.id + ',seat_3.eq.' + supaUser.id + ',seat_4.eq.' + supaUser.id)
+      .eq('status', 'waiting');
+    if (!mySeats?.length || _orMyTableId) return;
+    for (const t of mySeats) {
+      const seatIdx = ['seat_1','seat_2','seat_3','seat_4'].findIndex(s => t[s] === supaUser.id);
+      if (seatIdx < 0) continue;
+      const seatCol = 'seat_' + (seatIdx + 1);
+      const others = ['seat_1','seat_2','seat_3','seat_4'].filter((s,i) => i !== seatIdx && t[s]).length;
+      if (others === 0) {
+        await supaClient.from('online_tables').delete().eq('id', t.id);
+      } else {
+        await supaClient.from('online_tables').update({ [seatCol]: null }).eq('id', t.id);
+      }
+    }
+  } catch(e) { console.warn('orCleanupStaleSeats:', e); }
+}
+
+async function orEvictInactiveSeats() {
+  if (!supaClient) return;
+  try {
+    const threshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: tables } = await supaClient
+      .from('online_tables')
+      .select('id, seat_1, seat_2, seat_3, seat_4, status')
+      .eq('status', 'waiting');
+    if (!tables?.length) return;
+    const allUids = new Set();
+    tables.forEach(t => [t.seat_1, t.seat_2, t.seat_3, t.seat_4].forEach(u => u && allUids.add(u)));
+    if (!allUids.size) return;
+    const { data: profiles } = await supaClient
+      .from('profiles')
+      .select('id, is_online, last_active')
+      .in('id', [...allUids]);
+    const stale = new Set(
+      (profiles || [])
+        .filter(p => !p.is_online || !p.last_active || new Date(p.last_active) < new Date(threshold))
+        .map(p => p.id)
+    );
+    for (const t of tables) {
+      for (let i = 1; i <= 4; i++) {
+        const col = 'seat_' + i;
+        if (t[col] && stale.has(t[col]) && t[col] !== supaUser?.id) {
+          const remaining = ['seat_1','seat_2','seat_3','seat_4'].filter(s => t[s] && !stale.has(t[s]) && t[s] !== t[col]).length;
+          if (remaining === 0) {
+            await supaClient.from('online_tables').delete().eq('id', t.id);
+          } else {
+            await supaClient.from('online_tables').update({ [col]: null }).eq('id', t.id);
+          }
+        }
+      }
+    }
+  } catch(e) { console.warn('orEvictInactiveSeats:', e); }
+}
+
+// ── Load Tables ───────────────────────────────────────────
+async function orLoadTables(silent) {
+  const el = document.getElementById('or-tables-list');
+  if (!el) return;
+  if (!silent) el.innerHTML = '<div class="friend-status-msg">Loading tables…</div>';
+  try {
+    if (!_orEvictionDone) {
+      _orEvictionDone = true;
+      await orCleanupStaleSeats();
+      orSubscribeToTables();
+    }
+    await orEvictInactiveSeats();
+
+    const { data: tables } = await supaClient
+      .from('online_tables')
+      .select('*')
+      .eq('table_group', _orCurrentTableGroup)
+      .in('status', ['waiting', 'playing'])
+      .order('status', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    const rows = tables || [];
+
+    // Show online player count
+    const { count } = await supaClient
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_online', true);
+    const countEl = document.getElementById('or-online-count');
+    if (countEl && count != null) countEl.textContent = '🌐 ' + count + ' player' + (count === 1 ? '' : 's') + ' online';
+
+    const uids = new Set();
+    rows.forEach(t => [t.seat_1, t.seat_2, t.seat_3, t.seat_4].forEach(u => u && uids.add(u)));
+    let nameMap = {}, onlineMap = {};
+    if (uids.size > 0) {
+      const { data: p } = await supaClient.from('profiles')
+        .select('id, username, is_online, last_active').in('id', [...uids]);
+      const threeMinAgo = Date.now() - 3 * 60 * 1000;
+      (p || []).forEach(x => {
+        nameMap[x.id] = x.username;
+        onlineMap[x.id] = x.is_online && new Date(x.last_active).getTime() > threeMinAgo;
+      });
+    }
+    orRenderTables(rows, nameMap, onlineMap);
+  } catch(e) {
+    console.warn('orLoadTables:', e);
+    if (el) el.innerHTML = '<div class="friend-status-msg">Error loading tables.</div>';
+  }
+}
+
+// ── Render Tables ─────────────────────────────────────────
+function orRenderTables(tables, nameMap, onlineMap) {
+  const el = document.getElementById('or-tables-list');
+  if (!el) return;
+  const myRow = tables.find(t => [t.seat_1, t.seat_2, t.seat_3, t.seat_4].includes(supaUser?.id));
+  const banner = document.getElementById('or-my-table-banner');
+  if (myRow) {
+    const occ = [myRow.seat_1, myRow.seat_2, myRow.seat_3, myRow.seat_4].filter(Boolean).length;
+    const txt = document.getElementById('or-my-table-banner-text');
+    const statusStr = myRow.status === 'playing' ? '🎮 Game in progress' : '⏳ Waiting to start';
+    if (txt) txt.textContent = statusStr + ' · ' + occ + '/4 players';
+    if (banner) banner.style.display = 'block';
+  } else {
+    _orMyTableId = null; _orMyTableSeat = null; _orMyGlobalSeat = null;
+    if (banner) banner.style.display = 'none';
+    orStopTableTimer();
+  }
+
+  const playing = tables.filter(t => t.status === 'playing' && [t.seat_1, t.seat_2, t.seat_3, t.seat_4].some(Boolean));
+  const waiting = tables.filter(t => t.status === 'waiting');
+
+  let html = '';
+  if (playing.length) {
+    html += '<div class="fr-section-label" style="margin-bottom:6px;margin-top:0">In Progress</div>';
+    html += playing.map((t, i) => orRenderTableCard(t, i + 1, nameMap, onlineMap)).join('');
+  }
+
+  // Always show enough waiting tables (at least 3, padded with empties)
+  const neededEmpties = Math.max(0, 3 - waiting.length);
+  html += '<div class="fr-section-label" style="margin-bottom:6px;' + (playing.length ? 'margin-top:10px' : 'margin-top:0') + '">Open Tables</div>';
+  waiting.forEach((t, i) => { html += orRenderTableCard(t, playing.length + i + 1, nameMap, onlineMap); });
+  for (let i = 0; i < neededEmpties; i++) {
+    html += orRenderEmptyTableCard(playing.length + waiting.length + i + 1);
+  }
+  el.innerHTML = html;
+
+  // Start timer for my waiting table
+  if (myRow && myRow.status === 'waiting' && _orMyTableId === myRow.id) orStartTableTimer(myRow);
+}
+
+function orRenderTableCard(t, num, nameMap, onlineMap) {
+  const isMyTable = [t.seat_1, t.seat_2, t.seat_3, t.seat_4].includes(supaUser?.id);
+  const occ = [t.seat_1, t.seat_2, t.seat_3, t.seat_4].filter(Boolean).length;
+  const isPlaying = t.status === 'playing';
+  const statusBadge = isPlaying
+    ? '<span style="font-size:0.64rem;padding:2px 7px;background:rgba(80,200,100,0.15);border:1px solid rgba(80,200,100,0.3);border-radius:10px;color:#7fffaa">Playing</span>'
+    : '<span style="font-size:0.64rem;padding:2px 7px;background:rgba(255,200,60,0.12);border:1px solid rgba(255,200,60,0.3);border-radius:10px;color:#ffe566">Waiting</span>';
+  const cardStyle = isMyTable ? 'border-color:rgba(255,140,60,0.45);background:rgba(255,100,20,0.07);' : '';
+  const votes = Array.isArray(t.ready_votes) ? t.ready_votes : [];
+  const seats = [t.seat_1, t.seat_2, t.seat_3, t.seat_4];
+  const seatHtml = seats.map((uid, i) => {
+    if (!uid) {
+      if (isPlaying || isMyTable) return `<div class="table-seat empty"><div class="seat-avatar" style="background:rgba(60,60,60,0.3);color:rgba(100,100,100,0.5)">—</div><span>Empty</span></div>`;
+      return `<div class="table-seat empty" onclick="orJoinTable('${t.id}',${i+1})"><div class="seat-avatar" style="background:rgba(255,140,40,0.15);color:rgba(255,160,60,0.7)">+</div><span>Join</span></div>`;
+    }
+    const name = nameMap[uid] || '…';
+    const isOn = onlineMap[uid];
+    const isReady = votes.includes(uid);
+    const isMe = uid === supaUser?.id;
+    return `<div class="table-seat${isMe?' me-seat':''}">
+      <div class="seat-avatar" style="background:rgba(255,140,40,0.2);border:1px solid rgba(255,140,40,0.35);color:rgba(255,200,140,0.9);${isOn?'box-shadow:0 0 0 2px rgba(80,220,100,0.3)':''}">
+        ${name.slice(0,2).toUpperCase()}
+      </div>
+      <span style="color:${isMe?'#ffc878':'rgba(200,180,140,0.8)'};font-weight:${isMe?700:400}">${name.length>7?name.slice(0,6)+'…':name}</span>
+      ${isReady && !isPlaying ? '<span style="font-size:0.5rem;color:#7fffaa">✓</span>' : ''}
+    </div>`;
+  }).join('');
+
+  let readyBtn = '';
+  if (isMyTable && !isPlaying) {
+    const alreadyVoted = votes.includes(supaUser?.id);
+    readyBtn = alreadyVoted
+      ? `<button class="btn-table-start" disabled style="opacity:0.5;cursor:default">⏳ Waiting…</button>`
+      : `<button class="btn-table-start" onclick="orVoteReady('${t.id}')">✓ Ready</button>`;
+    if (_orIsHost && occ >= 2) {
+      readyBtn += `<button class="btn-table-start" onclick="orTimerForceStart('${t.id}')" style="margin-left:6px;background:rgba(200,100,20,0.25);border-color:rgba(255,140,60,0.4);color:#ffc878;">▶ Start Now</button>`;
+    }
+  } else if (!isMyTable && !isPlaying && !_orMyTableId) {
+    // If there's an open seat, show join button at card level too (in case seat onclick is hard to tap)
+    const openSeat = seats.findIndex(s => !s);
+    if (openSeat >= 0) readyBtn = `<button class="btn-table-start" onclick="orJoinTable('${t.id}',${openSeat+1})">🪑 Take a Seat</button>`;
+  }
+  const inProgressNote = isMyTable && isPlaying
+    ? `<div style="font-size:0.75rem;color:rgba(100,220,120,0.7);text-align:center;padding:4px">🎮 Game in progress</div>`
+    : '';
+  const timer = (isMyTable && t.status === 'waiting')
+    ? `<div class="table-timer" id="or-table-timer-${t.id}">⏱ 60s · all tap Ready to start</div>`
+    : '';
+  return `<div class="friend-table-card${isMyTable?' my-table':''}" style="${cardStyle}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <span style="font-size:0.78rem;color:rgba(255,180,80,0.9);font-family:'Crimson Pro',serif;font-weight:600">Table ${num}</span>
+      <div style="display:flex;align-items:center;gap:6px">${statusBadge}<span style="font-size:0.72rem;color:var(--text-dim)">${occ}/4</span></div>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <div class="table-circle" style="border-color:rgba(255,140,40,0.4);color:rgba(255,180,80,0.7)">TABLE<br>${num}</div>
+      <div class="table-seats">${seatHtml}</div>
+    </div>
+    ${timer}${inProgressNote}
+    <div class="table-actions">${readyBtn}</div>
+  </div>`;
+}
+
+function orRenderEmptyTableCard(num) {
+  return `<div class="friend-table-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <span style="font-size:0.78rem;color:rgba(255,180,80,0.7);font-family:'Crimson Pro',serif;font-weight:600">Table ${num}</span>
+      <span style="font-size:0.72rem;color:var(--text-dim)">0/4 seated</span>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <div class="table-circle" style="border-color:rgba(255,140,40,0.25);color:rgba(255,160,60,0.4)">TABLE<br>${num}</div>
+      <div class="table-seats">
+        ${[1,2,3,4].map(i =>
+          `<div class="table-seat empty" onclick="orCreateAndJoinTable(${i})">
+            <div class="seat-avatar" style="background:rgba(255,140,40,0.12);color:rgba(255,160,60,0.55)">+</div>
+            <span>Click to sit</span></div>`
+        ).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Sit down ─────────────────────────────────────────────
+async function orCreateAndJoinTable(seatNum) {
+  if (!supaClient || !supaUser) return;
+  if (_orMyTableId) { _orMyTableId = null; _orMyTableSeat = null; _orMyGlobalSeat = null; }
+  try {
+    const seatCol = 'seat_' + seatNum;
+    const { data, error } = await supaClient.from('online_tables').insert({
+      table_group: _orCurrentTableGroup,
+      host_id: supaUser.id,
+      status: 'waiting',
+      [seatCol]: supaUser.id,
+      ready_votes: '[]',
+      payload: {},
+      pending_move: null
+    }).select().single();
+    if (error) { toast('❌ Could not create table: ' + error.message); return; }
+    _orMyTableId = data.id;
+    _orMyTableSeat = seatNum;
+    _orMyGlobalSeat = seatNum - 1;
+    _orIsHost = true;
+    orWatchMyTable(data.id);
+    orLoadTables();
+    orStartTableTimer(data);
+    toast('🪑 Seated at Online Table!');
+  } catch(e) { console.warn('orCreateAndJoinTable:', e); }
+}
+
+async function orJoinTable(tableId, seatNum) {
+  if (!supaClient || !supaUser || _orMyTableId) return;
+  const seatCol = 'seat_' + seatNum;
+  try {
+    const { data: row } = await supaClient.from('online_tables').select('*').eq('id', tableId).single();
+    if (!row || row[seatCol]) { toast('Seat taken — try another.'); orLoadTables(); return; }
+    const { error } = await supaClient.from('online_tables').update({ [seatCol]: supaUser.id }).eq('id', tableId);
+    if (error) { toast('Could not join: ' + error.message); return; }
+    _orMyTableId = tableId;
+    _orMyTableSeat = seatNum;
+    _orMyGlobalSeat = seatNum - 1;
+    _orIsHost = false;
+    orWatchMyTable(tableId);
+    orLoadTables();
+    orStartTableTimer(row);
+    toast('🪑 Joined Online Table!');
+  } catch(e) { console.warn('orJoinTable:', e); }
+}
+
+// ── Leave table ───────────────────────────────────────────
+async function orLeaveCurrentTable() {
+  if (!supaClient || !supaUser || !_orMyTableId) return;
+  const seatCol = 'seat_' + _orMyTableSeat;
+  try {
+    const { data: t } = await supaClient.from('online_tables').select('*').eq('id', _orMyTableId).single();
+    if (!t) { _orCleanupTable(); return; }
+    const remaining = ['seat_1','seat_2','seat_3','seat_4'].filter(s => t[s] && t[s] !== supaUser.id).length;
+    if (remaining === 0) {
+      await supaClient.from('online_tables').delete().eq('id', _orMyTableId);
+    } else {
+      await supaClient.from('online_tables').update({ [seatCol]: null }).eq('id', _orMyTableId);
+    }
+    _orCleanupTable();
+    orLoadTables();
+    toast('Left the table.');
+  } catch(e) { console.warn('orLeaveCurrentTable:', e); }
+}
+
+function _orCleanupTable() {
+  _orMyTableId = null; _orMyTableSeat = null; _orMyGlobalSeat = null;
+  _orSeats = []; _orOtherSeats = []; _orSeenKeys = new Set();
+  _orLastNotifId = null; _orLastPmSeq = 0; _orAppliedSeq = 0;
+  _orSeqCounter = 0; _orGameOverHandled = false; _orLocalPlaySeq = 0;
+  _orJoinedAtGame = 0; _orActedThisRound = new Set();
+  orStopPolling();
+  orStopTableTimer();
+  if (_orMyTableWatchSub) { clearInterval(_orMyTableWatchSub); _orMyTableWatchSub = null; }
+}
+
+// ── Ready voting ──────────────────────────────────────────
+async function orVoteReady(tableId) {
+  if (!supaClient || !supaUser) return;
+  const btn = document.querySelector(`[onclick="orVoteReady('${tableId}')"]`);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Waiting…'; }
+  try {
+    const { data: t } = await supaClient.from('online_tables').select('*').eq('id', tableId).single();
+    if (!t) return;
+    const votes = Array.isArray(t.ready_votes) ? t.ready_votes : [];
+    if (!votes.includes(supaUser.id)) votes.push(supaUser.id);
+    const seats = [t.seat_1, t.seat_2, t.seat_3, t.seat_4].filter(Boolean);
+    await supaClient.from('online_tables').update({ ready_votes: votes }).eq('id', tableId);
+    if (seats.every(uid => votes.includes(uid))) {
+      await orStartTableGame(tableId);
+    } else {
+      toast('Ready! Waiting for ' + (seats.length - votes.length) + ' more…');
+    }
+  } catch(e) { console.warn('orVoteReady:', e); }
+}
+
+async function orTimerForceStart(tableId) {
+  if (!supaClient || !supaUser || !_orIsHost) return;
+  const { data: t } = await supaClient.from('online_tables').select('seat_1,seat_2,seat_3,seat_4').eq('id', tableId).single();
+  if (!t) return;
+  const humanCount = [t.seat_1, t.seat_2, t.seat_3, t.seat_4].filter(Boolean).length;
+  if (humanCount < 2) { toast('Need at least 2 players to start.'); return; }
+  await orStartTableGame(tableId);
+}
+
+// ── Table timer (60s) ─────────────────────────────────────
+function orStartTableTimer(table) {
+  orStopTableTimer();
+  if (!table || table.status !== 'waiting') return;
+  const started = table.created_at ? new Date(table.created_at).getTime() : Date.now();
+  const duration = 60000;
+  _orTableTimerInterval = setInterval(() => {
+    const elapsed = Date.now() - started;
+    const remaining = Math.max(0, Math.ceil((duration - elapsed) / 1000));
+    const el = document.getElementById('or-table-timer-' + table.id);
+    if (el) el.textContent = '⏱ ' + remaining + 's · all tap Ready to start';
+    if (remaining <= 0) {
+      orStopTableTimer();
+      if (_orIsHost && _orMyTableId === table.id) orTimerForceStart(table.id);
+    }
+  }, 1000);
+}
+function orStopTableTimer() {
+  if (_orTableTimerInterval) { clearInterval(_orTableTimerInterval); _orTableTimerInterval = null; }
+}
+
+// ── Start game ────────────────────────────────────────────
+async function orStartTableGame(tableId) {
+  if (!supaClient || !supaUser) return;
+  try {
+    const seed = Math.floor(Math.random() * 0x7fffffff);
+    await supaClient.from('online_tables').update({
+      status: 'playing',
+      started_at: new Date().toISOString(),
+      payload: { seed, started: true }
+    }).eq('id', tableId);
+  } catch(e) { console.warn('orStartTableGame:', e); }
+}
+
+// ── Watch my table for game start ─────────────────────────
+function orWatchMyTable(tableId, waitForNewSeed) {
+  if (_orMyTableWatchSub) { clearInterval(_orMyTableWatchSub); _orMyTableWatchSub = null; }
+  _orMyTableWatchSub = setInterval(async () => {
+    if (gameActive) { clearInterval(_orMyTableWatchSub); _orMyTableWatchSub = null; return; }
+    try {
+      const { data: row } = await supaClient.from('online_tables').select('*').eq('id', tableId).single();
+      if (!row) return;
+      const seed = row.payload?.seed;
+      if (!seed) return;
+      if (waitForNewSeed !== undefined && seed === waitForNewSeed) return;
+      if (seed !== _orSeed || waitForNewSeed !== undefined) {
+        clearInterval(_orMyTableWatchSub); _orMyTableWatchSub = null;
+        await orLaunchGame(row);
+      }
+    } catch(e) {}
+  }, 1500);
+}
+
+// ── Launch game (reuses Friend Table game engine) ─────────
+async function orLaunchGame(table) {
+  if (!supaClient || !supaUser || gameActive) return;
+  _orSeed = table.payload?.seed;
+  if (!_orSeed) return;
+
+  const seats = [table.seat_1, table.seat_2, table.seat_3, table.seat_4];
+  _orSeats = seats;
+  const myGlobal = seats.indexOf(supaUser.id);
+  if (myGlobal < 0) return;
+  _orMyGlobalSeat = myGlobal;
+  _orMyTableId = table.id;
+  _orOtherSeats = seats.filter(u => u && u !== supaUser.id);
+
+  // Fetch seat names
+  const uids = seats.filter(Boolean);
+  const { data: profiles } = await supaClient.from('profiles').select('id, username').in('id', uids);
+  const nameMap = {};
+  (profiles || []).forEach(p => { nameMap[p.id] = p.username || '?'; });
+
+  // Build seat name array
+  const seatNames = seats.map((uid, i) => uid ? (nameMap[uid] || 'P' + (i+1)) : ('Bot ' + (i+1)));
+
+  // Reuse Friend Table launch logic — patch into the FT variables
+  _ftSeed = _orSeed;
+  _ftSeats = _orSeats;
+  _ftOtherSeats = _orOtherSeats;
+  _myTableId = _orMyTableId;
+  _myGlobalSeat = _orMyGlobalSeat;
+  _myTableSeat = myGlobal + 1;
+  _ftIsHost = (table.host_id === supaUser.id);
+  _ftGameOverHandled = false;
+  _orGameOverHandled = false;
+  _ftSeenKeys = _orSeenKeys;
+
+  // Patch saveFriendGameStats to point to online stats instead
+  _orGameMode = table.table_group || _orCurrentTableGroup;
+
+  // Use the existing FT launch machinery
+  const rand = seededRandom(_orSeed);
+  const allCards = [];
+  for (let s = 0; s < 4; s++) for (let v = 0; v < 13; v++) allCards.push({ suit: s, value: v });
+  const shuffled = seededShuffle(allCards, _orSeed);
+  const dealtHands = [shuffled.slice(0,13), shuffled.slice(13,26), shuffled.slice(26,39), shuffled.slice(39,52)];
+
+  // Rotate so our hand is hand[0]
+  const r = _orMyGlobalSeat;
+  const rotatedHands = dealtHands.map((_, li) => dealtHands[(li + r) % 4]);
+  const rotatedNames = seatNames.map((_, li) => seatNames[(li + r) % 4]);
+  const npcSlots = seats.map((uid, i) => !uid);
+  const rotatedNpc = npcSlots.map((_, li) => npcSlots[(li + r) % 4]);
+
+  // Initialise the game using existing multiplayer/friend-table game engine
+  closeOnlineRoom();
+
+  mpSeats = rotatedNames.map((name, i) => ({ name, globalSeat: (i + r) % 4 }));
+  mpNpcSlots = rotatedNpc;
+  mpGameMode = 'multi';
+  gameMode = _orGameMode;
+  selectedMode = _orGameMode;
+  mpMyLocalSeat = 0;
+
+  hands = rotatedHands;
+  currentPlayer = 0;
+  lastPlay = null; lastPlayer = -1; passCount = 0;
+  globalDiscardedCards = [];
+  gameActive = true;
+
+  if (mpSessionHistory.length === 0 || _orJoinedAtGame === 0) {
+    mpSessionScores = [0, 0, 0, 0];
+    _orJoinedAtGame = mpSessionHistory.length;
+  }
+
+  hideSplash();
+  renderAll();
+  setPlayerControls(isMyTurn());
+  updateTurnIndicator();
+
+  const lbl = document.getElementById('player-name-label');
+  if (lbl) lbl.textContent = rotatedNames[0];
+  [{nameId:'name-p2',li:1},{nameId:'name-p3',li:2},{nameId:'name-p4',li:3}].forEach(({nameId,li}) => {
+    const ne = document.getElementById(nameId);
+    if (ne) ne.textContent = (rotatedNpc[li] ? '🤖 ' : '👤 ') + mpSeats[li].name;
+  });
+
+  // Mark this as an Online Room game so stats save to OR columns
+  _activeRoomType = 'online';
+
+  ftStartPolling(table.id);
+  if (ftAmNpcRunner()) setTimeout(() => { if (gameActive && _myTableId) ftPushState(); }, 800);
+  if (!isMyTurn() && mpNpcSlots[currentPlayer] && ftAmNpcRunner()) {
+    const tok = ++mpTurnToken;
+    setTimeout(() => { if (mpTurnToken === tok) npcTurn(); }, 1200);
+  }
+  toast('🌐 Online game started!');
+}
+
+// ── Active room type flag ─────────────────────────────────
+let _activeRoomType = 'friend'; // 'friend' | 'online' — set at game launch
+
+// ── Save Online game stats ────────────────────────────────
+async function saveOnlineGameStats(didWin, pointsDelta) {
+  if (!supaClient || !supaUser) return;
+  const mode = selectedMode || 'beginner';
+  const wCol = 'or_wins_' + mode;
+  const gCol = 'or_games_' + mode;
+  const pCol = 'or_points_' + mode;
+  try {
+    const { data: p } = await supaClient
+      .from('profiles')
+      .select(wCol + ',' + gCol + ',' + pCol)
+      .eq('id', supaUser.id)
+      .single();
+    const cur = p || {};
+    await supaClient.from('profiles').update({
+      [wCol]: (cur[wCol] || 0) + (didWin ? 1 : 0),
+      [gCol]: (cur[gCol] || 0) + 1,
+      [pCol]: (cur[pCol] || 0) + (pointsDelta || 0),
+    }).eq('id', supaUser.id);
+  } catch(e) { console.warn('saveOnlineGameStats:', e); }
+}
+
+// ── Leaderboard ───────────────────────────────────────────
+async function orLoadLeaderboard() {
+  const el = document.getElementById('or-leaderboard-content');
+  if (!el || !supaClient) return;
+
+  el.innerHTML = `
+    <div style="font-size:0.68rem;color:rgba(255,160,60,0.45);font-family:'Crimson Pro',serif;text-align:center;margin-bottom:10px;letter-spacing:0.06em;">
+      Online Room · Online Points · All Players
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="lb-tab active" id="orlbtab-beginner"     onclick="orLbSwitchTab('beginner')">🌱 Beginner</button>
+      <button class="lb-tab"        id="orlbtab-intermediate" onclick="orLbSwitchTab('intermediate')">🥉 Inter.</button>
+      <button class="lb-tab"        id="orlbtab-hard"         onclick="orLbSwitchTab('hard')">🥈 Hard</button>
+      <button class="lb-tab"        id="orlbtab-pro"          onclick="orLbSwitchTab('pro')">🥇 Pro</button>
+    </div>
+    <div id="or-lb-rows"></div>
+  `;
+  _orLbCurrentTab = 'beginner';
+  await orLbLoad('beginner');
+}
+
+function orLbSwitchTab(tab) {
+  ['beginner','intermediate','hard','pro'].forEach(t => {
+    document.getElementById('orlbtab-' + t)?.classList.toggle('active', t === tab);
+  });
+  _orLbCurrentTab = tab;
+  orLbLoad(tab);
+}
+
+async function orLbLoad(tab) {
+  const el = document.getElementById('or-lb-rows');
+  if (!el || !supaClient) return;
+  el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim);font-style:italic;font-size:0.8rem">Loading…</div>';
+
+  const myId = supaUser?.id;
+  const wCol = 'or_wins_' + tab;
+  const gCol = 'or_games_' + tab;
+  const pCol = 'or_points_' + tab;
+
+  try {
+    const { data } = await supaClient
+      .from('profiles')
+      .select(`id,username,is_online,rank_score,${wCol},${gCol},${pCol}`)
+      .gt(gCol, 0)
+      .order(pCol, { ascending: false })   // rank by Online Points
+      .order(wCol, { ascending: false })   // tiebreak by wins
+      .limit(50);
+
+    if (!data?.length) {
+      el.innerHTML = `<div style="text-align:center;padding:22px;color:var(--text-dim)">
+        No Online Room games yet in this mode.<br>
+        <span style="font-size:0.72rem;opacity:0.6">Play online to appear here!</span>
+      </div>`;
+      return;
+    }
+
+    el.innerHTML = data.map((p, i) => {
+      const wins  = p[wCol] || 0;
+      const games = p[gCol] || 0;
+      const pts   = p[pCol] || 0;
+      const ptsColor = pts > 0 ? '#ffc878' : pts < 0 ? '#ff9999' : 'var(--text-dim)';
+      const ptsStr   = (pts > 0 ? '+' : '') + pts;
+      const rank     = rankFromScore(p.rank_score || 0);
+      return lbRow(i, p, myId,
+        `🏆 ${wins}W / ${games}G` +
+        ` &nbsp;·&nbsp; <span style="color:${ptsColor};font-weight:700">${ptsStr} Online Pts</span>` +
+        ` &nbsp;·&nbsp; ${rank.icon} <span style="color:var(--gold-light)">✦${p.rank_score||0}</span>`,
+        p.is_online
+      );
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--text-dim)">Could not load.</div>';
+    console.warn('orLbLoad:', e);
+  }
+}
+
+// ── Polling / state sync (delegates to FT engine) ────────
+function orStopPolling() {
+  if (_orPollTimer) { clearInterval(_orPollTimer); _orPollTimer = null; }
 }
 
 </script>
