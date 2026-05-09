@@ -5694,8 +5694,13 @@ function continueGame() {
     // PeerJS Host Game — deal new game and broadcast to all guests
     mpStartGame();
   } else if (mpGameMode === 'vs_human' && !mpIsHost) {
-    // Guest — wait; host will call mpStartGame and broadcast new state
-    toast('Waiting for host to start next game…');
+    // Guest — if host already started the new game, just show it
+    if (gameActive) {
+      document.getElementById('winner-banner').style.display = 'none';
+    } else {
+      // Host hasn't started yet — wait; the start message will auto-dismiss the banner
+      toast('Waiting for host to start next game…');
+    }
   } else {
     startGame();
   }
@@ -9418,7 +9423,8 @@ function mpGuestOnData(data){
     return;
   }
   if(data.type==='start'){
-    mpSeats=data.seats.map(s=>({name:s.name,conn:null}));
+    // Hide winner banner in case guest hasn't dismissed it yet (host started first)
+    document.getElementById('winner-banner').style.display='none';
     document.getElementById('mp-lobby').classList.remove('open');
     mpGuestStartGame(data);
     return;
@@ -10318,6 +10324,7 @@ function orWatchMyTable(tableId, waitForNewSeed) {
     try {
       const { data: row } = await supaClient.from('online_tables').select('*').eq('id', tableId).single();
       if (!row) return;
+      if (row.status !== 'playing') return; // not started yet
       const seed = row.payload?.seed;
       if (!seed) return;
       if (waitForNewSeed !== undefined && seed === waitForNewSeed) return;
@@ -10349,72 +10356,86 @@ async function orLaunchGame(table) {
   const nameMap = {};
   (profiles || []).forEach(p => { nameMap[p.id] = p.username || '?'; });
 
-  // Build seat name array
+  // Build seat name array (global order)
   const seatNames = seats.map((uid, i) => uid ? (nameMap[uid] || 'P' + (i+1)) : ('Bot ' + (i+1)));
+  const npcSlots  = seats.map(uid => !uid);
 
-  // Reuse Friend Table launch logic — patch into the FT variables
-  _ftSeed = _orSeed;
-  _ftSeats = _orSeats;
+  // Patch FT variables so the shared game engine works
+  _ftSeed       = _orSeed;
+  _ftSeats      = _orSeats;
   _ftOtherSeats = _orOtherSeats;
-  _myTableId = _orMyTableId;
+  _myTableId    = _orMyTableId;
   _myGlobalSeat = _orMyGlobalSeat;
-  _myTableSeat = myGlobal + 1;
-  _ftIsHost = (table.host_id === supaUser.id);
-  _ftGameOverHandled = false;
-  _orGameOverHandled = false;
-  _ftSeenKeys = _orSeenKeys;
+  _myTableSeat  = myGlobal + 1;
+  _ftIsHost     = (table.host_id === supaUser.id);
+  _ftGameOverHandled  = false;
+  _orGameOverHandled  = false;
+  _ftSeenKeys   = _orSeenKeys;
+  _orGameMode   = table.table_group || _orCurrentTableGroup;
 
-  // Patch saveFriendGameStats to point to online stats instead
-  _orGameMode = table.table_group || _orCurrentTableGroup;
+  // Deal cards using shared seed — same result on every device
+  const deck = seededShuffle(buildDeck(), _orSeed);
+  hands = [[],[],[],[]];
+  for (let i = 0; i < 52; i++) hands[i % 4].push(deck[i]);
+  hands.forEach(h => h.sort(compareCards));
 
-  // Use the existing FT launch machinery
-  const rand = seededRandom(_orSeed);
-  const allCards = [];
-  for (let s = 0; s < 4; s++) for (let v = 0; v < 13; v++) allCards.push({ suit: s, value: v });
-  const shuffled = seededShuffle(allCards, _orSeed);
-  const dealtHands = [shuffled.slice(0,13), shuffled.slice(13,26), shuffled.slice(26,39), shuffled.slice(39,52)];
+  // Find who has 3♦ (in global order)
+  openingPlayer = hands.findIndex(h => h.some(c => c.rank === '3' && c.suit === '♦'));
+  currentPlayer = openingPlayer;
 
-  // Rotate so our hand is hand[0]
+  // Rotate so MY seat is at local index 0
   const r = _orMyGlobalSeat;
-  const rotatedHands = dealtHands.map((_, li) => dealtHands[(li + r) % 4]);
-  const rotatedNames = seatNames.map((_, li) => seatNames[(li + r) % 4]);
-  const npcSlots = seats.map((uid, i) => !uid);
-  const rotatedNpc = npcSlots.map((_, li) => npcSlots[(li + r) % 4]);
-
-  // Initialise the game using existing multiplayer/friend-table game engine
-  closeOnlineRoom();
-
-  mpSeats = rotatedNames.map((name, i) => ({ name, globalSeat: (i + r) % 4 }));
-  mpNpcSlots = rotatedNpc;
-  mpGameMode = 'multi';
-  gameMode = _orGameMode;
-  selectedMode = _orGameMode;
-  mpMyLocalSeat = 0;
-
-  hands = rotatedHands;
-  currentPlayer = 0;
-  lastPlay = null; lastPlayer = -1; passCount = 0;
-  globalDiscardedCards = [];
-  gameActive = true;
-
-  if (mpSessionHistory.length === 0 || _orJoinedAtGame === 0) {
-    mpSessionScores = [0, 0, 0, 0];
-    _orJoinedAtGame = mpSessionHistory.length;
+  if (r !== 0) {
+    hands         = [0,1,2,3].map(li => hands[(r + li) % 4]);
+    currentPlayer = (currentPlayer - r + 4) % 4;
+    openingPlayer = (openingPlayer - r + 4) % 4;
   }
 
-  hideSplash();
+  // Set up game engine state
+  mpGameMode   = 'vs_human';
+  selectedMode = _orGameMode;
+  mpMySeat     = 0;
+  mpNpcSlots   = [0,1,2,3].map(li => npcSlots[(r + li) % 4]);
+  mpSeats      = [0,1,2,3].map(li => ({ name: seatNames[(r + li) % 4], conn: null }));
+  mpIsHost     = true; // all players run game logic locally (same as FT)
+
+  lastPlay             = null;
+  passCount            = 0;
+  firstTurn            = true;
+  currentRoundPlays    = [];
+  globalDiscardedCards = new Set();
+  selectedCards        = [];
+  discardPile          = [];
+  startingHandProfile  = hands.map(h => classifyStartingHand(h));
+  gameActive           = true;
+
+  if (mpSessionHistory.length === 0 || _orJoinedAtGame === 0) {
+    mpSessionScores  = [0, 0, 0, 0];
+    _orJoinedAtGame  = mpSessionHistory.length;
+  }
+
+  // Show game screen
+  closeOnlineRoom();
+  document.getElementById('splash').style.display = 'none';
+  document.getElementById('game').style.display   = 'block';
+  const ff = document.getElementById('btn-forfeit');
+  if (ff) ff.style.display = 'none';
+
+  // Set player name labels
+  const lbl = document.getElementById('player-name-label');
+  if (lbl) lbl.textContent = mpSeats[0].name;
+  [{nameId:'name-p2',li:1},{nameId:'name-p3',li:2},{nameId:'name-p4',li:3}].forEach(({nameId,li}) => {
+    const ne = document.getElementById(nameId);
+    if (ne) ne.textContent = (mpNpcSlots[li] ? '🤖 ' : '👤 ') + mpSeats[li].name;
+    const se = document.getElementById('score-p' + nameId.replace('name-p',''));
+    if (se) se.style.display = mpNpcSlots[li] ? 'none' : 'block';
+  });
+
   renderAll();
   setPlayerControls(isMyTurn());
   updateTurnIndicator();
 
-  const lbl = document.getElementById('player-name-label');
-  if (lbl) lbl.textContent = rotatedNames[0];
-  [{nameId:'name-p2',li:1},{nameId:'name-p3',li:2},{nameId:'name-p4',li:3}].forEach(({nameId,li}) => {
-    const ne = document.getElementById(nameId);
-    if (ne) ne.textContent = (rotatedNpc[li] ? '🤖 ' : '👤 ') + mpSeats[li].name;
-  });
-
-  // Mark this as an Online Room game so stats save to OR columns
+  // Mark as Online Room so stats save to the right columns
   _activeRoomType = 'online';
 
   ftStartPolling(table.id);
