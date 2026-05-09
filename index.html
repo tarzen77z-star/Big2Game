@@ -4081,11 +4081,8 @@ function updateTurnIndicator() {
     // Use localSeatNames if available (set by applyFriendTableSnapshot), else derive from mpSeats
     const localNames = [0,1,2,3].map(localIdx => {
       if (localIdx === 0) return 'Your turn';
-      // For host: _friendTableHostRotation rotates mpSeats to local
-      // For guest: mpMySeat rotates host-local mpSeats to guest-local
-      const rotation = mpIsHost ? 0 : mpMySeat;
-      const hostLocalIdx = (localIdx + rotation) % 4;
-      const name = mpSeats[hostLocalIdx]?.name || ('Player '+(hostLocalIdx+1));
+      // mpSeats is now LOCAL-indexed everywhere — use localIdx directly
+      const name = mpSeats[localIdx]?.name || ('Player '+(localIdx+1));
       return name + "'s turn";
     });
     document.getElementById('turn-indicator').textContent = localNames[currentPlayer] + extra;
@@ -4138,18 +4135,11 @@ function updateScoreboard() {
 // Returns display names for scoreboard in local index order [0..3]
 function mpScoreboardNames() {
   if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
-    if (_myTableId) {
-      // FT: mpSeats already local-rotated — use name, mark NPCs clearly
-      return [0,1,2,3].map(li => {
-        if (!mpSeats[li]) return 'NPC ' + (li+1);
-        const isNpc = mpNpcSlots[li];
-        return isNpc ? ('🤖 ' + mpSeats[li].name) : mpSeats[li].name;
-      });
-    }
-    // PeerJS: mpSeats in global order, rotate by mpMySeat
+    // mpSeats is LOCAL-indexed for both FT and PeerJS now
     return [0,1,2,3].map(li => {
-      const globalSeat = (mpMySeat + li) % 4;
-      return mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('Player '+(globalSeat+1));
+      if (!mpSeats[li]) return 'NPC ' + (li+1);
+      const isNpc = mpNpcSlots[li];
+      return isNpc ? ('🤖 ' + mpSeats[li].name) : mpSeats[li].name;
     });
   }
   return [playerCustomName, 'Ace', 'Rex', 'Ivy'];
@@ -4497,7 +4487,7 @@ function executePlay(playerIdx, cards, play) {
       ? (playerIdx - (mpMySeat||0) + 4) % 4
       : playerIdx;
     const namesForCel = mpGameMode === 'vs_human' && mpSeats.length
-      ? [0,1,2,3].map(li => { const gs=(( (mpMySeat||0)+li)%4); return mpSeats[gs]?.name||('Player '+(gs+1)); })
+      ? [0,1,2,3].map(li => mpSeats[li]?.name||('Player '+(li+1)))
       : null;
     gameActive = true; // re-enable so endGame works correctly
     showWinCelebration(winnerLocalForCel, namesForCel, () => endGame(playerIdx));
@@ -5599,11 +5589,8 @@ function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas, namesOverride) 
   if (namesOverride) {
     names = namesOverride;
   } else if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
-    names = [0,1,2,3].map(li => {
-      const globalSeat = (mpMySeat + li) % 4;
-      const n = mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('Player '+(globalSeat+1));
-      return n;
-    });
+    // mpSeats is now LOCAL-indexed, so local index li maps directly
+    names = [0,1,2,3].map(li => mpSeats[li] ? mpSeats[li].name : ('Player '+(li+1)));
   } else {
     names = [playerCustomName, 'Ace', 'Rex', 'Ivy'];
   }
@@ -5703,6 +5690,12 @@ function continueGame() {
     // Clear the watchMyTable safety-net — ftRestartGame has its own polling loop
     if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
     ftRestartGame(); // works for ALL players — runner writes seed, others poll
+  } else if (mpGameMode === 'vs_human' && mpIsHost) {
+    // PeerJS Host Game — deal new game and broadcast to all guests
+    mpStartGame();
+  } else if (mpGameMode === 'vs_human' && !mpIsHost) {
+    // Guest — wait; host will call mpStartGame and broadcast new state
+    toast('Waiting for host to start next game…');
   } else {
     startGame();
   }
@@ -5920,9 +5913,8 @@ function updatePlayerName(val) {
 
 function playerName(idx) {
   if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
-    // In MP, idx is local index — map to global seat then get name
-    const globalSeat = (mpMySeat + idx) % 4;
-    return mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('Player ' + (globalSeat + 1));
+    // mpSeats is LOCAL-indexed (rotated), so idx is the direct index
+    return mpSeats[idx] ? mpSeats[idx].name : ('Player ' + (idx + 1));
   }
   return [playerCustomName,'Ace','Rex','Ivy'][idx];
 }
@@ -9276,12 +9268,14 @@ function mpSendRejoinSync(conn, guestSeat) {
     ...lastPlay, playerIdx:(lastPlay.playerIdx-guestLocalFromHost+4)%4
   } : null;
   const guestSessionScores = [0,1,2,3].map(li=>(mpSessionScores[(guestLocalFromHost+li)%4]||0));
+  // Seat names rotated to guest-local order
   const guestSeatNames = [0,1,2,3].map(li=>mpSeats[(guestLocalFromHost+li)%4]?.name||('Player '+(li+1)));
   const guestSeatRankScores = [0,1,2,3].map(li=>{
     const gi=(guestLocalFromHost+li)%4;
     return gi===0?rankScore:(mpSeatRankScores[gi]||0);
   });
-  const npcSeatsArr = Array.from({length:4},(_,i)=>i>=mpSeats.length);
+  // NPC slots rotated to guest-local order (mpNpcSlots is host-local = global for host)
+  const guestNpcSeats = [0,1,2,3].map(li => mpNpcSlots[(guestLocalFromHost+li)%4]);
   const snap = {
     type:'sync',
     hands:guestHands,
@@ -9299,8 +9293,8 @@ function mpSendRejoinSync(conn, guestSeat) {
     // Extra rejoin info
     isRejoinSync:true,
     mySeat:guestSeat,
-    npcSeats:npcSeatsArr,
-    seats:mpSeats.map(s=>({name:s.name}))
+    npcSeats:guestNpcSeats,
+    seats:mpSeats.map(s=>({name:s.name})) // local-order names for reference
   };
   try{conn.send(snap);}catch(e){}
 }
@@ -9434,27 +9428,34 @@ function mpGuestOnData(data){
       // Full rejoin setup
       if(data.mySeat !== undefined) mpMySeat = data.mySeat;
       mpGameMode='vs_human';
-      if(data.seats) mpSeats=data.seats.map(s=>({name:s.name,conn:null}));
+      // npcSeats in data is already guest-local-rotated (fixed in mpSendRejoinSync)
       if(data.npcSeats) mpNpcSlots=data.npcSeats.slice();
       mpNpcSlots[0]=false; // local 0 is always us
+      // Rebuild mpSeats in LOCAL order from the local-order seatNames
+      if(data.mpSeatNames){
+        mpSeats=data.mpSeatNames.map(name=>({name,conn:null}));
+      } else if(data.seats){
+        // Fallback: rotate global-order seats to local order
+        mpSeats=[0,1,2,3].map(li=>({name:data.seats[(mpMySeat+li)%4]?.name||('Player '+(li+1)),conn:null}));
+      }
       document.getElementById('mp-lobby').classList.remove('open');
       document.getElementById('splash').style.display='none';
       document.getElementById('game').style.display='block';
       const ff=document.getElementById('btn-forfeit');if(ff)ff.style.display='none';
       const zb=document.getElementById('btn-hand-zoom');if(zb)zb.style.top='12px';
+      voiceUpdateVisibility();voiceAdjustPosition(true);
       const lbl=document.getElementById('player-name-label');
-      if(lbl)lbl.textContent=playerCustomName;
-      // Set up zone labels
+      if(lbl)lbl.textContent=mpSeats[0].name;
+      // Set up zone labels using local-order mpSeats and mpNpcSlots
       const zoneMap=[
         {zoneId:'npc-right',nameId:'name-p2',localIdx:1},
         {zoneId:'npc-top',  nameId:'name-p3',localIdx:2},
         {zoneId:'npc-left', nameId:'name-p4',localIdx:3},
       ];
-      if(data.mpSeatNames) zoneMap.forEach(({zoneId,nameId,localIdx})=>{
+      zoneMap.forEach(({zoneId,nameId,localIdx})=>{
         const ne=document.getElementById(nameId);
-        const globalSeat=(mpMySeat+localIdx)%4;
-        const isNpc=mpNpcSlots[globalSeat]!==false;
-        if(ne) ne.textContent=(isNpc?'🤖 ':'👤 ')+(data.mpSeatNames[localIdx]||'Player '+(globalSeat+1));
+        const isNpc=mpNpcSlots[localIdx]; // local-indexed
+        if(ne) ne.textContent=(isNpc?'🤖 ':'👤 ')+(mpSeats[localIdx]?.name||'Player '+(localIdx+1));
         const ze=document.getElementById(zoneId);
         if(ze) ze.classList.toggle('mp-human',!isNpc);
         const scoreEl=document.getElementById('score-p'+nameId.replace('name-p',''));
@@ -9512,11 +9513,11 @@ function mpStartGame(){
 // Host initialises its own game state (global seats = host local indices)
 function mpHostStartGame(data){
   mpGameMode='vs_human';
-  mpSeats=data.seats.map(s=>({name:s.name,conn:mpSeats[data.seats.indexOf(s)]?.conn||null}));
-  // Actually rebuild from existing mpSeats connections
+  // Host is always seat 0, so global order = local order for host
+  // Rebuild mpSeats with connections, in global/local order (same for host)
   mpSeats=data.seats.map((s,i)=>({name:s.name,conn:i===0?null:mpConnections[i-1]}));
   mpMySeat=0;
-  mpNpcSlots=data.npcSeats.slice(); // global index → is NPC
+  mpNpcSlots=data.npcSeats.slice(); // global index = local index for host (seat 0)
   mpTurnToken=0;
   mpSeatRankScores[0]=rankScore; // host's own rank score
 
@@ -9545,8 +9546,9 @@ function mpHostStartGame(data){
 // Guest sets up display only — all game state comes from host sync
 function mpGuestStartGame(data){
   mpGameMode='vs_human';
-  mpSeats=data.seats.map(s=>({name:s.name,conn:null}));
   mpMySeat=data.mySeat;
+  // Rotate mpSeats to LOCAL order: mpSeats[0]=me, [1]=my right, [2]=my top, [3]=my left
+  mpSeats=[0,1,2,3].map(li=>({name:data.seats[(mpMySeat+li)%4].name,conn:null}));
   // Rotate npcSlots to guest-local perspective
   mpNpcSlots=[0,1,2,3].map(li=>data.npcSeats[(mpMySeat+li)%4]);
   mpTurnToken=0;
@@ -9571,6 +9573,7 @@ function mpGuestStartGame(data){
 }
 
 // Set up name labels and zone classes for MP game
+// mpSeats is already rotated to LOCAL order before this is called
 function mpSetupGameScreen(seats){
   document.getElementById('splash').style.display='none';
   document.getElementById('game').style.display='block';
@@ -9583,10 +9586,12 @@ function mpSetupGameScreen(seats){
   // Show voice button and adjust its position
   voiceUpdateVisibility();
   voiceAdjustPosition(true);
+  // mpSeats[0] is always "me" in local order
   const lbl=document.getElementById('player-name-label');
-  if(lbl)lbl.textContent=mpSeats[mpMySeat].name;
+  if(lbl)lbl.textContent=mpSeats[0].name;
 
-  // Label the 3 opponent zones: right=local1, top=local2, left=local3
+  // Label the 3 opponent zones using LOCAL indices directly
+  // localIdx 1=right, 2=top, 3=left — mpSeats[localIdx] and mpNpcSlots[localIdx]
   const zoneMap=[
     {zoneId:'npc-right',nameId:'name-p2',localIdx:1},
     {zoneId:'npc-top',  nameId:'name-p3',localIdx:2},
@@ -9594,8 +9599,8 @@ function mpSetupGameScreen(seats){
   ];
   zoneMap.forEach(({zoneId,nameId,localIdx})=>{
     const globalSeat=(mpMySeat+localIdx)%4;
-    const isNpc=mpNpcSlots[globalSeat];
-    const name=mpSeats[globalSeat]?mpSeats[globalSeat].name:'Player '+(globalSeat+1);
+    const isNpc=mpNpcSlots[localIdx]; // mpNpcSlots is LOCAL-indexed (0=me,1=right,2=top,3=left)
+    const name=mpSeats[localIdx]?mpSeats[localIdx].name:'Player '+(localIdx+1); // mpSeats is LOCAL-indexed after rotation
     const ne=document.getElementById(nameId);if(ne)ne.textContent=(isNpc?'🤖 ':'👤 ')+name;
     const ze=document.getElementById(zoneId);if(ze)ze.classList.toggle('mp-human',!isNpc);
     // Show rank score for human players in MP
@@ -9604,8 +9609,7 @@ function mpSetupGameScreen(seats){
     if(scoreEl){
       if(!isNpc){
         scoreEl.style.display='block';
-        // Host shows own rankScore for seat 0; guests' scores arrive via sync
-        scoreEl.textContent='✦ ' + (globalSeat===mpMySeat ? rankScore : (mpSeatRankScores[globalSeat]||0));
+        scoreEl.textContent='✦ ' + (mpSeatRankScores[globalSeat]||0);
       } else {
         scoreEl.style.display='none';
       }
@@ -9624,14 +9628,10 @@ function mpGuestApplySync(snap){
   }
   if(snap.mpSeatNames){
     mpSessionNames=[...snap.mpSeatNames];
-    // mpSeatNames is already rotated to guest-local order by the host,
-    // so li=0 is the guest's own name, li=1 is the player to their right, etc.
-    // mpSeats is stored in global order, so we need to convert li → global seat.
+    // mpSeatNames is already guest-local (rotated by host): [0]=me,[1]=my right, etc.
+    // mpSeats is also local-order, so map directly by local index li
     snap.mpSeatNames.forEach((name,li)=>{
-      // guest-local li → global seat: (mpMySeat + li) % 4
-      // BUT mpSeatNames from host is already guest-local (rotated by host), so li IS guest-local
-      const globalSeat=(mpMySeat+li)%4;
-      if(mpSeats[globalSeat]) mpSeats[globalSeat].name=name;
+      if(mpSeats[li]) mpSeats[li].name=name;
     });
   }
   // Always update NPC slots from sync so score labels hide correctly
