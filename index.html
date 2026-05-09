@@ -1401,6 +1401,7 @@
   @media (max-width: 500px) {
     #discard-pile.discard-zoomed .play-card .rank { font-size: 1.1rem !important; }
     #discard-pile.discard-zoomed .play-card .center-suit { font-size: 1.56rem !important; }
+    #voice-status { font-size: 0.6rem; padding: 2px 6px; max-width: 110px; }
   }
   /* Zoom indicator */
   .zoom-hint {
@@ -1439,6 +1440,66 @@
   }
   #btn-hand-zoom:hover { background: rgba(201,168,76,0.15); border-color: var(--gold); color: var(--gold-light); }
   #btn-hand-zoom.zoomed { background: rgba(201,168,76,0.2); border-color: var(--gold); color: var(--gold); }
+
+  /* ── VOICE BUTTON ── */
+  #btn-voice {
+    position: absolute;
+    left: 12px;
+    top: 90px;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(100,200,255,0.4);
+    color: rgba(100,200,255,0.75);
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    font-size: 0.85rem;
+    display: none; /* hidden by default; shown only in Host Game mode */
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 15;
+    transition: all 0.2s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  #btn-voice:hover { background: rgba(100,200,255,0.15); border-color: rgba(100,200,255,0.8); color: rgba(100,200,255,1); }
+  #btn-voice.voice-on {
+    background: rgba(60,180,80,0.25);
+    border-color: rgba(80,220,120,0.8);
+    color: #7fffaa;
+    box-shadow: 0 0 10px rgba(80,220,120,0.4);
+  }
+  #btn-voice.voice-muted {
+    background: rgba(180,60,60,0.25);
+    border-color: rgba(220,80,80,0.7);
+    color: #ff9999;
+  }
+  /* Voice status indicator */
+  #voice-status {
+    position: absolute;
+    left: 46px;
+    top: 90px;
+    font-family: 'Crimson Pro', serif;
+    font-size: 0.68rem;
+    color: rgba(100,200,255,0.7);
+    background: rgba(0,0,0,0.55);
+    border: 1px solid rgba(100,200,255,0.2);
+    border-radius: 8px;
+    padding: 3px 8px;
+    pointer-events: none;
+    z-index: 15;
+    display: none;
+    white-space: nowrap;
+    backdrop-filter: blur(4px);
+  }
+  #voice-status.visible { display: block; }
+  /* Speaking pulse animation */
+  @keyframes voice-pulse {
+    0%,100% { box-shadow: 0 0 6px rgba(80,220,120,0.4); }
+    50%      { box-shadow: 0 0 16px rgba(80,220,120,0.85); }
+  }
+  #btn-voice.speaking { animation: voice-pulse 0.8s ease-in-out infinite; }
 
   /* ── MP Room Standing tabs on winner banner ── */
   #winner-tabs {
@@ -3016,6 +3077,9 @@
   <!-- Forfeit button: upper-left -->
   <button class="btn-forfeit" id="btn-forfeit" onclick="forfeitGame()">🏳 Forfeit</button>
   <button id="btn-hand-zoom" title="Toggle card zoom" onclick="toggleHandZoom()">🔍</button>
+  <!-- Voice button: only visible in Host Game (PeerJS multiplayer) mode -->
+  <button id="btn-voice" title="Toggle voice chat" onclick="voiceToggle()">🎙️</button>
+  <div id="voice-status"></div>
 
   <!-- Top NPC (Player 3) -->
   <div id="npc-top" class="npc-zone">
@@ -9035,7 +9099,7 @@ function mpInitHost(){
   mpRenderSeats();
   try{
     mpPeer=new Peer('big2-'+mpRoomCode+'-host');
-    mpPeer.on('open',()=>mpSetStatus('Room ready! Share code: '+mpRoomCode));
+    mpPeer.on('open',()=>{ mpSetStatus('Room ready! Share code: '+mpRoomCode); voiceListenForCalls(); });
     mpPeer.on('connection',conn=>mpHostOnConnect(conn));
     mpPeer.on('error',err=>mpSetStatus('⚠ '+err.message));
   }catch(e){mpSetStatus('PeerJS unavailable.');}
@@ -9061,6 +9125,8 @@ function mpHostOnConnect(conn){
 }
 
 function mpHostOnData(conn,data){
+  // Handle voice messages from guests
+  voiceHandleData(data);
   if(data.type==='name'){
     const s=mpSeats.findIndex(x=>x.conn===conn);
     if(s>=0){
@@ -9319,6 +9385,7 @@ function mpJoinRoom(){
   try{
     mpPeer=new Peer();
     mpPeer.on('open',()=>{
+      voiceListenForCalls(); // listen for host voice calls
       mpHostConn=mpPeer.connect('big2-'+code+'-host',{reliable:true});
       mpHostConn.on('open',()=>{
         mpHostConn.send({type:'name',name:playerCustomName});
@@ -9341,6 +9408,8 @@ function mpJoinRoom(){
 }
 
 function mpGuestOnData(data){
+  // Handle voice-related messages
+  voiceHandleData(data);
   if(data.type==='full'){mpSetStatus('Room full.','mp-status-join');return;}
   if(data.type==='seat'){
     mpMySeat=data.seat;
@@ -9511,6 +9580,9 @@ function mpSetupGameScreen(seats){
   // Move zoom button up since forfeit is hidden
   const zb = document.getElementById('btn-hand-zoom');
   if (zb) zb.style.top = '12px';
+  // Show voice button and adjust its position
+  voiceUpdateVisibility();
+  voiceAdjustPosition(true);
   const lbl=document.getElementById('player-name-label');
   if(lbl)lbl.textContent=mpSeats[mpMySeat].name;
 
@@ -9687,6 +9759,7 @@ function mpRejoinRoom(){
   try{
     mpPeer=new Peer();
     mpPeer.on('open',()=>{
+      voiceListenForCalls(); // listen for host voice calls on rejoin
       mpHostConn=mpPeer.connect('big2-'+code+'-host',{reliable:true});
       mpHostConn.on('open',()=>{
         mpSetStatus('Connected, rejoining…','mp-status-rejoin');
@@ -9710,12 +9783,17 @@ function mpDestroy(){
   if(mpPeer){try{mpPeer.destroy();}catch(e){}mpPeer=null;}
   mpIsHost=false;mpRoomCode=null;mpSeats=[];mpMySeat=-1;mpGameMode='single';
   mpNpcSlots=[false,false,false,false];mpTurnToken=0;
+  // Stop voice chat when room ends
+  voiceStop();
+  voiceUpdateVisibility();
   // Restore forfeit button for single-player
   const ff = document.getElementById('btn-forfeit');
   if (ff) ff.style.display = '';
   // Restore zoom button position
   const zb = document.getElementById('btn-hand-zoom');
   if (zb) zb.style.top = '';
+  // Restore voice button position
+  voiceAdjustPosition(false);
 }
 
 
@@ -10452,6 +10530,206 @@ async function orLbLoad(tab) {
 // ── Polling / state sync (delegates to FT engine) ────────
 function orStopPolling() {
   if (_orPollTimer) { clearInterval(_orPollTimer); _orPollTimer = null; }
+}
+
+// ════════════════════════════════════════════════════════════
+//  VOICE CHAT SYSTEM — Host Game (PeerJS) only
+//  Host calls each guest via mpPeer.call(); guests answer.
+//  Toggle on/off during gameplay. Mute disables mic track.
+// ════════════════════════════════════════════════════════════
+
+let _voiceEnabled  = false;
+let _voiceMuted    = false;
+let _voiceStream   = null;
+let _voiceCalls    = [];
+let _voiceAudios   = [];
+let _voiceVadTimer = null;
+
+function voiceUpdateVisibility() {
+  const btn = document.getElementById('btn-voice');
+  const vst = document.getElementById('voice-status');
+  if (!btn) return;
+  const show = (mpGameMode === 'vs_human');
+  btn.style.display = show ? 'flex' : 'none';
+  if (!show && vst) vst.classList.remove('visible');
+}
+
+async function voiceToggle() {
+  if (!_voiceEnabled) {
+    await voiceStart();
+  } else if (!_voiceMuted) {
+    voiceMute();
+  } else {
+    voiceUnmute();
+  }
+}
+
+async function voiceStart() {
+  const btn = document.getElementById('btn-voice');
+  try {
+    _voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    _voiceEnabled = true;
+    _voiceMuted   = false;
+    if (btn) { btn.classList.add('voice-on'); btn.classList.remove('voice-muted'); btn.title = 'Mute mic'; }
+    voiceSetStatus('🎙️ Mic on');
+
+    if (mpIsHost) {
+      // Call each connected peer
+      mpConnections.forEach(conn => {
+        if (!conn || !conn.peer) return;
+        try {
+          const call = mpPeer.call(conn.peer, _voiceStream);
+          if (!call) return;
+          _voiceCalls.push(call);
+          call.on('stream', remoteStream => voiceAddRemoteStream(remoteStream));
+          call.on('close', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
+          call.on('error', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
+        } catch(e) {}
+      });
+      // Notify guests voice is available
+      mpConnections.forEach(c => { try { c.send({ type: 'voice_started' }); } catch(e) {} });
+    } else {
+      // Guest ready — notify host
+      if (mpHostConn) { try { mpHostConn.send({ type: 'voice_ready' }); } catch(e) {} }
+    }
+
+    voiceStartVAD();
+    toast('🎙️ Voice chat on');
+  } catch(e) {
+    toast('⚠ Mic access denied');
+    console.warn('voiceStart error:', e);
+  }
+}
+
+function voiceMute() {
+  if (!_voiceStream) return;
+  _voiceMuted = true;
+  _voiceStream.getAudioTracks().forEach(t => { t.enabled = false; });
+  const btn = document.getElementById('btn-voice');
+  if (btn) { btn.classList.remove('voice-on','speaking'); btn.classList.add('voice-muted'); btn.title = 'Unmute mic'; }
+  voiceSetStatus('🔇 Muted');
+  toast('🔇 Mic muted');
+}
+
+function voiceUnmute() {
+  if (!_voiceStream) return;
+  _voiceMuted = false;
+  _voiceStream.getAudioTracks().forEach(t => { t.enabled = true; });
+  const btn = document.getElementById('btn-voice');
+  if (btn) { btn.classList.remove('voice-muted'); btn.classList.add('voice-on'); btn.title = 'Mute mic'; }
+  voiceSetStatus('🎙️ Mic on');
+  toast('🎙️ Mic on');
+}
+
+function voiceStop() {
+  _voiceEnabled = false; _voiceMuted = false;
+  _voiceCalls.forEach(c => { try { c.close(); } catch(e) {} });
+  _voiceCalls = [];
+  _voiceAudios.forEach(a => { try { a.pause(); a.srcObject = null; a.remove(); } catch(e) {} });
+  _voiceAudios = [];
+  if (_voiceStream) { _voiceStream.getTracks().forEach(t => t.stop()); _voiceStream = null; }
+  if (_voiceVadTimer) { clearInterval(_voiceVadTimer); _voiceVadTimer = null; }
+  const btn = document.getElementById('btn-voice');
+  if (btn) { btn.classList.remove('voice-on','voice-muted','speaking'); btn.title = 'Toggle voice chat'; }
+  const vst = document.getElementById('voice-status');
+  if (vst) vst.classList.remove('visible');
+}
+
+// Guest handles incoming call from host
+function voiceListenForCalls() {
+  if (!mpPeer) return;
+  mpPeer.on('call', call => {
+    call.answer(_voiceStream || new MediaStream());
+    _voiceCalls.push(call);
+    call.on('stream', remoteStream => voiceAddRemoteStream(remoteStream));
+    call.on('close', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
+    call.on('error', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
+    // Show voice indicator even if guest hasn't turned on their own mic yet
+    voiceUpdateVisibility();
+    voiceSetStatus('🎙️ Host voice on — tap 🎙️ to join');
+  });
+}
+
+// Host calls a newly joined/rejoined guest
+function voiceCallNewGuest(peerConn) {
+  if (!_voiceEnabled || !_voiceStream || !mpIsHost || !mpPeer) return;
+  if (!peerConn || !peerConn.peer) return;
+  const alreadyCalled = _voiceCalls.some(c => c.peer === peerConn.peer);
+  if (alreadyCalled) return;
+  try {
+    const call = mpPeer.call(peerConn.peer, _voiceStream);
+    if (!call) return;
+    _voiceCalls.push(call);
+    call.on('stream', remoteStream => voiceAddRemoteStream(remoteStream));
+    call.on('close', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
+    call.on('error', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
+  } catch(e) {}
+}
+
+function voiceAddRemoteStream(stream) {
+  const audio = document.createElement('audio');
+  audio.autoplay = true; audio.playsInline = true;
+  audio.srcObject = stream; audio.style.display = 'none';
+  document.body.appendChild(audio);
+  _voiceAudios.push(audio);
+  audio.play().catch(() => {});
+}
+
+// Voice Activity Detection — microphone glow
+function voiceStartVAD() {
+  if (_voiceVadTimer) { clearInterval(_voiceVadTimer); _voiceVadTimer = null; }
+  if (!_voiceStream) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = ctx.createMediaStreamSource(_voiceStream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    _voiceVadTimer = setInterval(() => {
+      if (_voiceMuted || !_voiceEnabled) return;
+      analyser.getByteFrequencyData(buf);
+      const avg = buf.reduce((a, b) => a + b, 0) / buf.length;
+      const btn = document.getElementById('btn-voice');
+      if (btn) btn.classList.toggle('speaking', avg > 12);
+    }, 150);
+  } catch(e) {}
+}
+
+function voiceSetStatus(msg) {
+  const vst = document.getElementById('voice-status');
+  if (!vst) return;
+  vst.textContent = msg;
+  vst.classList.add('visible');
+}
+
+// Handle voice-related data messages from host/guest
+function voiceHandleData(data) {
+  if (data.type === 'voice_started') {
+    // Host turned on voice — hint guest
+    voiceUpdateVisibility();
+    voiceSetStatus('🎙️ Host is in voice — tap 🎙️ to join');
+  }
+  if (data.type === 'voice_ready') {
+    // A guest announced they are voice-ready — call them if we're host with voice on
+    if (mpIsHost && _voiceEnabled && _voiceStream) {
+      mpConnections.forEach(conn => voiceCallNewGuest(conn));
+    }
+  }
+}
+
+// Adjust voice button position (mirrors zoom btn logic when forfeit is hidden)
+function voiceAdjustPosition(forfeitHidden) {
+  const btn = document.getElementById('btn-voice');
+  const vst = document.getElementById('voice-status');
+  if (!btn) return;
+  if (forfeitHidden) {
+    btn.style.top  = '50px';
+    if (vst) vst.style.top = '50px';
+  } else {
+    btn.style.top  = '90px';
+    if (vst) vst.style.top = '90px';
+  }
 }
 
 </script>
