@@ -2393,8 +2393,8 @@
   <div class="sp-action-card" onclick="openMpLobby()">
     <div class="sp-action-card-suit">♠</div>
     <div class="sp-action-card-body">
-      <div class="sp-action-title">Host Game</div>
-      <div class="sp-action-sub">Share a code · up to 4 players</div>
+      <div class="sp-action-title">Host Game <span style="display:inline-flex;align-items:center;gap:3px;background:rgba(46,204,113,0.18);border:1px solid rgba(46,204,113,0.45);border-radius:10px;padding:1px 7px;font-size:0.62rem;font-family:'Crimson Pro',serif;color:#7fffaa;letter-spacing:0.04em;vertical-align:middle;margin-left:6px">🎙️ Voice</span></div>
+      <div class="sp-action-sub">Share a code · up to 4 players · voice chat</div>
     </div>
     <div class="sp-action-arrow">▸</div>
   </div>
@@ -2608,10 +2608,14 @@
     <div class="mp-section active" id="mp-sec-host">
       <!-- Stage 1: landing — shown before room is created -->
       <div id="mp-host-landing">
-        <p style="font-size:0.85rem;color:rgba(160,184,255,0.85);margin-bottom:1rem;line-height:1.5">
+        <p style="font-size:0.85rem;color:rgba(160,184,255,0.85);margin-bottom:0.75rem;line-height:1.5">
           Start a new room and invite up to 3 friends.<br>
           <span style="font-size:0.78rem;color:rgba(160,184,255,0.55)">You'll get a 4-letter code to share with them.</span>
         </p>
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(46,204,113,0.1);border:1px solid rgba(46,204,113,0.35);border-radius:8px;padding:8px 12px;margin-bottom:1rem">
+          <span style="font-size:1.2rem">🎙️</span>
+          <span style="font-size:0.78rem;color:rgba(180,255,210,0.9);line-height:1.45"><strong style="color:#7fffaa">Voice chat included</strong> — talk with your friends while you play. Your browser will ask for mic permission when the game starts.</span>
+        </div>
         <button class="btn-mp btn-mp-start" onclick="mpCreateRoom()" style="width:100%;margin-bottom:0.5rem">🏠 Create Room</button>
         <button class="btn-mp" onclick="closeMpLobby()" style="width:100%">Cancel</button>
       </div>
@@ -2622,6 +2626,10 @@
         <div class="room-code-hint" id="mp-copy-hint">Tap code to copy</div>
         <div id="mp-status">Generating room…</div>
         <div id="mp-player-list"></div>
+        <div style="display:flex;align-items:center;gap:7px;background:rgba(46,204,113,0.09);border:1px solid rgba(46,204,113,0.3);border-radius:8px;padding:7px 11px;margin-top:0.6rem;margin-bottom:0.2rem">
+          <span style="font-size:1rem">🎙️</span>
+          <span style="font-size:0.74rem;color:rgba(180,255,210,0.85);line-height:1.4"><strong style="color:#7fffaa">Voice chat active</strong> — you can talk with players in this room. Allow mic access when prompted.</span>
+        </div>
         <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:0.8rem">
           <button class="btn-mp btn-mp-start" id="btn-mp-start" onclick="mpStartGame()" disabled>▶ Start Game</button>
           <button class="btn-mp" onclick="mpCancelRoom()">✕ Cancel Room</button>
