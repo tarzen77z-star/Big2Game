@@ -468,13 +468,21 @@
     letter-spacing: 0.04em;
   }
   .btn-pass-big {
-    padding: 7.7px 20px !important;
+    padding: 7.7px 24px !important;
     font-size: 1.1rem !important;
-    background: rgba(0,0,0,0.4) !important;
-    border-color: rgba(201,168,76,0.5) !important;
-    color: var(--gold-light) !important;
+    letter-spacing: 0.04em;
+    background: linear-gradient(135deg, #c0392b, #7b1a1a) !important;
+    border: 2px solid #ff8888 !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 0 14px rgba(192,57,43,0.4), 0 3px 10px rgba(0,0,0,0.4) !important;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
   }
-  .btn-pass-big:hover:not(:disabled) { background: rgba(201,168,76,0.15) !important; }
+  .btn-pass-big:hover:not(:disabled) {
+    background: linear-gradient(135deg, #d9453a, #962020) !important;
+    box-shadow: 0 0 22px rgba(192,57,43,0.65), 0 3px 12px rgba(0,0,0,0.4) !important;
+    transform: translateY(-1px);
+  }
   /* Forfeit — upper-left corner */
   .btn-forfeit {
     position: absolute;
@@ -839,7 +847,7 @@
     #player-controls { gap: 4px; margin-bottom: 3px; padding: 0 4px; }
     .btn-sm { padding: 4px 8px; font-size: 0.72rem; }
     .btn-play-big { padding: 6px 14px !important; font-size: 0.85rem !important; }
-    .btn-pass-big { padding: 6px 10px !important; font-size: 0.85rem !important; }
+    .btn-pass-big { padding: 6px 14px !important; font-size: 0.85rem !important; }
 
     /* ── HAND CONTAINER ── */
     #hand-container { height: 128px; }
@@ -1401,7 +1409,6 @@
   @media (max-width: 500px) {
     #discard-pile.discard-zoomed .play-card .rank { font-size: 1.1rem !important; }
     #discard-pile.discard-zoomed .play-card .center-suit { font-size: 1.56rem !important; }
-    #voice-status { font-size: 0.6rem; padding: 2px 6px; max-width: 110px; }
   }
   /* Zoom indicator */
   .zoom-hint {
@@ -1440,66 +1447,6 @@
   }
   #btn-hand-zoom:hover { background: rgba(201,168,76,0.15); border-color: var(--gold); color: var(--gold-light); }
   #btn-hand-zoom.zoomed { background: rgba(201,168,76,0.2); border-color: var(--gold); color: var(--gold); }
-
-  /* ── VOICE BUTTON ── */
-  #btn-voice {
-    position: absolute;
-    left: 12px;
-    top: 90px;
-    background: rgba(0,0,0,0.45);
-    border: 1px solid rgba(100,200,255,0.4);
-    color: rgba(100,200,255,0.75);
-    border-radius: 50%;
-    width: 30px;
-    height: 30px;
-    font-size: 0.85rem;
-    display: none; /* hidden by default; shown only in Host Game mode */
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    z-index: 15;
-    transition: all 0.2s;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-  #btn-voice:hover { background: rgba(100,200,255,0.15); border-color: rgba(100,200,255,0.8); color: rgba(100,200,255,1); }
-  #btn-voice.voice-on {
-    background: rgba(60,180,80,0.25);
-    border-color: rgba(80,220,120,0.8);
-    color: #7fffaa;
-    box-shadow: 0 0 10px rgba(80,220,120,0.4);
-  }
-  #btn-voice.voice-muted {
-    background: rgba(180,60,60,0.25);
-    border-color: rgba(220,80,80,0.7);
-    color: #ff9999;
-  }
-  /* Voice status indicator */
-  #voice-status {
-    position: absolute;
-    left: 46px;
-    top: 90px;
-    font-family: 'Crimson Pro', serif;
-    font-size: 0.68rem;
-    color: rgba(100,200,255,0.7);
-    background: rgba(0,0,0,0.55);
-    border: 1px solid rgba(100,200,255,0.2);
-    border-radius: 8px;
-    padding: 3px 8px;
-    pointer-events: none;
-    z-index: 15;
-    display: none;
-    white-space: nowrap;
-    backdrop-filter: blur(4px);
-  }
-  #voice-status.visible { display: block; }
-  /* Speaking pulse animation */
-  @keyframes voice-pulse {
-    0%,100% { box-shadow: 0 0 6px rgba(80,220,120,0.4); }
-    50%      { box-shadow: 0 0 16px rgba(80,220,120,0.85); }
-  }
-  #btn-voice.speaking { animation: voice-pulse 0.8s ease-in-out infinite; }
 
   /* ── MP Room Standing tabs on winner banner ── */
   #winner-tabs {
@@ -3077,9 +3024,6 @@
   <!-- Forfeit button: upper-left -->
   <button class="btn-forfeit" id="btn-forfeit" onclick="forfeitGame()">🏳 Forfeit</button>
   <button id="btn-hand-zoom" title="Toggle card zoom" onclick="toggleHandZoom()">🔍</button>
-  <!-- Voice button: only visible in Host Game (PeerJS multiplayer) mode -->
-  <button id="btn-voice" title="Toggle voice chat" onclick="voiceToggle()">🎙️</button>
-  <div id="voice-status"></div>
 
   <!-- Top NPC (Player 3) -->
   <div id="npc-top" class="npc-zone">
@@ -3211,7 +3155,6 @@ let mpRoomCode    = null;
 let mpConnections = [];
 let mpHostConn    = null;
 let mpSeats       = [];
-let mpAllSeatNames= ['','','','']; // full 4-entry names in LOCAL order, incl. NPC slots
 let mpMySeat      = -1;
 let mpGameMode    = 'single';
 let mpNpcSlots    = [false,false,false,false];
@@ -4082,8 +4025,11 @@ function updateTurnIndicator() {
     // Use localSeatNames if available (set by applyFriendTableSnapshot), else derive from mpSeats
     const localNames = [0,1,2,3].map(localIdx => {
       if (localIdx === 0) return 'Your turn';
-      // mpSeats is now LOCAL-indexed everywhere — use localIdx directly
-      const name = mpSeats[localIdx]?.name || ('Player '+(localIdx+1));
+      // For host: _friendTableHostRotation rotates mpSeats to local
+      // For guest: mpMySeat rotates host-local mpSeats to guest-local
+      const rotation = mpIsHost ? 0 : mpMySeat;
+      const hostLocalIdx = (localIdx + rotation) % 4;
+      const name = mpSeats[hostLocalIdx]?.name || ('Player '+(hostLocalIdx+1));
       return name + "'s turn";
     });
     document.getElementById('turn-indicator').textContent = localNames[currentPlayer] + extra;
@@ -4135,11 +4081,19 @@ function updateScoreboard() {
 
 // Returns display names for scoreboard in local index order [0..3]
 function mpScoreboardNames() {
-  if (mpGameMode === 'vs_human') {
+  if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
+    if (_myTableId) {
+      // FT: mpSeats already local-rotated — use name, mark NPCs clearly
+      return [0,1,2,3].map(li => {
+        if (!mpSeats[li]) return 'NPC ' + (li+1);
+        const isNpc = mpNpcSlots[li];
+        return isNpc ? ('🤖 ' + mpSeats[li].name) : mpSeats[li].name;
+      });
+    }
+    // PeerJS: mpSeats in global order, rotate by mpMySeat
     return [0,1,2,3].map(li => {
-      const name = mpAllSeatNames[li] || mpSeats[li]?.name || ('Player '+(li+1));
-      const isNpc = mpNpcSlots[li];
-      return isNpc ? ('🤖 ' + name) : name;
+      const globalSeat = (mpMySeat + li) % 4;
+      return mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('Player '+(globalSeat+1));
     });
   }
   return [playerCustomName, 'Ace', 'Rex', 'Ivy'];
@@ -4486,8 +4440,8 @@ function executePlay(playerIdx, cards, play) {
     const winnerLocalForCel = mpGameMode === 'vs_human'
       ? (playerIdx - (mpMySeat||0) + 4) % 4
       : playerIdx;
-    const namesForCel = mpGameMode === 'vs_human'
-      ? [0,1,2,3].map(li => mpAllSeatNames[li] || mpSeats[li]?.name || ('Player '+(li+1)))
+    const namesForCel = mpGameMode === 'vs_human' && mpSeats.length
+      ? [0,1,2,3].map(li => { const gs=(( (mpMySeat||0)+li)%4); return mpSeats[gs]?.name||('Player '+(gs+1)); })
       : null;
     gameActive = true; // re-enable so endGame works correctly
     showWinCelebration(winnerLocalForCel, namesForCel, () => endGame(playerIdx));
@@ -5506,8 +5460,12 @@ function endGame(winnerIdx) {
     mpConnections.forEach(c => { try { c.send(goMsg); } catch(e) {} });
   }
 
-  const mpNames = mpGameMode === 'vs_human'
-    ? [0,1,2,3].map(li => mpAllSeatNames[li] || mpSeats[li]?.name || ('Player '+(li+1)))
+  // Build names for host (global seat = local seat since mpMySeat=0)
+  const mpNames = mpGameMode === 'vs_human' && mpSeats.length > 0
+    ? [0,1,2,3].map(li => {
+        const n = mpSeats[li] ? mpSeats[li].name : ('Player '+(li+1));
+        return n;
+      })
     : null;
   // Record in MP session history
   if (mpGameMode === 'vs_human') {
@@ -5584,8 +5542,12 @@ function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas, namesOverride) 
   let names;
   if (namesOverride) {
     names = namesOverride;
-  } else if (mpGameMode === 'vs_human') {
-    names = [0,1,2,3].map(li => mpAllSeatNames[li] || mpSeats[li]?.name || ('Player '+(li+1)));
+  } else if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
+    names = [0,1,2,3].map(li => {
+      const globalSeat = (mpMySeat + li) % 4;
+      const n = mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('Player '+(globalSeat+1));
+      return n;
+    });
   } else {
     names = [playerCustomName, 'Ace', 'Rex', 'Ivy'];
   }
@@ -5685,17 +5647,6 @@ function continueGame() {
     // Clear the watchMyTable safety-net — ftRestartGame has its own polling loop
     if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
     ftRestartGame(); // works for ALL players — runner writes seed, others poll
-  } else if (mpGameMode === 'vs_human' && mpIsHost) {
-    // PeerJS Host Game — deal new game and broadcast to all guests
-    mpStartGame();
-  } else if (mpGameMode === 'vs_human' && !mpIsHost) {
-    // Guest — if host already started the new game, just show it
-    if (gameActive) {
-      document.getElementById('winner-banner').style.display = 'none';
-    } else {
-      // Host hasn't started yet — wait; the start message will auto-dismiss the banner
-      toast('Waiting for host to start next game…');
-    }
   } else {
     startGame();
   }
@@ -5730,30 +5681,14 @@ function endSessionFinal() {
   document.getElementById('splash').style.display = 'block';
   const btn = document.getElementById('btn-end-session');
   if (btn) { btn.textContent = 'End Session'; btn.onclick = endSession; }
-
-  // Clean up the table seat in DB
+  // In Friend Table mode: null our seat in DB so staying players treat us as NPC
   if (_myTableId && supaClient && supaUser && _myTableSeat) {
     const seatCol = 'seat_' + _myTableSeat;
-    if (_activeRoomType === 'online') {
-      // Online Room: delete or reset table
-      supaClient.from('online_tables').select('seat_1,seat_2,seat_3,seat_4').eq('id', _myTableId).single()
-        .then(({ data: t }) => {
-          if (!t) return;
-          const others = ['seat_1','seat_2','seat_3','seat_4'].filter(c => t[c] && t[c] !== supaUser.id).length;
-          if (others === 0) {
-            supaClient.from('online_tables').delete().eq('id', _myTableId).then(() => {});
-          } else {
-            supaClient.from('online_tables')
-              .update({ [seatCol]: null, status: 'waiting', payload: {}, ready_votes: '[]' })
-              .eq('id', _myTableId).then(() => {});
-          }
-        });
-    } else {
-      // Friend Table: just null the seat
-      supaClient.from(_ftTableName()).update({ [seatCol]: null }).eq('id', _myTableId).then(() => {});
-    }
+    supaClient.from(_ftTableName())
+      .update({ [seatCol]: null })
+      .eq('id', _myTableId)
+      .then(() => {});  // fire and forget
   }
-
   if (_activeRoomType === 'online') { _orCleanupTable(); } else if (_myTableId) { cleanupFriendTable(); }
   _activeRoomType = 'friend';
   mpDestroy();
@@ -5766,28 +5701,12 @@ async function ftLeaveRoom() {
   document.getElementById('winner-banner').style.display = 'none';
 
   if (_myTableId && supaClient && supaUser && _myTableSeat) {
+    // Null our seat — staying players will detect this and treat us as NPC
     const seatCol = 'seat_' + _myTableSeat;
-    const tableName = _ftTableName();
     try {
-      if (_activeRoomType === 'online') {
-        // For Online Room: fetch the row first to decide whether to delete or just null seat
-        const { data: t } = await supaClient.from('online_tables').select('seat_1,seat_2,seat_3,seat_4').eq('id', _myTableId).single();
-        if (t) {
-          const others = ['seat_1','seat_2','seat_3','seat_4'].filter(c => t[c] && t[c] !== supaUser.id).length;
-          if (others === 0) {
-            // Last one out — delete the table entirely so it doesn't linger
-            await supaClient.from('online_tables').delete().eq('id', _myTableId);
-          } else {
-            // Others still in — null our seat and reset status to waiting
-            await supaClient.from('online_tables')
-              .update({ [seatCol]: null, status: 'waiting', payload: {}, ready_votes: '[]' })
-              .eq('id', _myTableId);
-          }
-        }
-      } else {
-        // Friend Table: just null our seat
-        await supaClient.from(tableName).update({ [seatCol]: null }).eq('id', _myTableId);
-      }
+      await supaClient.from(_ftTableName())
+        .update({ [seatCol]: null })
+        .eq('id', _myTableId);
     } catch(e) { console.warn('ftLeaveRoom seat null failed:', e); }
   }
 
@@ -5799,11 +5718,11 @@ async function ftLeaveRoom() {
   const btn = document.getElementById('btn-end-session');
   if (btn) { btn.textContent = 'End Session'; btn.onclick = endSession; }
 
-  // Clean up local state
+  // Clean up but preserve session scores in case of rejoin
   if (_activeRoomType === 'online') { _orCleanupTable(); } else if (_myTableId) { cleanupFriendTable(); }
   _activeRoomType = 'friend';
   mpDestroy();
-  toast('You left the room.');
+  toast('You left the room. Your score is held for the remaining players.');
 }
 
 function showScoreboard() {
@@ -5944,11 +5863,10 @@ function updatePlayerName(val) {
 }
 
 function playerName(idx) {
-  if (mpGameMode === 'vs_human') {
-    // mpAllSeatNames has full 4-entry LOCAL-order names including NPC slots
-    if (mpAllSeatNames[idx]) return mpAllSeatNames[idx];
-    if (mpSeats[idx]) return mpSeats[idx].name;
-    return 'Player ' + (idx + 1);
+  if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
+    // In MP, idx is local index — map to global seat then get name
+    const globalSeat = (mpMySeat + idx) % 4;
+    return mpSeats[globalSeat] ? mpSeats[globalSeat].name : ('Player ' + (globalSeat + 1));
   }
   return [playerCustomName,'Ace','Rex','Ivy'][idx];
 }
@@ -9125,47 +9043,34 @@ function mpInitHost(){
   mpRenderSeats();
   try{
     mpPeer=new Peer('big2-'+mpRoomCode+'-host');
-    mpPeer.on('open',()=>{ mpSetStatus('Room ready! Share code: '+mpRoomCode); voiceListenForCalls(); });
+    mpPeer.on('open',()=>mpSetStatus('Room ready! Share code: '+mpRoomCode));
     mpPeer.on('connection',conn=>mpHostOnConnect(conn));
     mpPeer.on('error',err=>mpSetStatus('⚠ '+err.message));
   }catch(e){mpSetStatus('PeerJS unavailable.');}
 }
 
 function mpHostOnConnect(conn){
+  // Always accept connection — rejoin handling decides if there's room
   conn.on('open',()=>{
-    if(gameActive) return; // during game: wait for rejoin message via mpHostOnData
-    // Check if this conn was already added by the name-message race handler
-    if(mpConnections.includes(conn)) return;
-    if(mpSeats.length>=4){conn.send({type:'full'});return;}
-    const seat=mpSeats.length;
-    mpSeats.push({name:'…',conn});
-    mpConnections.push(conn);
-    conn.send({type:'seat',seat});
-    mpSetStatus(mpSeats.length+'/4 players');
-    mpBroadcastLobby();
-    document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
+    if(!gameActive && mpSeats.length>=4){conn.send({type:'full'});return;}
+    if(!gameActive){
+      const seat=mpSeats.length;
+      mpSeats.push({name:'…',conn});
+      mpConnections.push(conn);
+      conn.send({type:'seat',seat});
+      mpSetStatus(mpSeats.length+'/4 players');
+      mpBroadcastLobby();
+      document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
+    }
+    // During game: wait for rejoin message
   });
   conn.on('data',data=>mpHostOnData(conn,data));
   conn.on('close',()=>mpHostOnDisconnect(conn));
 }
 
 function mpHostOnData(conn,data){
-  // Handle voice messages from guests
-  voiceHandleData(data);
   if(data.type==='name'){
-    let s=mpSeats.findIndex(x=>x.conn===conn);
-    if(s<0 && !gameActive){
-      // Race condition: name arrived before conn.on('open') pushed the seat.
-      // Add the seat now if there's still room.
-      if(mpSeats.length>=4){conn.send({type:'full'});return;}
-      s=mpSeats.length;
-      mpSeats.push({name:'…',conn});
-      if(!mpConnections.includes(conn)) mpConnections.push(conn);
-      conn.send({type:'seat',seat:s});
-      mpSetStatus(mpSeats.length+'/4 players');
-      mpBroadcastLobby();
-      document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
-    }
+    const s=mpSeats.findIndex(x=>x.conn===conn);
     if(s>=0){
       // Check for duplicate name in lobby — if same name already exists at another seat, reject this one
       if(!gameActive){
@@ -9313,17 +9218,12 @@ function mpSendRejoinSync(conn, guestSeat) {
     ...lastPlay, playerIdx:(lastPlay.playerIdx-guestLocalFromHost+4)%4
   } : null;
   const guestSessionScores = [0,1,2,3].map(li=>(mpSessionScores[(guestLocalFromHost+li)%4]||0));
-  // Seat names rotated to guest-local order
-  const guestSeatNames = [0,1,2,3].map(li => {
-    const gi=(guestLocalFromHost+li)%4;
-    return mpAllSeatNames[gi] || mpSeats[gi]?.name || ('Player '+(li+1));
-  });
+  const guestSeatNames = [0,1,2,3].map(li=>mpSeats[(guestLocalFromHost+li)%4]?.name||('Player '+(li+1)));
   const guestSeatRankScores = [0,1,2,3].map(li=>{
     const gi=(guestLocalFromHost+li)%4;
     return gi===0?rankScore:(mpSeatRankScores[gi]||0);
   });
-  // NPC slots rotated to guest-local order (mpNpcSlots is host-local = global for host)
-  const guestNpcSeats = [0,1,2,3].map(li => mpNpcSlots[(guestLocalFromHost+li)%4]);
+  const npcSeatsArr = Array.from({length:4},(_,i)=>i>=mpSeats.length);
   const snap = {
     type:'sync',
     hands:guestHands,
@@ -9341,8 +9241,8 @@ function mpSendRejoinSync(conn, guestSeat) {
     // Extra rejoin info
     isRejoinSync:true,
     mySeat:guestSeat,
-    npcSeats:guestNpcSeats,
-    seats:mpSeats.map(s=>({name:s.name})) // local-order names for reference
+    npcSeats:npcSeatsArr,
+    seats:mpSeats.map(s=>({name:s.name}))
   };
   try{conn.send(snap);}catch(e){}
 }
@@ -9378,11 +9278,7 @@ function mpBroadcastSync(){
     }:null;
     // Rotate session scores and rank scores to guest perspective
     const guestSessionScores = [0,1,2,3].map(li => (mpSessionScores[(guestLocalFromHost+li)%4]||0));
-    const guestSeatNames = [0,1,2,3].map(li => {
-      const gi=(guestLocalFromHost+li)%4;
-      // Use full name array (includes NPC names) rather than mpSeats (humans only)
-      return mpAllSeatNames[gi] || mpSeats[gi]?.name || ('Player '+(li+1));
-    });
+    const guestSeatNames = [0,1,2,3].map(li => mpSeats[(guestLocalFromHost+li)%4]?.name || ('Player '+(li+1)));
     const guestSeatRankScores = [0,1,2,3].map(li => {
       const gi=(guestLocalFromHost+li)%4;
       return gi===0 ? rankScore : (mpSeatRankScores[gi]||0);
@@ -9431,7 +9327,6 @@ function mpJoinRoom(){
   try{
     mpPeer=new Peer();
     mpPeer.on('open',()=>{
-      voiceListenForCalls(); // listen for host voice calls
       mpHostConn=mpPeer.connect('big2-'+code+'-host',{reliable:true});
       mpHostConn.on('open',()=>{
         mpHostConn.send({type:'name',name:playerCustomName});
@@ -9454,8 +9349,6 @@ function mpJoinRoom(){
 }
 
 function mpGuestOnData(data){
-  // Handle voice-related messages
-  voiceHandleData(data);
   if(data.type==='full'){mpSetStatus('Room full.','mp-status-join');return;}
   if(data.type==='seat'){
     mpMySeat=data.seat;
@@ -9470,8 +9363,7 @@ function mpGuestOnData(data){
     return;
   }
   if(data.type==='start'){
-    // Hide winner banner in case guest hasn't dismissed it yet (host started first)
-    document.getElementById('winner-banner').style.display='none';
+    mpSeats=data.seats.map(s=>({name:s.name,conn:null}));
     document.getElementById('mp-lobby').classList.remove('open');
     mpGuestStartGame(data);
     return;
@@ -9481,35 +9373,27 @@ function mpGuestOnData(data){
       // Full rejoin setup
       if(data.mySeat !== undefined) mpMySeat = data.mySeat;
       mpGameMode='vs_human';
-      // npcSeats in data is already guest-local-rotated (fixed in mpSendRejoinSync)
+      if(data.seats) mpSeats=data.seats.map(s=>({name:s.name,conn:null}));
       if(data.npcSeats) mpNpcSlots=data.npcSeats.slice();
       mpNpcSlots[0]=false; // local 0 is always us
-      // Rebuild mpSeats in LOCAL order from the local-order seatNames
-      if(data.mpSeatNames){
-        mpSeats=data.mpSeatNames.map(name=>({name,conn:null}));
-      } else if(data.seats){
-        // Fallback: rotate global-order seats to local order
-        mpSeats=[0,1,2,3].map(li=>({name:data.seats[(mpMySeat+li)%4]?.name||('Player '+(li+1)),conn:null}));
-      }
       document.getElementById('mp-lobby').classList.remove('open');
       document.getElementById('splash').style.display='none';
       document.getElementById('game').style.display='block';
       const ff=document.getElementById('btn-forfeit');if(ff)ff.style.display='none';
       const zb=document.getElementById('btn-hand-zoom');if(zb)zb.style.top='12px';
-      voiceUpdateVisibility();voiceAdjustPosition(true);
       const lbl=document.getElementById('player-name-label');
-      if(lbl)lbl.textContent=mpSeats[0].name;
-      // Set up zone labels using local-order mpSeats and mpNpcSlots
+      if(lbl)lbl.textContent=playerCustomName;
+      // Set up zone labels
       const zoneMap=[
         {zoneId:'npc-right',nameId:'name-p2',localIdx:1},
         {zoneId:'npc-top',  nameId:'name-p3',localIdx:2},
         {zoneId:'npc-left', nameId:'name-p4',localIdx:3},
       ];
-      zoneMap.forEach(({zoneId,nameId,localIdx})=>{
+      if(data.mpSeatNames) zoneMap.forEach(({zoneId,nameId,localIdx})=>{
         const ne=document.getElementById(nameId);
-        const isNpc=mpNpcSlots[localIdx];
-        const name = mpAllSeatNames[localIdx] || mpSeats[localIdx]?.name || ('Player '+(localIdx+1));
-        if(ne) ne.textContent=(isNpc?'🤖 ':'👤 ')+name;
+        const globalSeat=(mpMySeat+localIdx)%4;
+        const isNpc=mpNpcSlots[globalSeat]!==false;
+        if(ne) ne.textContent=(isNpc?'🤖 ':'👤 ')+(data.mpSeatNames[localIdx]||'Player '+(globalSeat+1));
         const ze=document.getElementById(zoneId);
         if(ze) ze.classList.toggle('mp-human',!isNpc);
         const scoreEl=document.getElementById('score-p'+nameId.replace('name-p',''));
@@ -9537,34 +9421,22 @@ function mpGuestOnData(data){
 
 // ── Start game ────────────────────────────────────────────
 function mpStartGame(){
-  if(!mpIsHost) return;
+  if(!mpIsHost||mpSeats.length<2)return;
   const deck=shuffle(buildDeck());
   const dealtHands=[[],[],[],[]];
   for(let i=0;i<52;i++) dealtHands[i%4].push(deck[i]);
   dealtHands.forEach(h=>h.sort(compareCards));
-
-  // humanCount = host (1) + connected guests
-  const humanCount = 1 + mpConnections.length;
-
-  // Preserve human seat names; fill remaining slots with NPC names
-  const humanNames = [mpSeats[0]?.name || playerCustomName];
-  for(let ci=0;ci<mpConnections.length;ci++){
-    const s = mpSeats.find(x=>x.conn===mpConnections[ci]);
-    humanNames.push(s ? s.name : ('Player '+(ci+2)));
-  }
-  const seatNames = humanNames.slice();
+  const seatNames=mpSeats.map(s=>s.name);
   while(seatNames.length<4) seatNames.push('NPC '+(seatNames.length+1));
-
-  // npcSeats[i]=true only for slots with no human (i >= humanCount)
-  const npcSeatsArr = Array.from({length:4}, (_, i) => i >= humanCount);
-
+  // npcSeats[i]=true if seat i is an NPC (no human connected)
+  const npcSeatsArr=Array.from({length:4},(_,i)=>i>=mpSeats.length);
   const openingP=dealtHands.findIndex(h=>h.some(c=>c.rank==='3'&&c.suit==='♦'));
   const startData={
     type:'start',
     seats:seatNames.map(n=>({name:n})),
     hostRankScore: rankScore,
-    hands:dealtHands,
-    openingPlayer:openingP,
+    hands:dealtHands,        // global order; guest receives rotated hands in sync
+    openingPlayer:openingP,  // global seat index
     npcSeats:npcSeatsArr
   };
   // Tell each guest their seat number
@@ -9572,27 +9444,22 @@ function mpStartGame(){
     try{c.send({...startData,mySeat:ci+1});}catch(e){}
   });
   document.getElementById('mp-lobby').classList.remove('open');
+  // Host starts with global seat 0 = local index 0
   mpHostStartGame(startData);
 }
 
 // Host initialises its own game state (global seats = host local indices)
 function mpHostStartGame(data){
   mpGameMode='vs_human';
-  // Rebuild mpSeats with ONLY human seats (host + one entry per connected guest).
-  // NPC slots must NOT be added here — they are tracked in mpNpcSlots instead.
-  const humanCount = 1 + mpConnections.length;
-  mpSeats = [];
-  mpSeats.push({name: data.seats[0].name, conn: null}); // host at slot 0
-  for(let ci=0;ci<mpConnections.length;ci++){
-    mpSeats.push({name: data.seats[ci+1].name, conn: mpConnections[ci]});
-  }
+  mpSeats=data.seats.map(s=>({name:s.name,conn:mpSeats[data.seats.indexOf(s)]?.conn||null}));
+  // Actually rebuild from existing mpSeats connections
+  mpSeats=data.seats.map((s,i)=>({name:s.name,conn:i===0?null:mpConnections[i-1]}));
   mpMySeat=0;
-  mpNpcSlots=data.npcSeats.slice();
-  // Store full 4-entry names (host-local = global for host) so NPC names are always available
-  mpAllSeatNames = data.seats.map(s => s.name);
+  mpNpcSlots=data.npcSeats.slice(); // global index → is NPC
   mpTurnToken=0;
-  mpSeatRankScores[0]=rankScore;
+  mpSeatRankScores[0]=rankScore; // host's own rank score
 
+  // Host uses global seat order directly (no remap needed since host is seat 0)
   hands=data.hands;
   discardPile=[];currentRoundPlays=[];globalDiscardedCards=new Set();
   lastPlay=null;passCount=0;selectedCards=[];firstTurn=true;gameActive=true;
@@ -9605,8 +9472,10 @@ function mpHostStartGame(data){
   setPlayerControls(currentPlayer===mpMySeat);
   updateTurnIndicator();
 
+  // Broadcast initial state to all guests
   mpBroadcastSync();
 
+  // Fire NPC chain if opening player is an NPC
   if(mpNpcSlots[currentPlayer]){
     mpRunNpcChain();
   }
@@ -9615,11 +9484,8 @@ function mpHostStartGame(data){
 // Guest sets up display only — all game state comes from host sync
 function mpGuestStartGame(data){
   mpGameMode='vs_human';
+  mpSeats=data.seats.map(s=>({name:s.name,conn:null}));
   mpMySeat=data.mySeat;
-  // Rotate mpSeats to LOCAL order: mpSeats[0]=me, [1]=my right, [2]=my top, [3]=my left
-  mpSeats=[0,1,2,3].map(li=>({name:data.seats[(mpMySeat+li)%4].name,conn:null}));
-  // Full 4-entry names rotated to local order (includes NPC names)
-  mpAllSeatNames=[0,1,2,3].map(li=>data.seats[(mpMySeat+li)%4].name);
   // Rotate npcSlots to guest-local perspective
   mpNpcSlots=[0,1,2,3].map(li=>data.npcSeats[(mpMySeat+li)%4]);
   mpTurnToken=0;
@@ -9644,7 +9510,6 @@ function mpGuestStartGame(data){
 }
 
 // Set up name labels and zone classes for MP game
-// mpSeats is already rotated to LOCAL order before this is called
 function mpSetupGameScreen(seats){
   document.getElementById('splash').style.display='none';
   document.getElementById('game').style.display='block';
@@ -9654,15 +9519,10 @@ function mpSetupGameScreen(seats){
   // Move zoom button up since forfeit is hidden
   const zb = document.getElementById('btn-hand-zoom');
   if (zb) zb.style.top = '12px';
-  // Show voice button and adjust its position
-  voiceUpdateVisibility();
-  voiceAdjustPosition(true);
-  // mpSeats[0] is always "me" in local order
   const lbl=document.getElementById('player-name-label');
-  if(lbl)lbl.textContent=mpSeats[0].name;
+  if(lbl)lbl.textContent=mpSeats[mpMySeat].name;
 
-  // Label the 3 opponent zones using LOCAL indices directly
-  // localIdx 1=right, 2=top, 3=left — mpSeats[localIdx] and mpNpcSlots[localIdx]
+  // Label the 3 opponent zones: right=local1, top=local2, left=local3
   const zoneMap=[
     {zoneId:'npc-right',nameId:'name-p2',localIdx:1},
     {zoneId:'npc-top',  nameId:'name-p3',localIdx:2},
@@ -9670,8 +9530,8 @@ function mpSetupGameScreen(seats){
   ];
   zoneMap.forEach(({zoneId,nameId,localIdx})=>{
     const globalSeat=(mpMySeat+localIdx)%4;
-    const isNpc=mpNpcSlots[localIdx];
-    const name = mpAllSeatNames[localIdx] || mpSeats[localIdx]?.name || ('Player '+(localIdx+1));
+    const isNpc=mpNpcSlots[globalSeat];
+    const name=mpSeats[globalSeat]?mpSeats[globalSeat].name:'Player '+(globalSeat+1);
     const ne=document.getElementById(nameId);if(ne)ne.textContent=(isNpc?'🤖 ':'👤 ')+name;
     const ze=document.getElementById(zoneId);if(ze)ze.classList.toggle('mp-human',!isNpc);
     // Show rank score for human players in MP
@@ -9680,7 +9540,8 @@ function mpSetupGameScreen(seats){
     if(scoreEl){
       if(!isNpc){
         scoreEl.style.display='block';
-        scoreEl.textContent='✦ ' + (mpSeatRankScores[globalSeat]||0);
+        // Host shows own rankScore for seat 0; guests' scores arrive via sync
+        scoreEl.textContent='✦ ' + (globalSeat===mpMySeat ? rankScore : (mpSeatRankScores[globalSeat]||0));
       } else {
         scoreEl.style.display='none';
       }
@@ -9699,10 +9560,14 @@ function mpGuestApplySync(snap){
   }
   if(snap.mpSeatNames){
     mpSessionNames=[...snap.mpSeatNames];
-    // Update full name array (local-indexed, includes NPC slots)
+    // mpSeatNames is already rotated to guest-local order by the host,
+    // so li=0 is the guest's own name, li=1 is the player to their right, etc.
+    // mpSeats is stored in global order, so we need to convert li → global seat.
     snap.mpSeatNames.forEach((name,li)=>{
-      mpAllSeatNames[li] = name;
-      if(mpSeats[li]) mpSeats[li].name=name;
+      // guest-local li → global seat: (mpMySeat + li) % 4
+      // BUT mpSeatNames from host is already guest-local (rotated by host), so li IS guest-local
+      const globalSeat=(mpMySeat+li)%4;
+      if(mpSeats[globalSeat]) mpSeats[globalSeat].name=name;
     });
   }
   // Always update NPC slots from sync so score labels hide correctly
@@ -9830,7 +9695,6 @@ function mpRejoinRoom(){
   try{
     mpPeer=new Peer();
     mpPeer.on('open',()=>{
-      voiceListenForCalls(); // listen for host voice calls on rejoin
       mpHostConn=mpPeer.connect('big2-'+code+'-host',{reliable:true});
       mpHostConn.on('open',()=>{
         mpSetStatus('Connected, rejoining…','mp-status-rejoin');
@@ -9852,19 +9716,14 @@ function mpDestroy(){
   mpConnections=[];
   if(mpHostConn){try{mpHostConn.close();}catch(e){}mpHostConn=null;}
   if(mpPeer){try{mpPeer.destroy();}catch(e){}mpPeer=null;}
-  mpIsHost=false;mpRoomCode=null;mpSeats=[];mpAllSeatNames=['','','',''];mpMySeat=-1;mpGameMode='single';
+  mpIsHost=false;mpRoomCode=null;mpSeats=[];mpMySeat=-1;mpGameMode='single';
   mpNpcSlots=[false,false,false,false];mpTurnToken=0;
-  // Stop voice chat when room ends
-  voiceStop();
-  voiceUpdateVisibility();
   // Restore forfeit button for single-player
   const ff = document.getElementById('btn-forfeit');
   if (ff) ff.style.display = '';
   // Restore zoom button position
   const zb = document.getElementById('btn-hand-zoom');
   if (zb) zb.style.top = '';
-  // Restore voice button position
-  voiceAdjustPosition(false);
 }
 
 
@@ -10389,7 +10248,6 @@ function orWatchMyTable(tableId, waitForNewSeed) {
     try {
       const { data: row } = await supaClient.from('online_tables').select('*').eq('id', tableId).single();
       if (!row) return;
-      if (row.status !== 'playing') return; // not started yet
       const seed = row.payload?.seed;
       if (!seed) return;
       if (waitForNewSeed !== undefined && seed === waitForNewSeed) return;
@@ -10421,86 +10279,72 @@ async function orLaunchGame(table) {
   const nameMap = {};
   (profiles || []).forEach(p => { nameMap[p.id] = p.username || '?'; });
 
-  // Build seat name array (global order)
+  // Build seat name array
   const seatNames = seats.map((uid, i) => uid ? (nameMap[uid] || 'P' + (i+1)) : ('Bot ' + (i+1)));
-  const npcSlots  = seats.map(uid => !uid);
 
-  // Patch FT variables so the shared game engine works
-  _ftSeed       = _orSeed;
-  _ftSeats      = _orSeats;
+  // Reuse Friend Table launch logic — patch into the FT variables
+  _ftSeed = _orSeed;
+  _ftSeats = _orSeats;
   _ftOtherSeats = _orOtherSeats;
-  _myTableId    = _orMyTableId;
+  _myTableId = _orMyTableId;
   _myGlobalSeat = _orMyGlobalSeat;
-  _myTableSeat  = myGlobal + 1;
-  _ftIsHost     = (table.host_id === supaUser.id);
-  _ftGameOverHandled  = false;
-  _orGameOverHandled  = false;
-  _ftSeenKeys   = _orSeenKeys;
-  _orGameMode   = table.table_group || _orCurrentTableGroup;
+  _myTableSeat = myGlobal + 1;
+  _ftIsHost = (table.host_id === supaUser.id);
+  _ftGameOverHandled = false;
+  _orGameOverHandled = false;
+  _ftSeenKeys = _orSeenKeys;
 
-  // Deal cards using shared seed — same result on every device
-  const deck = seededShuffle(buildDeck(), _orSeed);
-  hands = [[],[],[],[]];
-  for (let i = 0; i < 52; i++) hands[i % 4].push(deck[i]);
-  hands.forEach(h => h.sort(compareCards));
+  // Patch saveFriendGameStats to point to online stats instead
+  _orGameMode = table.table_group || _orCurrentTableGroup;
 
-  // Find who has 3♦ (in global order)
-  openingPlayer = hands.findIndex(h => h.some(c => c.rank === '3' && c.suit === '♦'));
-  currentPlayer = openingPlayer;
+  // Use the existing FT launch machinery
+  const rand = seededRandom(_orSeed);
+  const allCards = [];
+  for (let s = 0; s < 4; s++) for (let v = 0; v < 13; v++) allCards.push({ suit: s, value: v });
+  const shuffled = seededShuffle(allCards, _orSeed);
+  const dealtHands = [shuffled.slice(0,13), shuffled.slice(13,26), shuffled.slice(26,39), shuffled.slice(39,52)];
 
-  // Rotate so MY seat is at local index 0
+  // Rotate so our hand is hand[0]
   const r = _orMyGlobalSeat;
-  if (r !== 0) {
-    hands         = [0,1,2,3].map(li => hands[(r + li) % 4]);
-    currentPlayer = (currentPlayer - r + 4) % 4;
-    openingPlayer = (openingPlayer - r + 4) % 4;
-  }
+  const rotatedHands = dealtHands.map((_, li) => dealtHands[(li + r) % 4]);
+  const rotatedNames = seatNames.map((_, li) => seatNames[(li + r) % 4]);
+  const npcSlots = seats.map((uid, i) => !uid);
+  const rotatedNpc = npcSlots.map((_, li) => npcSlots[(li + r) % 4]);
 
-  // Set up game engine state
-  mpGameMode   = 'vs_human';
+  // Initialise the game using existing multiplayer/friend-table game engine
+  closeOnlineRoom();
+
+  mpSeats = rotatedNames.map((name, i) => ({ name, globalSeat: (i + r) % 4 }));
+  mpNpcSlots = rotatedNpc;
+  mpGameMode = 'multi';
+  gameMode = _orGameMode;
   selectedMode = _orGameMode;
-  mpMySeat     = 0;
-  mpNpcSlots   = [0,1,2,3].map(li => npcSlots[(r + li) % 4]);
-  mpSeats      = [0,1,2,3].map(li => ({ name: seatNames[(r + li) % 4], conn: null }));
-  mpIsHost     = true; // all players run game logic locally (same as FT)
+  mpMyLocalSeat = 0;
 
-  lastPlay             = null;
-  passCount            = 0;
-  firstTurn            = true;
-  currentRoundPlays    = [];
-  globalDiscardedCards = new Set();
-  selectedCards        = [];
-  discardPile          = [];
-  startingHandProfile  = hands.map(h => classifyStartingHand(h));
-  gameActive           = true;
+  hands = rotatedHands;
+  currentPlayer = 0;
+  lastPlay = null; lastPlayer = -1; passCount = 0;
+  globalDiscardedCards = [];
+  gameActive = true;
 
   if (mpSessionHistory.length === 0 || _orJoinedAtGame === 0) {
-    mpSessionScores  = [0, 0, 0, 0];
-    _orJoinedAtGame  = mpSessionHistory.length;
+    mpSessionScores = [0, 0, 0, 0];
+    _orJoinedAtGame = mpSessionHistory.length;
   }
 
-  // Show game screen
-  closeOnlineRoom();
-  document.getElementById('splash').style.display = 'none';
-  document.getElementById('game').style.display   = 'block';
-  const ff = document.getElementById('btn-forfeit');
-  if (ff) ff.style.display = 'none';
-
-  // Set player name labels
-  const lbl = document.getElementById('player-name-label');
-  if (lbl) lbl.textContent = mpSeats[0].name;
-  [{nameId:'name-p2',li:1},{nameId:'name-p3',li:2},{nameId:'name-p4',li:3}].forEach(({nameId,li}) => {
-    const ne = document.getElementById(nameId);
-    if (ne) ne.textContent = (mpNpcSlots[li] ? '🤖 ' : '👤 ') + mpSeats[li].name;
-    const se = document.getElementById('score-p' + nameId.replace('name-p',''));
-    if (se) se.style.display = mpNpcSlots[li] ? 'none' : 'block';
-  });
-
+  hideSplash();
   renderAll();
   setPlayerControls(isMyTurn());
   updateTurnIndicator();
 
-  // Mark as Online Room so stats save to the right columns
+  const lbl = document.getElementById('player-name-label');
+  if (lbl) lbl.textContent = rotatedNames[0];
+  [{nameId:'name-p2',li:1},{nameId:'name-p3',li:2},{nameId:'name-p4',li:3}].forEach(({nameId,li}) => {
+    const ne = document.getElementById(nameId);
+    if (ne) ne.textContent = (rotatedNpc[li] ? '🤖 ' : '👤 ') + mpSeats[li].name;
+  });
+
+  // Mark this as an Online Room game so stats save to OR columns
   _activeRoomType = 'online';
 
   ftStartPolling(table.id);
@@ -10616,228 +10460,6 @@ async function orLbLoad(tab) {
 // ── Polling / state sync (delegates to FT engine) ────────
 function orStopPolling() {
   if (_orPollTimer) { clearInterval(_orPollTimer); _orPollTimer = null; }
-}
-
-// ════════════════════════════════════════════════════════════
-//  VOICE CHAT SYSTEM — Host Game (PeerJS) only
-//  FULL MESH: every participant calls every other participant.
-//  Host distributes peer IDs so guests can reach each other.
-//  Toggle on/off during gameplay. Mute disables mic track only.
-// ════════════════════════════════════════════════════════════
-
-let _voiceEnabled  = false;
-let _voiceMuted    = false;
-let _voiceStream   = null;
-let _voiceCalls    = [];      // active MediaConnection objects
-let _voiceAudios   = [];      // <audio> elements for remote streams
-let _voiceVadTimer = null;
-let _voicePeerIds  = [];      // all peer IDs in the room (filled from host broadcast)
-
-function voiceUpdateVisibility() {
-  const btn = document.getElementById('btn-voice');
-  const vst = document.getElementById('voice-status');
-  if (!btn) return;
-  const show = (mpGameMode === 'vs_human');
-  btn.style.display = show ? 'flex' : 'none';
-  if (!show && vst) vst.classList.remove('visible');
-}
-
-async function voiceToggle() {
-  if (!_voiceEnabled) {
-    await voiceStart();
-  } else if (!_voiceMuted) {
-    voiceMute();
-  } else {
-    voiceUnmute();
-  }
-}
-
-async function voiceStart() {
-  const btn = document.getElementById('btn-voice');
-  try {
-    _voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    _voiceEnabled = true;
-    _voiceMuted   = false;
-    if (btn) { btn.classList.add('voice-on'); btn.classList.remove('voice-muted'); btn.title = 'Mute mic'; }
-    voiceSetStatus('🎙️ Mic on');
-
-    if (mpIsHost) {
-      // Collect all guest peer IDs
-      const guestPeerIds = mpConnections.map(c => c.peer).filter(Boolean);
-      _voicePeerIds = [mpPeer.id, ...guestPeerIds];
-
-      // Host calls every guest (mesh leg: host <-> each guest)
-      guestPeerIds.forEach(peerId => voiceDial(peerId));
-
-      // Tell every guest: voice is on, here are ALL peer IDs for full mesh
-      mpConnections.forEach(c => {
-        try { c.send({ type: 'voice_started', peerIds: _voicePeerIds, hostPeerId: mpPeer.id }); } catch(e) {}
-      });
-    } else {
-      // Guest: call the host + every other guest we know about
-      // _voicePeerIds was populated when we received voice_started from host
-      _voicePeerIds.forEach(peerId => {
-        if (peerId && peerId !== mpPeer.id) voiceDial(peerId);
-      });
-      // Let host know we are in voice (so it can dial us if voice was already on)
-      if (mpHostConn) { try { mpHostConn.send({ type: 'voice_ready', peerId: mpPeer.id }); } catch(e) {} }
-    }
-
-    voiceStartVAD();
-    toast('🎙️ Voice chat on');
-  } catch(e) {
-    toast('⚠ Mic access denied');
-    console.warn('voiceStart error:', e);
-  }
-}
-
-// Dial one remote peer — skip if we already have an active call to them
-function voiceDial(peerId) {
-  if (!mpPeer || !_voiceStream) return;
-  const already = _voiceCalls.some(c => c.peer === peerId && c.open !== false);
-  if (already) return;
-  try {
-    const call = mpPeer.call(peerId, _voiceStream);
-    if (!call) return;
-    _voiceCalls.push(call);
-    call.on('stream', remoteStream => voiceAddRemoteStream(remoteStream, call));
-    call.on('close', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
-    call.on('error', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
-  } catch(e) {}
-}
-
-function voiceMute() {
-  if (!_voiceStream) return;
-  _voiceMuted = true;
-  _voiceStream.getAudioTracks().forEach(t => { t.enabled = false; });
-  const btn = document.getElementById('btn-voice');
-  if (btn) { btn.classList.remove('voice-on','speaking'); btn.classList.add('voice-muted'); btn.title = 'Unmute mic'; }
-  voiceSetStatus('🔇 Muted');
-  toast('🔇 Mic muted');
-}
-
-function voiceUnmute() {
-  if (!_voiceStream) return;
-  _voiceMuted = false;
-  _voiceStream.getAudioTracks().forEach(t => { t.enabled = true; });
-  const btn = document.getElementById('btn-voice');
-  if (btn) { btn.classList.remove('voice-muted'); btn.classList.add('voice-on'); btn.title = 'Mute mic'; }
-  voiceSetStatus('🎙️ Mic on');
-  toast('🎙️ Mic on');
-}
-
-function voiceStop() {
-  _voiceEnabled = false; _voiceMuted = false;
-  _voiceCalls.forEach(c => { try { c.close(); } catch(e) {} });
-  _voiceCalls = [];
-  _voiceAudios.forEach(a => { try { a.pause(); a.srcObject = null; a.remove(); } catch(e) {} });
-  _voiceAudios = [];
-  if (_voiceStream) { _voiceStream.getTracks().forEach(t => t.stop()); _voiceStream = null; }
-  if (_voiceVadTimer) { clearInterval(_voiceVadTimer); _voiceVadTimer = null; }
-  _voicePeerIds = [];
-  const btn = document.getElementById('btn-voice');
-  if (btn) { btn.classList.remove('voice-on','voice-muted','speaking'); btn.title = 'Toggle voice chat'; }
-  const vst = document.getElementById('voice-status');
-  if (vst) vst.classList.remove('visible');
-}
-
-// Every peer listens for incoming calls — both host and guests call this
-function voiceListenForCalls() {
-  if (!mpPeer) return;
-  mpPeer.on('call', call => {
-    call.answer(_voiceStream || new MediaStream());
-    _voiceCalls.push(call);
-    call.on('stream', remoteStream => voiceAddRemoteStream(remoteStream, call));
-    call.on('close', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
-    call.on('error', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
-    voiceUpdateVisibility();
-    if (!mpIsHost) voiceSetStatus('🎙️ Voice active — tap 🎙️ to join');
-  });
-}
-
-function voiceAddRemoteStream(stream, call) {
-  const audio = document.createElement('audio');
-  audio.autoplay = true; audio.playsInline = true;
-  audio.srcObject = stream; audio.style.display = 'none';
-  audio.dataset.voiceCall = call ? call.peer : '';
-  document.body.appendChild(audio);
-  _voiceAudios.push(audio);
-  audio.play().catch(() => {});
-}
-
-// Voice Activity Detection — microphone glow when speaking
-function voiceStartVAD() {
-  if (_voiceVadTimer) { clearInterval(_voiceVadTimer); _voiceVadTimer = null; }
-  if (!_voiceStream) return;
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const src = ctx.createMediaStreamSource(_voiceStream);
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 256;
-    src.connect(analyser);
-    const buf = new Uint8Array(analyser.frequencyBinCount);
-    _voiceVadTimer = setInterval(() => {
-      if (_voiceMuted || !_voiceEnabled) return;
-      analyser.getByteFrequencyData(buf);
-      const avg = buf.reduce((a, b) => a + b, 0) / buf.length;
-      const btn = document.getElementById('btn-voice');
-      if (btn) btn.classList.toggle('speaking', avg > 12);
-    }, 150);
-  } catch(e) {}
-}
-
-function voiceSetStatus(msg) {
-  const vst = document.getElementById('voice-status');
-  if (!vst) return;
-  vst.textContent = msg;
-  vst.classList.add('visible');
-}
-
-// Handle voice-related data messages (called from mpHostOnData / mpGuestOnData)
-function voiceHandleData(data) {
-  if (data.type === 'voice_started') {
-    // Host sent the full peer ID list — save it for mesh dialing
-    if (data.peerIds) _voicePeerIds = data.peerIds;
-    voiceUpdateVisibility();
-    voiceSetStatus('🎙️ Voice active — tap 🎙️ to join');
-  }
-  if (data.type === 'voice_ready') {
-    // A guest turned on voice — host dials them and rebroadcasts peer list
-    if (mpIsHost && _voiceEnabled && _voiceStream) {
-      if (data.peerId) voiceDial(data.peerId);
-      // Rebroadcast updated peer list so all guests know to dial this new participant
-      const guestPeerIds = mpConnections.map(c => c.peer).filter(Boolean);
-      _voicePeerIds = [mpPeer.id, ...guestPeerIds];
-      mpConnections.forEach(c => {
-        try { c.send({ type: 'voice_peer_list', peerIds: _voicePeerIds }); } catch(e) {}
-      });
-    }
-  }
-  if (data.type === 'voice_peer_list') {
-    // Host sent an updated peer list — dial any new participants we are missing
-    if (data.peerIds) {
-      _voicePeerIds = data.peerIds;
-      if (_voiceEnabled && _voiceStream) {
-        _voicePeerIds.forEach(peerId => {
-          if (peerId && peerId !== mpPeer?.id) voiceDial(peerId);
-        });
-      }
-    }
-  }
-}
-
-// Adjust voice button position (stacks below zoom button when forfeit hidden in MP)
-function voiceAdjustPosition(forfeitHidden) {
-  const btn = document.getElementById('btn-voice');
-  const vst = document.getElementById('voice-status');
-  if (!btn) return;
-  if (forfeitHidden) {
-    btn.style.top  = '50px';
-    if (vst) vst.style.top = '50px';
-  } else {
-    btn.style.top  = '90px';
-    if (vst) vst.style.top = '90px';
-  }
 }
 
 </script>
