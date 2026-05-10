@@ -3211,6 +3211,7 @@ let mpRoomCode    = null;
 let mpConnections = [];
 let mpHostConn    = null;
 let mpSeats       = [];
+let mpAllSeatNames= ['','','','']; // full 4-entry names in LOCAL order, incl. NPC slots
 let mpMySeat      = -1;
 let mpGameMode    = 'single';
 let mpNpcSlots    = [false,false,false,false];
@@ -4134,12 +4135,11 @@ function updateScoreboard() {
 
 // Returns display names for scoreboard in local index order [0..3]
 function mpScoreboardNames() {
-  if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
-    // mpSeats is LOCAL-indexed for both FT and PeerJS now
+  if (mpGameMode === 'vs_human') {
     return [0,1,2,3].map(li => {
-      if (!mpSeats[li]) return 'NPC ' + (li+1);
+      const name = mpAllSeatNames[li] || mpSeats[li]?.name || ('Player '+(li+1));
       const isNpc = mpNpcSlots[li];
-      return isNpc ? ('🤖 ' + mpSeats[li].name) : mpSeats[li].name;
+      return isNpc ? ('🤖 ' + name) : name;
     });
   }
   return [playerCustomName, 'Ace', 'Rex', 'Ivy'];
@@ -4486,8 +4486,8 @@ function executePlay(playerIdx, cards, play) {
     const winnerLocalForCel = mpGameMode === 'vs_human'
       ? (playerIdx - (mpMySeat||0) + 4) % 4
       : playerIdx;
-    const namesForCel = mpGameMode === 'vs_human' && mpSeats.length
-      ? [0,1,2,3].map(li => mpSeats[li]?.name||('Player '+(li+1)))
+    const namesForCel = mpGameMode === 'vs_human'
+      ? [0,1,2,3].map(li => mpAllSeatNames[li] || mpSeats[li]?.name || ('Player '+(li+1)))
       : null;
     gameActive = true; // re-enable so endGame works correctly
     showWinCelebration(winnerLocalForCel, namesForCel, () => endGame(playerIdx));
@@ -5506,12 +5506,8 @@ function endGame(winnerIdx) {
     mpConnections.forEach(c => { try { c.send(goMsg); } catch(e) {} });
   }
 
-  // Build names for host (global seat = local seat since mpMySeat=0)
-  const mpNames = mpGameMode === 'vs_human' && mpSeats.length > 0
-    ? [0,1,2,3].map(li => {
-        const n = mpSeats[li] ? mpSeats[li].name : ('Player '+(li+1));
-        return n;
-      })
+  const mpNames = mpGameMode === 'vs_human'
+    ? [0,1,2,3].map(li => mpAllSeatNames[li] || mpSeats[li]?.name || ('Player '+(li+1)))
     : null;
   // Record in MP session history
   if (mpGameMode === 'vs_human') {
@@ -5588,9 +5584,8 @@ function mpShowEndBanner(winnerLocalIdx, raw, mults, gameDeltas, namesOverride) 
   let names;
   if (namesOverride) {
     names = namesOverride;
-  } else if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
-    // mpSeats is now LOCAL-indexed, so local index li maps directly
-    names = [0,1,2,3].map(li => mpSeats[li] ? mpSeats[li].name : ('Player '+(li+1)));
+  } else if (mpGameMode === 'vs_human') {
+    names = [0,1,2,3].map(li => mpAllSeatNames[li] || mpSeats[li]?.name || ('Player '+(li+1)));
   } else {
     names = [playerCustomName, 'Ace', 'Rex', 'Ivy'];
   }
@@ -5949,9 +5944,11 @@ function updatePlayerName(val) {
 }
 
 function playerName(idx) {
-  if (mpGameMode === 'vs_human' && mpSeats.length > 0) {
-    // mpSeats is LOCAL-indexed (rotated), so idx is the direct index
-    return mpSeats[idx] ? mpSeats[idx].name : ('Player ' + (idx + 1));
+  if (mpGameMode === 'vs_human') {
+    // mpAllSeatNames has full 4-entry LOCAL-order names including NPC slots
+    if (mpAllSeatNames[idx]) return mpAllSeatNames[idx];
+    if (mpSeats[idx]) return mpSeats[idx].name;
+    return 'Player ' + (idx + 1);
   }
   return [playerCustomName,'Ace','Rex','Ivy'][idx];
 }
@@ -9135,19 +9132,18 @@ function mpInitHost(){
 }
 
 function mpHostOnConnect(conn){
-  // Always accept connection — rejoin handling decides if there's room
   conn.on('open',()=>{
-    if(!gameActive && mpSeats.length>=4){conn.send({type:'full'});return;}
-    if(!gameActive){
-      const seat=mpSeats.length;
-      mpSeats.push({name:'…',conn});
-      mpConnections.push(conn);
-      conn.send({type:'seat',seat});
-      mpSetStatus(mpSeats.length+'/4 players');
-      mpBroadcastLobby();
-      document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
-    }
-    // During game: wait for rejoin message
+    if(gameActive) return; // during game: wait for rejoin message via mpHostOnData
+    // Check if this conn was already added by the name-message race handler
+    if(mpConnections.includes(conn)) return;
+    if(mpSeats.length>=4){conn.send({type:'full'});return;}
+    const seat=mpSeats.length;
+    mpSeats.push({name:'…',conn});
+    mpConnections.push(conn);
+    conn.send({type:'seat',seat});
+    mpSetStatus(mpSeats.length+'/4 players');
+    mpBroadcastLobby();
+    document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
   });
   conn.on('data',data=>mpHostOnData(conn,data));
   conn.on('close',()=>mpHostOnDisconnect(conn));
@@ -9157,7 +9153,19 @@ function mpHostOnData(conn,data){
   // Handle voice messages from guests
   voiceHandleData(data);
   if(data.type==='name'){
-    const s=mpSeats.findIndex(x=>x.conn===conn);
+    let s=mpSeats.findIndex(x=>x.conn===conn);
+    if(s<0 && !gameActive){
+      // Race condition: name arrived before conn.on('open') pushed the seat.
+      // Add the seat now if there's still room.
+      if(mpSeats.length>=4){conn.send({type:'full'});return;}
+      s=mpSeats.length;
+      mpSeats.push({name:'…',conn});
+      if(!mpConnections.includes(conn)) mpConnections.push(conn);
+      conn.send({type:'seat',seat:s});
+      mpSetStatus(mpSeats.length+'/4 players');
+      mpBroadcastLobby();
+      document.getElementById('btn-mp-start').disabled=mpSeats.length<2;
+    }
     if(s>=0){
       // Check for duplicate name in lobby — if same name already exists at another seat, reject this one
       if(!gameActive){
@@ -9306,7 +9314,10 @@ function mpSendRejoinSync(conn, guestSeat) {
   } : null;
   const guestSessionScores = [0,1,2,3].map(li=>(mpSessionScores[(guestLocalFromHost+li)%4]||0));
   // Seat names rotated to guest-local order
-  const guestSeatNames = [0,1,2,3].map(li=>mpSeats[(guestLocalFromHost+li)%4]?.name||('Player '+(li+1)));
+  const guestSeatNames = [0,1,2,3].map(li => {
+    const gi=(guestLocalFromHost+li)%4;
+    return mpAllSeatNames[gi] || mpSeats[gi]?.name || ('Player '+(li+1));
+  });
   const guestSeatRankScores = [0,1,2,3].map(li=>{
     const gi=(guestLocalFromHost+li)%4;
     return gi===0?rankScore:(mpSeatRankScores[gi]||0);
@@ -9367,7 +9378,11 @@ function mpBroadcastSync(){
     }:null;
     // Rotate session scores and rank scores to guest perspective
     const guestSessionScores = [0,1,2,3].map(li => (mpSessionScores[(guestLocalFromHost+li)%4]||0));
-    const guestSeatNames = [0,1,2,3].map(li => mpSeats[(guestLocalFromHost+li)%4]?.name || ('Player '+(li+1)));
+    const guestSeatNames = [0,1,2,3].map(li => {
+      const gi=(guestLocalFromHost+li)%4;
+      // Use full name array (includes NPC names) rather than mpSeats (humans only)
+      return mpAllSeatNames[gi] || mpSeats[gi]?.name || ('Player '+(li+1));
+    });
     const guestSeatRankScores = [0,1,2,3].map(li => {
       const gi=(guestLocalFromHost+li)%4;
       return gi===0 ? rankScore : (mpSeatRankScores[gi]||0);
@@ -9492,8 +9507,9 @@ function mpGuestOnData(data){
       ];
       zoneMap.forEach(({zoneId,nameId,localIdx})=>{
         const ne=document.getElementById(nameId);
-        const isNpc=mpNpcSlots[localIdx]; // local-indexed
-        if(ne) ne.textContent=(isNpc?'🤖 ':'👤 ')+(mpSeats[localIdx]?.name||'Player '+(localIdx+1));
+        const isNpc=mpNpcSlots[localIdx];
+        const name = mpAllSeatNames[localIdx] || mpSeats[localIdx]?.name || ('Player '+(localIdx+1));
+        if(ne) ne.textContent=(isNpc?'🤖 ':'👤 ')+name;
         const ze=document.getElementById(zoneId);
         if(ze) ze.classList.toggle('mp-human',!isNpc);
         const scoreEl=document.getElementById('score-p'+nameId.replace('name-p',''));
@@ -9521,7 +9537,7 @@ function mpGuestOnData(data){
 
 // ── Start game ────────────────────────────────────────────
 function mpStartGame(){
-  if(!mpIsHost||mpConnections.length<1)return; // need at least host + 1 guest
+  if(!mpIsHost) return;
   const deck=shuffle(buildDeck());
   const dealtHands=[[],[],[],[]];
   for(let i=0;i<52;i++) dealtHands[i%4].push(deck[i]);
@@ -9533,7 +9549,6 @@ function mpStartGame(){
   // Preserve human seat names; fill remaining slots with NPC names
   const humanNames = [mpSeats[0]?.name || playerCustomName];
   for(let ci=0;ci<mpConnections.length;ci++){
-    // Find the seat matching this connection
     const s = mpSeats.find(x=>x.conn===mpConnections[ci]);
     humanNames.push(s ? s.name : ('Player '+(ci+2)));
   }
@@ -9572,7 +9587,9 @@ function mpHostStartGame(data){
     mpSeats.push({name: data.seats[ci+1].name, conn: mpConnections[ci]});
   }
   mpMySeat=0;
-  mpNpcSlots=data.npcSeats.slice(); // correctly built in mpStartGame from humanCount
+  mpNpcSlots=data.npcSeats.slice();
+  // Store full 4-entry names (host-local = global for host) so NPC names are always available
+  mpAllSeatNames = data.seats.map(s => s.name);
   mpTurnToken=0;
   mpSeatRankScores[0]=rankScore;
 
@@ -9601,6 +9618,8 @@ function mpGuestStartGame(data){
   mpMySeat=data.mySeat;
   // Rotate mpSeats to LOCAL order: mpSeats[0]=me, [1]=my right, [2]=my top, [3]=my left
   mpSeats=[0,1,2,3].map(li=>({name:data.seats[(mpMySeat+li)%4].name,conn:null}));
+  // Full 4-entry names rotated to local order (includes NPC names)
+  mpAllSeatNames=[0,1,2,3].map(li=>data.seats[(mpMySeat+li)%4].name);
   // Rotate npcSlots to guest-local perspective
   mpNpcSlots=[0,1,2,3].map(li=>data.npcSeats[(mpMySeat+li)%4]);
   mpTurnToken=0;
@@ -9651,8 +9670,8 @@ function mpSetupGameScreen(seats){
   ];
   zoneMap.forEach(({zoneId,nameId,localIdx})=>{
     const globalSeat=(mpMySeat+localIdx)%4;
-    const isNpc=mpNpcSlots[localIdx]; // mpNpcSlots is LOCAL-indexed (0=me,1=right,2=top,3=left)
-    const name=mpSeats[localIdx]?mpSeats[localIdx].name:'Player '+(localIdx+1); // mpSeats is LOCAL-indexed after rotation
+    const isNpc=mpNpcSlots[localIdx];
+    const name = mpAllSeatNames[localIdx] || mpSeats[localIdx]?.name || ('Player '+(localIdx+1));
     const ne=document.getElementById(nameId);if(ne)ne.textContent=(isNpc?'🤖 ':'👤 ')+name;
     const ze=document.getElementById(zoneId);if(ze)ze.classList.toggle('mp-human',!isNpc);
     // Show rank score for human players in MP
@@ -9680,9 +9699,9 @@ function mpGuestApplySync(snap){
   }
   if(snap.mpSeatNames){
     mpSessionNames=[...snap.mpSeatNames];
-    // mpSeatNames is already guest-local (rotated by host): [0]=me,[1]=my right, etc.
-    // mpSeats is also local-order, so map directly by local index li
+    // Update full name array (local-indexed, includes NPC slots)
     snap.mpSeatNames.forEach((name,li)=>{
+      mpAllSeatNames[li] = name;
       if(mpSeats[li]) mpSeats[li].name=name;
     });
   }
@@ -9833,7 +9852,7 @@ function mpDestroy(){
   mpConnections=[];
   if(mpHostConn){try{mpHostConn.close();}catch(e){}mpHostConn=null;}
   if(mpPeer){try{mpPeer.destroy();}catch(e){}mpPeer=null;}
-  mpIsHost=false;mpRoomCode=null;mpSeats=[];mpMySeat=-1;mpGameMode='single';
+  mpIsHost=false;mpRoomCode=null;mpSeats=[];mpAllSeatNames=['','','',''];mpMySeat=-1;mpGameMode='single';
   mpNpcSlots=[false,false,false,false];mpTurnToken=0;
   // Stop voice chat when room ends
   voiceStop();
@@ -10601,16 +10620,18 @@ function orStopPolling() {
 
 // ════════════════════════════════════════════════════════════
 //  VOICE CHAT SYSTEM — Host Game (PeerJS) only
-//  Host calls each guest via mpPeer.call(); guests answer.
-//  Toggle on/off during gameplay. Mute disables mic track.
+//  FULL MESH: every participant calls every other participant.
+//  Host distributes peer IDs so guests can reach each other.
+//  Toggle on/off during gameplay. Mute disables mic track only.
 // ════════════════════════════════════════════════════════════
 
 let _voiceEnabled  = false;
 let _voiceMuted    = false;
 let _voiceStream   = null;
-let _voiceCalls    = [];
-let _voiceAudios   = [];
+let _voiceCalls    = [];      // active MediaConnection objects
+let _voiceAudios   = [];      // <audio> elements for remote streams
 let _voiceVadTimer = null;
+let _voicePeerIds  = [];      // all peer IDs in the room (filled from host broadcast)
 
 function voiceUpdateVisibility() {
   const btn = document.getElementById('btn-voice');
@@ -10641,23 +10662,25 @@ async function voiceStart() {
     voiceSetStatus('🎙️ Mic on');
 
     if (mpIsHost) {
-      // Call each connected peer
-      mpConnections.forEach(conn => {
-        if (!conn || !conn.peer) return;
-        try {
-          const call = mpPeer.call(conn.peer, _voiceStream);
-          if (!call) return;
-          _voiceCalls.push(call);
-          call.on('stream', remoteStream => voiceAddRemoteStream(remoteStream));
-          call.on('close', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
-          call.on('error', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
-        } catch(e) {}
+      // Collect all guest peer IDs
+      const guestPeerIds = mpConnections.map(c => c.peer).filter(Boolean);
+      _voicePeerIds = [mpPeer.id, ...guestPeerIds];
+
+      // Host calls every guest (mesh leg: host <-> each guest)
+      guestPeerIds.forEach(peerId => voiceDial(peerId));
+
+      // Tell every guest: voice is on, here are ALL peer IDs for full mesh
+      mpConnections.forEach(c => {
+        try { c.send({ type: 'voice_started', peerIds: _voicePeerIds, hostPeerId: mpPeer.id }); } catch(e) {}
       });
-      // Notify guests voice is available
-      mpConnections.forEach(c => { try { c.send({ type: 'voice_started' }); } catch(e) {} });
     } else {
-      // Guest ready — notify host
-      if (mpHostConn) { try { mpHostConn.send({ type: 'voice_ready' }); } catch(e) {} }
+      // Guest: call the host + every other guest we know about
+      // _voicePeerIds was populated when we received voice_started from host
+      _voicePeerIds.forEach(peerId => {
+        if (peerId && peerId !== mpPeer.id) voiceDial(peerId);
+      });
+      // Let host know we are in voice (so it can dial us if voice was already on)
+      if (mpHostConn) { try { mpHostConn.send({ type: 'voice_ready', peerId: mpPeer.id }); } catch(e) {} }
     }
 
     voiceStartVAD();
@@ -10666,6 +10689,21 @@ async function voiceStart() {
     toast('⚠ Mic access denied');
     console.warn('voiceStart error:', e);
   }
+}
+
+// Dial one remote peer — skip if we already have an active call to them
+function voiceDial(peerId) {
+  if (!mpPeer || !_voiceStream) return;
+  const already = _voiceCalls.some(c => c.peer === peerId && c.open !== false);
+  if (already) return;
+  try {
+    const call = mpPeer.call(peerId, _voiceStream);
+    if (!call) return;
+    _voiceCalls.push(call);
+    call.on('stream', remoteStream => voiceAddRemoteStream(remoteStream, call));
+    call.on('close', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
+    call.on('error', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
+  } catch(e) {}
 }
 
 function voiceMute() {
@@ -10696,53 +10734,38 @@ function voiceStop() {
   _voiceAudios = [];
   if (_voiceStream) { _voiceStream.getTracks().forEach(t => t.stop()); _voiceStream = null; }
   if (_voiceVadTimer) { clearInterval(_voiceVadTimer); _voiceVadTimer = null; }
+  _voicePeerIds = [];
   const btn = document.getElementById('btn-voice');
   if (btn) { btn.classList.remove('voice-on','voice-muted','speaking'); btn.title = 'Toggle voice chat'; }
   const vst = document.getElementById('voice-status');
   if (vst) vst.classList.remove('visible');
 }
 
-// Guest handles incoming call from host
+// Every peer listens for incoming calls — both host and guests call this
 function voiceListenForCalls() {
   if (!mpPeer) return;
   mpPeer.on('call', call => {
     call.answer(_voiceStream || new MediaStream());
     _voiceCalls.push(call);
-    call.on('stream', remoteStream => voiceAddRemoteStream(remoteStream));
+    call.on('stream', remoteStream => voiceAddRemoteStream(remoteStream, call));
     call.on('close', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
     call.on('error', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
-    // Show voice indicator even if guest hasn't turned on their own mic yet
     voiceUpdateVisibility();
-    voiceSetStatus('🎙️ Host voice on — tap 🎙️ to join');
+    if (!mpIsHost) voiceSetStatus('🎙️ Voice active — tap 🎙️ to join');
   });
 }
 
-// Host calls a newly joined/rejoined guest
-function voiceCallNewGuest(peerConn) {
-  if (!_voiceEnabled || !_voiceStream || !mpIsHost || !mpPeer) return;
-  if (!peerConn || !peerConn.peer) return;
-  const alreadyCalled = _voiceCalls.some(c => c.peer === peerConn.peer);
-  if (alreadyCalled) return;
-  try {
-    const call = mpPeer.call(peerConn.peer, _voiceStream);
-    if (!call) return;
-    _voiceCalls.push(call);
-    call.on('stream', remoteStream => voiceAddRemoteStream(remoteStream));
-    call.on('close', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
-    call.on('error', () => { _voiceCalls = _voiceCalls.filter(c => c !== call); });
-  } catch(e) {}
-}
-
-function voiceAddRemoteStream(stream) {
+function voiceAddRemoteStream(stream, call) {
   const audio = document.createElement('audio');
   audio.autoplay = true; audio.playsInline = true;
   audio.srcObject = stream; audio.style.display = 'none';
+  audio.dataset.voiceCall = call ? call.peer : '';
   document.body.appendChild(audio);
   _voiceAudios.push(audio);
   audio.play().catch(() => {});
 }
 
-// Voice Activity Detection — microphone glow
+// Voice Activity Detection — microphone glow when speaking
 function voiceStartVAD() {
   if (_voiceVadTimer) { clearInterval(_voiceVadTimer); _voiceVadTimer = null; }
   if (!_voiceStream) return;
@@ -10770,22 +10793,40 @@ function voiceSetStatus(msg) {
   vst.classList.add('visible');
 }
 
-// Handle voice-related data messages from host/guest
+// Handle voice-related data messages (called from mpHostOnData / mpGuestOnData)
 function voiceHandleData(data) {
   if (data.type === 'voice_started') {
-    // Host turned on voice — hint guest
+    // Host sent the full peer ID list — save it for mesh dialing
+    if (data.peerIds) _voicePeerIds = data.peerIds;
     voiceUpdateVisibility();
-    voiceSetStatus('🎙️ Host is in voice — tap 🎙️ to join');
+    voiceSetStatus('🎙️ Voice active — tap 🎙️ to join');
   }
   if (data.type === 'voice_ready') {
-    // A guest announced they are voice-ready — call them if we're host with voice on
+    // A guest turned on voice — host dials them and rebroadcasts peer list
     if (mpIsHost && _voiceEnabled && _voiceStream) {
-      mpConnections.forEach(conn => voiceCallNewGuest(conn));
+      if (data.peerId) voiceDial(data.peerId);
+      // Rebroadcast updated peer list so all guests know to dial this new participant
+      const guestPeerIds = mpConnections.map(c => c.peer).filter(Boolean);
+      _voicePeerIds = [mpPeer.id, ...guestPeerIds];
+      mpConnections.forEach(c => {
+        try { c.send({ type: 'voice_peer_list', peerIds: _voicePeerIds }); } catch(e) {}
+      });
+    }
+  }
+  if (data.type === 'voice_peer_list') {
+    // Host sent an updated peer list — dial any new participants we are missing
+    if (data.peerIds) {
+      _voicePeerIds = data.peerIds;
+      if (_voiceEnabled && _voiceStream) {
+        _voicePeerIds.forEach(peerId => {
+          if (peerId && peerId !== mpPeer?.id) voiceDial(peerId);
+        });
+      }
     }
   }
 }
 
-// Adjust voice button position (mirrors zoom btn logic when forfeit is hidden)
+// Adjust voice button position (stacks below zoom button when forfeit hidden in MP)
 function voiceAdjustPosition(forfeitHidden) {
   const btn = document.getElementById('btn-voice');
   const vst = document.getElementById('voice-status');
