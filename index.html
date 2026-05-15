@@ -5709,19 +5709,19 @@ function buildMpRoomStanding() {
 
 function continueGame() {
   document.getElementById('winner-banner').style.display = 'none';
-  if (_myTableId) {
-    // Clear the watchMyTable safety-net — ftRestartGame has its own polling loop
+  if (_activeRoomType === 'online' && _myTableId) {
+    // Online Room: runner writes new seed; everyone polls and re-launches
+    orRestartGame();
+  } else if (_myTableId) {
+    // Friend Table
     if (_myTableWatchSub) { clearInterval(_myTableWatchSub); _myTableWatchSub = null; }
-    ftRestartGame(); // works for ALL players — runner writes seed, others poll
+    ftRestartGame();
   } else if (mpGameMode === 'vs_human' && mpIsHost) {
-    // PeerJS Host Game — deal new game and broadcast to all guests
     mpStartGame();
   } else if (mpGameMode === 'vs_human' && !mpIsHost) {
-    // Guest — if host already started the new game, just show it
     if (gameActive) {
       document.getElementById('winner-banner').style.display = 'none';
     } else {
-      // Host hasn't started yet — wait; the start message will auto-dismiss the banner
       toast('Waiting for host to start next game…');
     }
   } else {
@@ -10429,6 +10429,37 @@ function orWatchMyTable(tableId, waitForNewSeed) {
   }, 1500);
 }
 
+// ── Restart an Online Room game (next game in same table) ─
+async function orRestartGame() {
+  if (!_myTableId || !supaClient) return;
+  ftStopPolling();
+  if (_orMyTableWatchSub) { clearInterval(_orMyTableWatchSub); _orMyTableWatchSub = null; }
+  const oldSeed = _orSeed;
+  const tableId = _myTableId;
+
+  if (ftAmNpcRunner()) {
+    // Runner writes new seed — everyone else polls for it
+    const newSeed = Math.floor(Math.random() * 0x7fffffff);
+    try {
+      await supaClient.from('online_tables')
+        .update({ payload: { seed: newSeed, started: true }, pending_move: null, game_result: null, status: 'playing' })
+        .eq('id', tableId);
+    } catch(e) { console.warn('orRestartGame seed write:', e); }
+    // Clear old game_move notifications so they don't bleed into next game
+    setTimeout(async () => {
+      try {
+        await supaClient.from('friend_notifications')
+          .delete()
+          .eq('type', 'game_move')
+          .eq('payload->>table_id', tableId);
+      } catch(e) {}
+    }, 3000);
+  }
+
+  // All players watch for the new seed and launch
+  orWatchMyTable(tableId, oldSeed);
+}
+
 // ── Launch game (reuses Friend Table game engine) ─────────
 async function orLaunchGame(table) {
   if (!supaClient || !supaUser || gameActive) return;
@@ -10463,7 +10494,13 @@ async function orLaunchGame(table) {
   _ftIsHost     = (table.host_id === supaUser.id);
   _ftGameOverHandled  = false;
   _orGameOverHandled  = false;
-  _ftSeenKeys   = _orSeenKeys;
+  // Critical: reset seq guards so new game states aren't rejected as stale
+  _ftAppliedSeq    = 0;
+  _ftLocalPlaySeq  = 0;
+  _ftSeqCounter    = 0;
+  // Critical: fresh seen-key set so old FT/OR notification IDs don't block new moves
+  _ftSeenKeys   = new Set();
+  _orSeenKeys   = new Set();
   _orGameMode   = table.table_group || _orCurrentTableGroup;
 
   // Deal cards using shared seed — same result on every device
@@ -10491,6 +10528,8 @@ async function orLaunchGame(table) {
   mpNpcSlots   = [0,1,2,3].map(li => npcSlots[(r + li) % 4]);
   mpSeats      = [0,1,2,3].map(li => ({ name: seatNames[(r + li) % 4], conn: null }));
   mpIsHost     = true; // all players run game logic locally (same as FT)
+  // Full 4-entry name array in local order (includes NPC slot names)
+  mpAllSeatNames = [0,1,2,3].map(li => seatNames[(r + li) % 4]);
 
   lastPlay             = null;
   passCount            = 0;
